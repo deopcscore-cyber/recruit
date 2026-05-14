@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Welltower Recruiter</title>
+  <link rel="stylesheet" href="/css/app.css" />
+</head>
+<body>
+<div id="app">
+
+  <!-- ========== SIDEBAR ========== -->
+  <aside class="sidebar">
+    <div class="sidebar-logo">
+      <h2>Welltower</h2>
+      <p>Recruiter Platform</p>
+    </div>
+
+    <nav class="sidebar-nav">
+      <div class="nav-section-label">Workspace</div>
+      <div class="nav-item" data-page="candidates">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        <span>Candidates</span>
+        <span class="badge hidden" id="unread-badge">0</span>
+      </div>
+      <div class="nav-section-label">Account</div>
+      <div class="nav-item" data-page="settings">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        <span>Settings</span>
+      </div>
+    </nav>
+
+    <div class="sidebar-footer">
+      <span id="sidebar-user-name" style="font-size:0.85rem;font-weight:500;color:rgba(255,255,255,0.8)"></span>
+      <span id="sidebar-user-email" style="font-size:0.72rem;color:rgba(255,255,255,0.35)"></span>
+      <div style="margin-top:10px;display:flex;align-items:center;gap:8px">
+        <a href="#" id="logout-btn" style="color:rgba(255,255,255,0.4);text-decoration:none;font-size:0.75rem">Sign out</a>
+        <button class="dark-toggle" id="dark-toggle-btn" title="Toggle dark mode">☽</button>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ========== MAIN CONTENT ========== -->
+  <div class="main-content">
+
+    <!-- ===== CANDIDATES PAGE ===== -->
+    <div class="page" id="page-candidates">
+
+      <!-- Topbar -->
+      <div class="topbar">
+        <div class="topbar-title">
+          Candidates
+          <span id="candidates-count" style="font-size:0.8rem;font-weight:400;color:#94a3b8;margin-left:6px"></span>
+        </div>
+        <div class="topbar-actions">
+          <input type="text" class="search-box" id="search-input" placeholder="Search…" />
+          <button class="btn btn-secondary btn-sm" id="fetch-email-btn" title="Fetch unread replies from Gmail">↓ Replies</button>
+          <button class="btn btn-secondary btn-sm" id="bulk-outreach-btn" title="Bulk outreach to selected Imported candidates">⚡ Bulk Outreach</button>
+          <button class="btn btn-secondary btn-sm" id="import-btn">Import CSV</button>
+          <button class="btn btn-primary btn-sm" id="add-candidate-btn" title="Add candidate (N)">+ Add</button>
+        </div>
+      </div>
+
+      <!-- Metrics bar -->
+      <div class="metrics-bar" id="metrics-bar"></div>
+
+      <!-- Filter bar -->
+      <div class="filter-bar">
+        <select id="stage-filter">
+          <option value="">All Stages</option>
+          <option>Imported</option>
+          <option>Outreach Sent</option>
+          <option>Replied</option>
+          <option>Resume Requested</option>
+          <option>Resume Received</option>
+          <option>Interviewing</option>
+          <option>Closed</option>
+        </select>
+
+        <div class="view-toggle">
+          <button id="view-pipeline-btn" class="active">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><rect x="3" y="3" width="7" height="18" rx="1"/><rect x="14" y="3" width="7" height="18" rx="1"/></svg>
+            Board
+          </button>
+          <button id="view-list-btn">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+            List
+          </button>
+        </div>
+
+        <!-- Bulk actions (visible in list view) -->
+        <div id="bulk-actions" style="display:flex;align-items:center;gap:8px;margin-left:auto">
+          <select id="bulk-stage-select" style="width:auto;font-size:0.8rem">
+            <option value="">Bulk set stage…</option>
+            <option>Imported</option>
+            <option>Outreach Sent</option>
+            <option>Replied</option>
+            <option>Resume Requested</option>
+            <option>Resume Received</option>
+            <option>Interviewing</option>
+            <option>Closed</option>
+          </select>
+          <button class="btn btn-secondary btn-sm" id="bulk-stage-btn">Apply</button>
+          <button class="btn btn-secondary btn-sm" id="export-csv-btn">Export CSV</button>
+        </div>
+      </div>
+
+      <!-- Views -->
+      <div style="flex:1;overflow:hidden;display:flex">
+        <div id="pipeline-view" class="pipeline-wrapper" style="flex:1">
+          <div class="pipeline-board" id="pipeline-board"></div>
+        </div>
+        <div id="list-view-wrapper" class="list-view-wrapper hidden" style="flex:1;overflow-y:auto">
+          <div id="list-view"></div>
+        </div>
+      </div>
+
+    </div><!-- /page-candidates -->
+
+    <!-- ===== SETTINGS PAGE ===== -->
+    <div class="page" id="page-settings">
+      <div class="topbar">
+        <div class="topbar-title">Settings</div>
+      </div>
+      <div class="settings-wrapper">
+
+        <div class="settings-card">
+          <div class="settings-card-header"><h3>Gmail Integration</h3></div>
+          <div class="settings-card-body">
+            <div id="gmail-status-indicator" class="gmail-status disconnected" style="margin-bottom:16px">
+              <span class="status-dot"></span> Not connected
+            </div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
+              <button class="btn btn-primary btn-sm" id="connect-gmail-btn">Connect Gmail</button>
+              <button class="btn btn-secondary btn-sm hidden" id="disconnect-gmail-btn">Disconnect</button>
+              <button class="btn btn-secondary btn-sm hidden" id="test-email-btn">Send Test Email</button>
+            </div>
+            <p style="font-size:0.8rem;color:#64748b;margin:12px 0 0;line-height:1.6">
+              Connect your Gmail account via OAuth2 to send and receive emails directly from this platform. Your credentials are stored securely per account.
+            </p>
+          </div>
+        </div>
+
+        <div class="settings-card">
+          <div class="settings-card-header"><h3>AI Writing Style</h3></div>
+          <div class="settings-card-body">
+            <form id="style-form">
+              <div class="form-group">
+                <label>Tone</label>
+                <select id="style-tone">
+                  <option value="warm">Warm & Personal</option>
+                  <option value="professional">Professional & Direct</option>
+                  <option value="casual">Casual & Conversational</option>
+                  <option value="formal">Formal</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label>Additional AI Instructions</label>
+                <textarea id="style-notes" placeholder="e.g. Always reference Welltower's 1,500+ properties, mention the mission-driven culture, etc." style="min-height:80px"></textarea>
+              </div>
+              <div class="form-group">
+                <label>Phrases to Use <span class="text-muted text-xs">(comma-separated)</span></label>
+                <input type="text" id="style-use" placeholder="e.g. meaningful work, long-term partnership" />
+              </div>
+              <div class="form-group">
+                <label>Phrases to Avoid <span class="text-muted text-xs">(comma-separated)</span></label>
+                <input type="text" id="style-avoid" placeholder="e.g. synergy, leverage, circle back" />
+              </div>
+              <button type="submit" class="btn btn-primary btn-sm">Save Settings</button>
+            </form>
+          </div>
+        </div>
+
+        <div class="settings-card">
+          <div class="settings-card-header"><h3>Add Colleague Account</h3></div>
+          <div class="settings-card-body">
+            <form id="colleague-form">
+              <div class="form-row">
+                <div class="form-group">
+                  <label>Full Name</label>
+                  <input type="text" id="col-name" placeholder="Jane Smith" required />
+                </div>
+                <div class="form-group">
+                  <label>Email</label>
+                  <input type="email" id="col-email" placeholder="jane@welltower.com" required />
+                </div>
+              </div>
+              <div class="form-group">
+                <label>Temporary Password</label>
+                <input type="password" id="col-password" placeholder="At least 6 characters" required />
+              </div>
+              <button type="submit" class="btn btn-primary btn-sm">Create Account</button>
+            </form>
+          </div>
+        </div>
+
+      </div>
+    </div><!-- /page-settings -->
+
+  </div><!-- /main-content -->
+</div><!-- /app -->
+
+<!-- ========== IMPORT MODAL ========== -->
+<div class="modal-overlay" id="import-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <h3>Import Candidates from CSV</h3>
+      <button class="modal-close">&times;</button>
+    </div>
+    <div class="modal-body">
+      <p style="font-size:0.875rem;color:#475569;margin:0 0 16px;line-height:1.6">
+        Upload a ContactOut CSV export. Reads Full Name, Email, Title, Company, LinkedIn URL, Summary, and career/education fields. Rows without a valid email are skipped.
+      </p>
+      <form id="import-form">
+        <div class="form-group">
+          <label>CSV File</label>
+          <input type="file" id="import-csv-file" accept=".csv" required />
+        </div>
+      </form>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" id="import-cancel-btn">Cancel</button>
+      <button class="btn btn-primary" id="import-submit-btn">Import Candidates</button>
+    </div>
+  </div>
+</div>
+
+<!-- ========== ADD CANDIDATE MODAL ========== -->
+<div class="modal-overlay" id="add-candidate-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <h3>Add Candidate</h3>
+      <button class="modal-close">&times;</button>
+    </div>
+    <div class="modal-body">
+      <form id="add-candidate-form">
+        <div class="form-row">
+          <div class="form-group">
+            <label>Full Name *</label>
+            <input type="text" id="new-name" placeholder="Jane Smith" required />
+          </div>
+          <div class="form-group">
+            <label>Email *</label>
+            <input type="email" id="new-email" placeholder="jane@example.com" required />
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Current Title</label>
+            <input type="text" id="new-title" placeholder="Chief Financial Officer" />
+          </div>
+          <div class="form-group">
+            <label>Company</label>
+            <input type="text" id="new-company" placeholder="Acme Corp" />
+          </div>
+        </div>
+        <div class="form-group">
+          <label>LinkedIn URL</label>
+          <input type="text" id="new-linkedin" placeholder="https://linkedin.com/in/…" />
+        </div>
+        <div class="form-group">
+          <label>Summary / Headline</label>
+          <textarea id="new-summary" style="min-height:60px" placeholder="Brief background or headline…"></textarea>
+        </div>
+      </form>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" id="add-cancel-btn">Cancel</button>
+      <button class="btn btn-primary" id="add-candidate-submit-btn">Add Candidate</button>
+    </div>
+  </div>
+</div>
+
+<!-- ========== BULK OUTREACH MODAL ========== -->
+<div class="modal-overlay" id="bulk-outreach-modal">
+  <div class="modal" style="max-width:620px">
+    <div class="modal-header">
+      <h3>Bulk Outreach</h3>
+      <button class="modal-close">&times;</button>
+    </div>
+    <div class="modal-body">
+      <p style="font-size:0.875rem;color:#475569;margin:0 0 16px;line-height:1.6">
+        Select <strong>Imported</strong> candidates to send personalized outreach emails. Each email is AI-generated individually and sent with a short delay. You can review the queue before starting.
+      </p>
+      <div id="bulk-outreach-list" style="max-height:280px;overflow-y:auto;border:1px solid #e2e8f0;border-radius:8px;padding:8px;display:flex;flex-direction:column;gap:4px"></div>
+      <div style="margin-top:12px;display:flex;align-items:center;gap:10px">
+        <label style="font-size:0.8rem;font-weight:400;color:#64748b">Subject line:</label>
+        <input type="text" id="bulk-subject" value="A conversation about Welltower" style="flex:1" />
+      </div>
+    </div>
+    <div class="modal-footer">
+      <span id="bulk-progress" style="font-size:0.82rem;color:#64748b;margin-right:auto"></span>
+      <button class="btn btn-secondary" id="bulk-outreach-cancel-btn">Cancel</button>
+      <button class="btn btn-primary" id="bulk-outreach-start-btn">Generate & Queue</button>
+    </div>
+  </div>
+</div>
+
+<script src="/js/api.js"></script>
+<script src="/js/modal.js"></script>
+<script src="/js/pipeline.js"></script>
+<script src="/js/app.js"></script>
+</body>
+</html>
