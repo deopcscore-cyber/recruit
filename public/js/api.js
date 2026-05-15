@@ -48,7 +48,7 @@ const API = {
     uploadResume(id, formData) { return API.postForm(`/api/candidates/${id}/resume`, formData); },
     downloadResume(id) { window.open(`/api/candidates/${id}/resume/download`, '_blank'); },
     addThread(id, data) { return API.post(`/api/candidates/${id}/thread`, data); },
-    bulkStage(ids, stage) { return API.post('/api/candidates/bulk-stage', { ids, stage }); }
+    bulkStage(ids, stage) { return API.post('/api/candidates/bulk-update', { ids, stage }); }
   },
 
   // Email
@@ -65,7 +65,13 @@ const API = {
     roleJD(candidateId) { return API.post('/api/ai/role-jd', { candidateId }); },
     resumeReview(candidateId) { return API.post('/api/ai/resume-review', { candidateId }); },
     victory(candidateId) { return API.post('/api/ai/victory', { candidateId }); },
-    reply(candidateId, lastMessage) { return API.post('/api/ai/reply', { candidateId, lastMessage }); }
+    reply(candidateId, lastMessage) { return API.post('/api/ai/reply', { candidateId, lastMessage }); },
+    score(candidateId) { return API.post('/api/ai/score', { candidateId }); }
+  },
+
+  // Analytics
+  analytics: {
+    get() { return API.get('/api/analytics'); }
   },
 
   // Settings

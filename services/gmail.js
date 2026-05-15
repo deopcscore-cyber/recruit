@@ -152,7 +152,7 @@ async function getAuthedClient(user) {
   return oauth2Client;
 }
 
-function buildRawEmail({ from, to, subject, body, threadId, inReplyTo, trackingId, baseUrl }) {
+function buildRawEmail({ from, to, subject, body, threadId, inReplyTo, references, trackingId, baseUrl }) {
   const pixel = trackingId
     ? `<img src="${baseUrl}/track/${trackingId}" width="1" height="1" style="display:none" />`
     : '';
@@ -180,10 +180,10 @@ function buildRawEmail({ from, to, subject, body, threadId, inReplyTo, trackingI
   ];
 
   if (inReplyTo) {
-    // inReplyTo must be the full SMTP Message-ID (may already include angle brackets)
     const bracket = inReplyTo.startsWith('<') ? inReplyTo : `<${inReplyTo}>`;
     headers.push(`In-Reply-To: ${bracket}`);
-    headers.push(`References: ${bracket}`);
+    // Use full cumulative chain if available, else just this message
+    headers.push(`References: ${references || bracket}`);
   }
 
   const rawEmail = headers.join('\r\n') + '\r\n\r\n' + fullHtml;
@@ -196,7 +196,7 @@ function buildRawEmail({ from, to, subject, body, threadId, inReplyTo, trackingI
     .replace(/=+$/, '');
 }
 
-async function sendEmail(userId, { to, subject, body, threadId, inReplyTo, trackingId }) {
+async function sendEmail(userId, { to, subject, body, threadId, inReplyTo, references, trackingId }) {
   const user = await storage.getUserById(userId);
   if (!user) throw new Error('User not found');
 
@@ -205,16 +205,7 @@ async function sendEmail(userId, { to, subject, body, threadId, inReplyTo, track
 
   const from = user.gmail.address || 'me';
 
-  const raw = buildRawEmail({
-    from,
-    to,
-    subject,
-    body,
-    threadId,
-    inReplyTo,
-    trackingId,
-    baseUrl: BASE_URL
-  });
+  const raw = buildRawEmail({ from, to, subject, body, threadId, inReplyTo, references, trackingId, baseUrl: BASE_URL });
 
   const requestBody = { raw };
   if (threadId) requestBody.threadId = threadId;

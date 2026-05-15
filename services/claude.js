@@ -296,10 +296,47 @@ Write the reply now:`;
   return response.content[0].text.trim();
 }
 
+async function scoreCandidate(candidate, user) {
+  const candidateInfo = formatCandidateContext(candidate);
+
+  const prompt = `You are a senior healthcare real estate recruiter at Welltower Inc. Score this executive candidate for fit with Welltower's strategic leadership needs.
+
+CANDIDATE:
+${candidateInfo}
+
+Score them 1-10 on overall executive fit for Welltower (senior housing, healthcare REIT, data/innovation focus) and return ONLY a valid JSON object:
+{
+  "score": <integer 1-10>,
+  "rationale": "<2-3 specific sentences about this candidate's fit, referencing their actual background>",
+  "strengths": ["<strength 1>", "<strength 2>", "<strength 3>"],
+  "concerns": ["<concern 1>", "<concern 2>"]
+}
+
+Score 8-10: exceptional fit (deep healthcare + strategic + executive). 5-7: solid fit with gaps. 1-4: significant gaps.
+Return ONLY the JSON.`;
+
+  const response = await client.messages.create({
+    model: MODEL,
+    max_tokens: 400,
+    messages: [{ role: 'user', content: prompt }]
+  });
+
+  const text = response.content[0].text.trim();
+  const clean = text.replace(/^```json\s*/i, '').replace(/```\s*$/, '').trim();
+  try {
+    return JSON.parse(clean);
+  } catch {
+    const match = text.match(/\{[\s\S]*\}/);
+    if (match) return JSON.parse(match[0]);
+    throw new Error('Could not parse score response');
+  }
+}
+
 module.exports = {
   generateOutreach,
   generateRoleJD,
   generateResumeFeedback,
   generateVictoryEmail,
-  generateReply
+  generateReply,
+  scoreCandidate
 };

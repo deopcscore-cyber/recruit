@@ -208,10 +208,18 @@ function createCandidateCard(candidate) {
 
   const tags = (candidate.tags || []).slice(0, 2).map(t => `<span class="card-tag">${escapeHtml(t)}</span>`).join('');
 
+  // Score badge
+  let scoreBadge = '';
+  if (candidate.score != null) {
+    const sc = candidate.score;
+    const scColor = sc >= 8 ? '#16a34a' : sc >= 5 ? '#d97706' : '#ef4444';
+    scoreBadge = `<span style="font-size:0.7rem;font-weight:700;color:${scColor};border:1px solid ${scColor}40;border-radius:4px;padding:1px 5px;margin-left:4px">${sc}/10</span>`;
+  }
+
   card.innerHTML = `
     <div class="card-top">
       <div class="card-name-row">
-        <span class="card-name">${escapeHtml(candidate.name || 'Unknown')}</span>
+        <span class="card-name">${escapeHtml(candidate.name || 'Unknown')}${scoreBadge}</span>
         <div class="card-badges">
           ${candidate.unread ? '<span class="badge-new">New</span>' : ''}
           ${candidate.opened ? '<span class="badge-opened" title="Email opened">Opened</span>' : ''}
@@ -515,9 +523,45 @@ function renderProfileTab(body) {
         </div>
       </div>
 
+      <!-- AI Score Panel -->
+      <div class="tab-section">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+          <h4 style="margin:0">AI Candidate Score</h4>
+          <button class="btn btn-ghost btn-sm" id="pf-score-btn">
+            ${c.score != null ? '↺ Re-score' : '✦ Score Candidate'}
+          </button>
+        </div>
+        ${c.scoreDetails ? (() => {
+          const sc = c.scoreDetails;
+          const color = sc.score >= 8 ? '#16a34a' : sc.score >= 5 ? '#d97706' : '#ef4444';
+          return `
+            <div style="display:flex;align-items:center;gap:16px;padding:12px;background:${color}10;border-radius:8px;border:1px solid ${color}30">
+              <div style="font-size:2.5rem;font-weight:800;color:${color};line-height:1">${sc.score}<span style="font-size:1rem;font-weight:400">/10</span></div>
+              <div style="flex:1">
+                <div style="font-size:0.85rem;color:var(--text);line-height:1.5">${escapeHtml(sc.rationale||'')}</div>
+                ${sc.strengths&&sc.strengths.length?`<div style="margin-top:8px;font-size:0.78rem;color:#16a34a">✓ ${sc.strengths.join(' · ')}</div>`:''}
+                ${sc.concerns&&sc.concerns.length?`<div style="margin-top:4px;font-size:0.78rem;color:#ef4444">⚠ ${sc.concerns.join(' · ')}</div>`:''}
+                <div style="font-size:0.72rem;color:var(--text-muted);margin-top:6px">Scored ${sc.scoredAt ? formatRelative(sc.scoredAt) : ''}</div>
+              </div>
+            </div>`;
+        })() : `<p style="font-size:0.85rem;color:var(--text-muted);margin:0">Click "Score Candidate" to get an AI fit assessment (1–10) with strengths and concerns.</p>`}
+      </div>
+
+      <!-- Notes History -->
       <div class="tab-section">
         <h4>Notes <span class="save-indicator" id="notes-indicator"></span></h4>
-        <textarea id="pf-notes" style="min-height:100px">${escapeHtml(c.notes||'')}</textarea>
+        ${(c.notesHistory && c.notesHistory.length > 0) ? `
+          <div style="margin-bottom:12px;max-height:200px;overflow-y:auto;display:flex;flex-direction:column;gap:8px">
+            ${[...(c.notesHistory||[])].reverse().map(n => `
+              <div style="background:var(--bg-secondary);border-radius:8px;padding:10px 12px">
+                <div style="font-size:0.78rem;color:var(--text-muted);margin-bottom:4px">${escapeHtml(n.author||'Recruiter')} · ${formatRelative(n.timestamp)}</div>
+                <div style="font-size:0.875rem;color:var(--text);white-space:pre-wrap">${escapeHtml(n.text)}</div>
+              </div>`).join('')}
+          </div>` : ''}
+        <div style="display:flex;gap:8px;align-items:flex-end">
+          <textarea id="pf-notes" style="min-height:72px;flex:1" placeholder="Add a note…"></textarea>
+          <button class="btn btn-secondary btn-sm" id="pf-add-note" style="align-self:flex-end;white-space:nowrap">Add Note</button>
+        </div>
       </div>
 
       ${careerHtml ? `<div class="tab-section"><h4>Career History</h4>${careerHtml}</div>` : ''}
@@ -575,20 +619,49 @@ function renderProfileTab(body) {
     });
   });
 
-  // Notes auto-save
-  let notesTimer = null;
-  body.querySelector('#pf-notes').addEventListener('input', () => {
-    const ind = body.querySelector('#notes-indicator');
-    if (ind) { ind.textContent = 'Unsaved…'; ind.className = 'save-indicator'; }
-    clearTimeout(notesTimer);
-    notesTimer = setTimeout(async () => {
+  // AI Score button
+  const scoreBtn = body.querySelector('#pf-score-btn');
+  if (scoreBtn) {
+    scoreBtn.addEventListener('click', async () => {
+      scoreBtn.disabled = true; scoreBtn.textContent = '✦ Scoring…';
       try {
-        const updated = await API.candidates.update(c.id, { notes: body.querySelector('#pf-notes').value });
-        Object.assign(_modalCandidate, updated);
-        if (ind) { ind.textContent = 'Saved'; ind.className = 'save-indicator saved'; }
+        const result = await API.ai.score(c.id);
+        Object.assign(_modalCandidate, { score: result.score, scoreDetails: { ...result, scoredAt: new Date().toISOString() } });
+        _modalOnUpdate(_modalCandidate);
+        renderProfileTab(body);
+        Toast.success(`Scored ${result.score}/10`);
       } catch (err) { Toast.error(err.message); }
-    }, 1500);
-  });
+      finally { scoreBtn.disabled = false; }
+    });
+  }
+
+  // Add Note button
+  const addNoteBtn = body.querySelector('#pf-add-note');
+  if (addNoteBtn) {
+    addNoteBtn.addEventListener('click', async () => {
+      const noteText = body.querySelector('#pf-notes').value.trim();
+      if (!noteText) { Toast.warning('Write a note first'); return; }
+      addNoteBtn.disabled = true; addNoteBtn.textContent = 'Saving…';
+      try {
+        const updated = await API.candidates.update(c.id, { noteText });
+        Object.assign(_modalCandidate, updated);
+        _modalOnUpdate(_modalCandidate);
+        renderProfileTab(body);
+        Toast.success('Note added');
+      } catch (err) { Toast.error(err.message); }
+      finally { addNoteBtn.disabled = false; addNoteBtn.textContent = 'Add Note'; }
+    });
+  }
+
+  // Notes — just a plain textarea now (submitted via Add Note button, no auto-save)
+  const notesEl = body.querySelector('#pf-notes');
+  if (notesEl) {
+    notesEl.addEventListener('keydown', e => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+        e.preventDefault(); addNoteBtn && addNoteBtn.click();
+      }
+    });
+  }
 
   // Save profile
   body.querySelector('#pf-save').addEventListener('click', async () => {
@@ -601,8 +674,7 @@ function renderProfileTab(body) {
         title: body.querySelector('#pf-title').value.trim(),
         company: body.querySelector('#pf-company').value.trim(),
         linkedin: body.querySelector('#pf-linkedin').value.trim(),
-        background: body.querySelector('#pf-background').value.trim(),
-        notes: body.querySelector('#pf-notes').value
+        background: body.querySelector('#pf-background').value.trim()
       });
       Object.assign(_modalCandidate, updated);
       _modalOnUpdate(_modalCandidate);

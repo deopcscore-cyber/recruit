@@ -88,6 +88,26 @@ router.post('/send', requireAuth, async (req, res) => {
       sendParams.inReplyTo = candidate.lastSmtpMessageId;
     }
 
+    // Normalize subject for reply threading (RFC 2822 compliance)
+    let replySubject = subject;
+    if (isReply) {
+      if (!replySubject.match(/^re:\s*/i)) {
+        replySubject = 'Re: ' + (candidate.originalSubject || replySubject).replace(/^re:\s*/i, '');
+      }
+      sendParams.subject = replySubject;
+
+      // Build In-Reply-To using SMTP Message-ID
+      if (candidate.lastSmtpMessageId) {
+        const cleanId = candidate.lastSmtpMessageId.replace(/^<|>$/g, '');
+        sendParams.inReplyTo = cleanId;
+        // Cumulative References chain
+        const newRef = `<${cleanId}>`;
+        sendParams.references = candidate.gmailReferences
+          ? (candidate.gmailReferences.includes(newRef) ? candidate.gmailReferences : `${candidate.gmailReferences} ${newRef}`)
+          : newRef;
+      }
+    }
+
     const { gmailMessageId, gmailThreadId, smtpMessageId } = await gmailService.sendEmail(req.session.userId, sendParams);
 
     // Add to thread
@@ -119,6 +139,20 @@ router.post('/send', requireAuth, async (req, res) => {
       const followUp = new Date();
       followUp.setDate(followUp.getDate() + 5);
       candidate.followUpDate = followUp.toISOString();
+    }
+
+    // Track first email subject for consistent thread subject on all replies
+    if (!candidate.originalSubject) {
+      candidate.originalSubject = sendParams.subject || subject;
+    }
+
+    // Update cumulative References chain with this outbound message's SMTP ID
+    if (smtpMessageId) {
+      const newRef = `<${smtpMessageId.replace(/^<|>$/g, '')}>`;
+      candidate.gmailReferences = candidate.gmailReferences
+        ? `${candidate.gmailReferences} ${newRef}`
+        : newRef;
+      candidate.lastSmtpMessageId = smtpMessageId;
     }
 
     await storage.saveCandidate(candidate);
@@ -175,7 +209,13 @@ router.post('/fetch', requireAuth, async (req, res) => {
       candidate.unread = true;
       candidate.lastGmailMessageId = reply.gmailMessageId;
       // Store inbound SMTP Message-ID so next outbound reply threads correctly
-      if (reply.messageId) candidate.lastSmtpMessageId = reply.messageId;
+      if (reply.messageId) {
+        candidate.lastSmtpMessageId = reply.messageId;
+        const newRef = `<${reply.messageId.replace(/^<|>$/g, '')}>`;
+        candidate.gmailReferences = candidate.gmailReferences
+          ? (candidate.gmailReferences.includes(newRef) ? candidate.gmailReferences : `${candidate.gmailReferences} ${newRef}`)
+          : newRef;
+      }
 
       // ── Resume attachment auto-capture ───────────────────────────────────
       if (reply.resumeAttachment) {

@@ -94,6 +94,26 @@ router.post('/victory', async (req, res) => {
   }
 });
 
+// POST /api/ai/score
+router.post('/score', async (req, res) => {
+  try {
+    const ctx = await getContext(req, res);
+    if (!ctx) return;
+
+    const scoreData = await claude.scoreCandidate(ctx.candidate, ctx.user);
+
+    // Save score to candidate
+    ctx.candidate.score = scoreData.score;
+    ctx.candidate.scoreDetails = { ...scoreData, scoredAt: new Date().toISOString() };
+    await storage.saveCandidate(ctx.candidate);
+
+    return res.json(scoreData);
+  } catch (err) {
+    console.error('AI score error:', err);
+    return res.status(500).json({ error: 'Failed to score candidate: ' + err.message });
+  }
+});
+
 // POST /api/ai/reply
 router.post('/reply', async (req, res) => {
   try {

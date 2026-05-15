@@ -130,7 +130,8 @@ router.put('/:id', async (req, res) => {
       'name', 'email', 'title', 'company', 'linkedin', 'background',
       'career', 'education', 'summary', 'stage', 'notes', 'tags',
       'stepsCompleted', 'followUpDate', 'gmailThreadId', 'lastGmailMessageId',
-      'lastSmtpMessageId', 'lastSubject', 'unread', 'opened', 'openedAt', 'thread', 'resume'
+      'lastSmtpMessageId', 'lastSubject', 'unread', 'opened', 'openedAt', 'thread', 'resume',
+      'originalSubject', 'gmailReferences', 'score', 'scoreDetails'
     ];
 
     allowed.forEach(key => {
@@ -142,6 +143,18 @@ router.put('/:id', async (req, res) => {
     // Merge stepsCompleted rather than replace
     if (req.body.stepsCompleted) {
       candidate.stepsCompleted = { ...candidate.stepsCompleted, ...req.body.stepsCompleted };
+    }
+
+    // Notes history — append new note entry
+    if (req.body.noteText && req.body.noteText.trim()) {
+      if (!candidate.notesHistory) candidate.notesHistory = [];
+      candidate.notesHistory.push({
+        id: require('uuid').v4(),
+        text: req.body.noteText.trim(),
+        timestamp: new Date().toISOString(),
+        author: req.session.userName || 'Recruiter'
+      });
+      candidate.notes = req.body.noteText.trim(); // keep notes in sync
     }
 
     await storage.saveCandidate(candidate);
@@ -210,8 +223,10 @@ router.post('/import', csvUpload.single('csv'), async (req, res) => {
     const detectedHeaders = Object.keys(records[0] || {});
     console.log('CSV import — detected headers:', detectedHeaders);
 
+    const existingCandidates = await storage.getUserCandidates(req.session.userId);
     const importedCandidates = [];
     let skipped = 0;
+    let duplicates = 0;
 
     // Build a normalized header map once (strips BOM, lowercases, trims)
     const headerMap = {};
@@ -269,6 +284,10 @@ router.post('/import', csvUpload.single('csv'), async (req, res) => {
         skipped++;
         continue;
       }
+
+      // Skip duplicates (same email already in this user's pipeline)
+      const isDuplicate = existingCandidates.some(ec => ec.email && email && ec.email.toLowerCase() === email.toLowerCase());
+      if (isDuplicate) { duplicates++; continue; }
 
       // Core fields — ContactOut column names and common alternatives
       const title = getFromRow(row,
@@ -355,6 +374,7 @@ router.post('/import', csvUpload.single('csv'), async (req, res) => {
     return res.json({
       imported: importedCandidates.length,
       skipped,
+      duplicates,
       candidates: importedCandidates
     });
   } catch (err) {
@@ -460,6 +480,34 @@ router.post('/:id/thread', async (req, res) => {
   } catch (err) {
     console.error('Add thread message error:', err);
     return res.status(500).json({ error: 'Failed to add message' });
+  }
+});
+
+// POST /api/candidates/bulk-update
+router.post('/bulk-update', requireAuth, async (req, res) => {
+  try {
+    const { ids, stage } = req.body;
+    if (!ids || !Array.isArray(ids) || !stage) {
+      return res.status(400).json({ error: 'ids (array) and stage are required' });
+    }
+    const validStages = ['Imported','Outreach Sent','Replied','Resume Requested','Resume Received','Interviewing','Closed'];
+    if (!validStages.includes(stage)) {
+      return res.status(400).json({ error: 'Invalid stage' });
+    }
+    const candidates = await storage.getAllCandidates();
+    let updated = 0;
+    for (const c of candidates) {
+      if (ids.includes(c.id) && c.userId === req.session.userId) {
+        c.stage = stage;
+        c.updatedAt = new Date().toISOString();
+        updated++;
+      }
+    }
+    await storage.saveAllCandidates(candidates);
+    return res.json({ updated });
+  } catch (err) {
+    console.error('Bulk update error:', err);
+    return res.status(500).json({ error: 'Bulk update failed' });
   }
 });
 

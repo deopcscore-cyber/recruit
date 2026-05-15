@@ -36,7 +36,10 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // Nav
   document.querySelectorAll('.nav-item').forEach(item => {
-    item.addEventListener('click', () => navigateTo(item.dataset.page));
+    item.addEventListener('click', () => {
+      navigateTo(item.dataset.page);
+      if (item.dataset.page === 'analytics') loadAnalyticsPage();
+    });
   });
 
   // Logout
@@ -110,9 +113,34 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   });
 
+  // Analytics refresh button
+  document.getElementById('refresh-analytics-btn').addEventListener('click', loadAnalyticsPage);
+
+  // Follow-up filter option (injected dynamically)
+  const stageFilter = document.getElementById('stage-filter');
+  const fuOpt = document.createElement('option');
+  fuOpt.value = '__followup__'; fuOpt.textContent = '⏰ Follow-Up Due';
+  stageFilter.appendChild(fuOpt);
+
   // Load candidates
   await loadCandidates();
   navigateTo('candidates');
+
+  // Auto-refresh every 2 minutes — detect new opens and show toast
+  setInterval(async () => {
+    const previousOpened = new Set(allCandidates.filter(c => c.opened).map(c => c.id));
+    const previousUnread = new Set(allCandidates.filter(c => c.unread).map(c => c.id));
+    try {
+      const fresh = await API.candidates.list();
+      const newOpens = fresh.filter(c => c.opened && !previousOpened.has(c.id));
+      const newReplies = fresh.filter(c => c.unread && !previousUnread.has(c.id));
+      if (newOpens.length) Toast.show(`📬 ${newOpens.map(c=>c.name).join(', ')} opened your email`);
+      if (newReplies.length) Toast.success(`💬 ${newReplies.length} new repl${newReplies.length===1?'y':'ies'} received`);
+      allCandidates = fresh;
+      renderCandidates();
+      updateUnreadBadge();
+    } catch { /* silent */ }
+  }, 2 * 60 * 1000);
 });
 
 // ---- Theme ----
@@ -153,7 +181,12 @@ async function loadCandidates() {
 
 function getFilteredCandidates() {
   let filtered = [...allCandidates];
-  if (currentFilter.stage) filtered = filtered.filter(c => c.stage === currentFilter.stage);
+  if (currentFilter.stage === '__followup__') {
+    const now = new Date();
+    filtered = filtered.filter(c => c.followUpDate && new Date(c.followUpDate) <= now && c.stage !== 'Closed');
+  } else if (currentFilter.stage) {
+    filtered = filtered.filter(c => c.stage === currentFilter.stage);
+  }
   if (currentFilter.search) {
     const q = currentFilter.search;
     filtered = filtered.filter(c =>
@@ -232,7 +265,10 @@ async function handleImport() {
     const fd = new FormData();
     fd.append('csv', file);
     const result = await API.candidates.import(fd);
-    Toast.success(`Imported ${result.imported} candidates${result.skipped > 0 ? ` (${result.skipped} skipped)` : ''}`);
+    const skippedMsg = [];
+    if (result.skipped > 0) skippedMsg.push(`${result.skipped} skipped (no email)`);
+    if (result.duplicates > 0) skippedMsg.push(`${result.duplicates} duplicates`);
+    Toast.success(`Imported ${result.imported} candidates${skippedMsg.length ? ` (${skippedMsg.join(', ')})` : ''}`);
     new Modal('import-modal').close();
     fileInput.value = '';
     await loadCandidates();
@@ -420,6 +456,76 @@ async function handleBulkOutreach() {
 }
 
 function delay(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+// ---- Analytics Page ----
+async function loadAnalyticsPage() {
+  const el = document.getElementById('analytics-content');
+  if (!el) return;
+  el.innerHTML = `<div style="padding:40px;text-align:center;color:var(--text-muted)">Loading…</div>`;
+  try {
+    const d = await API.analytics.get();
+    const STAGE_COLORS_LOCAL = {
+      'Imported':'#64748b','Outreach Sent':'#2563eb','Replied':'#7c3aed',
+      'Resume Requested':'#d97706','Resume Received':'#0891b2','Interviewing':'#16a34a','Closed':'#374151'
+    };
+    const stageRows = Object.entries(d.stageCounts).map(([s,n]) => {
+      const color = STAGE_COLORS_LOCAL[s] || '#64748b';
+      const pct = d.total > 0 ? Math.round((n/d.total)*100) : 0;
+      return `<div style="display:flex;align-items:center;gap:12px;padding:8px 0;border-bottom:1px solid var(--border)">
+        <span style="width:160px;font-size:0.85rem;color:var(--text)">${s}</span>
+        <div style="flex:1;background:var(--border);border-radius:4px;height:8px">
+          <div style="width:${pct}%;background:${color};height:8px;border-radius:4px;transition:width .4s"></div>
+        </div>
+        <span style="width:32px;text-align:right;font-weight:600;color:${color}">${n}</span>
+      </div>`;
+    }).join('');
+
+    const followUpHtml = d.followUpCandidates && d.followUpCandidates.length
+      ? d.followUpCandidates.map(c => `
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border)">
+          <span style="font-size:0.875rem;font-weight:500">${escapeHtml(c.name)}</span>
+          <span style="font-size:0.78rem;color:var(--text-muted)">${c.stage}</span>
+          <span style="font-size:0.78rem;color:#ef4444;font-weight:600">Due ${new Date(c.followUpDate).toLocaleDateString()}</span>
+        </div>`).join('')
+      : `<p style="color:var(--text-muted);font-size:0.875rem">No follow-ups overdue 🎉</p>`;
+
+    el.innerHTML = `
+      <!-- KPI strip -->
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:16px;margin-bottom:24px">
+        ${[
+          { label:'Total Candidates', value: d.total, color:'#2563eb' },
+          { label:'Response Rate',    value: d.responseRate+'%', color:'#7c3aed' },
+          { label:'Email Open Rate',  value: d.openRate+'%', color:'#0891b2' },
+          { label:'Avg Days Active',  value: d.avgDays+'d', color:'#d97706' },
+          { label:'Unread Replies',   value: d.unreadCount, color: d.unreadCount>0?'#ef4444':'#16a34a' },
+          { label:'Follow-Ups Due',   value: d.followUpsDue, color: d.followUpsDue>0?'#f97316':'#16a34a' }
+        ].map(k => `
+          <div class="settings-card" style="margin:0">
+            <div class="settings-card-body" style="text-align:center;padding:16px 12px">
+              <div style="font-size:1.8rem;font-weight:700;color:${k.color}">${k.value}</div>
+              <div style="font-size:0.75rem;color:var(--text-muted);margin-top:4px">${k.label}</div>
+            </div>
+          </div>`).join('')}
+      </div>
+
+      <!-- Stage breakdown -->
+      <div class="settings-card">
+        <div class="settings-card-header"><h3>Pipeline Breakdown</h3></div>
+        <div class="settings-card-body">${stageRows}</div>
+      </div>
+
+      <!-- Follow-ups due -->
+      <div class="settings-card">
+        <div class="settings-card-header">
+          <h3>⏰ Follow-Ups Due <span style="font-size:0.8rem;font-weight:400;color:var(--text-muted)">(${d.followUpsDue})</span></h3>
+        </div>
+        <div class="settings-card-body">${followUpHtml}</div>
+      </div>
+    `;
+  } catch (err) {
+    el.innerHTML = `<div style="padding:40px;text-align:center;color:#ef4444">Failed to load analytics: ${err.message}</div>`;
+  }
+}
 
 // ---- Settings ----
 function initSettingsPage() {
