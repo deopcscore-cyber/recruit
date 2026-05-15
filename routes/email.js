@@ -1,9 +1,12 @@
 const express = require('express');
 const router = express.Router();
+const path = require('path');
+const fs = require('fs');
 const { v4: uuidv4 } = require('uuid');
 const gmailService = require('../services/gmail');
 const storage = require('../services/storage');
 const requireAuth = require('../middleware/auth');
+const { DATA_DIR } = require('../config');
 
 // GET /api/email/connect — generate OAuth URL
 router.get('/connect', requireAuth, async (req, res) => {
@@ -173,6 +176,57 @@ router.post('/fetch', requireAuth, async (req, res) => {
       candidate.lastGmailMessageId = reply.gmailMessageId;
       // Store inbound SMTP Message-ID so next outbound reply threads correctly
       if (reply.messageId) candidate.lastSmtpMessageId = reply.messageId;
+
+      // ── Resume attachment auto-capture ───────────────────────────────────
+      if (reply.resumeAttachment) {
+        try {
+          const resumeDir = path.join(DATA_DIR, 'resumes');
+          if (!fs.existsSync(resumeDir)) fs.mkdirSync(resumeDir, { recursive: true });
+
+          const safeFilename = reply.resumeAttachment.filename.replace(/[^a-zA-Z0-9._-]/g, '_');
+          const storedFilename = `${candidate.id}_${Date.now()}_${safeFilename}`;
+          const filePath = path.join(resumeDir, storedFilename);
+          fs.writeFileSync(filePath, reply.resumeAttachment.buffer);
+
+          // Extract text from the file
+          let extractedText = '';
+          const mime = reply.resumeAttachment.mimeType;
+          if (mime.includes('pdf')) {
+            const pdfParse = require('pdf-parse');
+            const parsed = await pdfParse(reply.resumeAttachment.buffer);
+            extractedText = parsed.text || '';
+          } else if (mime.includes('word') || mime.includes('openxmlformats')) {
+            const mammoth = require('mammoth');
+            const res = await mammoth.extractRawText({ buffer: reply.resumeAttachment.buffer });
+            extractedText = res.value || '';
+          }
+
+          candidate.resume = {
+            filename: storedFilename,
+            originalName: reply.resumeAttachment.filename,
+            path: filePath,
+            text: extractedText,
+            mimetype: mime,
+            size: reply.resumeAttachment.buffer.length,
+            uploadedAt: new Date().toISOString(),
+            source: 'email'
+          };
+
+          // Mark step complete + auto-advance stage to Resume Received
+          if (!candidate.stepsCompleted) candidate.stepsCompleted = {};
+          candidate.stepsCompleted.resumeReceived = true;
+
+          const stageOrder2 = ['Imported','Outreach Sent','Replied','Resume Requested','Resume Received','Interviewing','Closed'];
+          const curIdx2 = stageOrder2.indexOf(candidate.stage || 'Imported');
+          const recvIdx = stageOrder2.indexOf('Resume Received');
+          if (curIdx2 < recvIdx) candidate.stage = 'Resume Received';
+
+          console.log(`Resume auto-captured from email for candidate ${candidate.name} (${storedFilename})`);
+        } catch (attachErr) {
+          console.error('Resume attachment processing error:', attachErr.message);
+        }
+      }
+      // ────────────────────────────────────────────────────────────────────
 
       // Auto-advance stage to Replied (only upgrade, never downgrade)
       const stageOrder = ['Imported','Outreach Sent','Replied','Resume Requested','Resume Received','Interviewing','Closed'];

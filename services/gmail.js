@@ -2,6 +2,93 @@ const { google } = require('googleapis');
 const storage = require('./storage');
 const { BASE_URL } = require('../config');
 
+// ─── Markdown → HTML converter (used for JD emails) ──────────────────────────
+function inlineFormat(text) {
+  return text
+    .replace(/\*\*\*(.+?)\*\*\*/g, '<strong><em>$1</em></strong>')
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/\*(.+?)\*/g, '<em>$1</em>')
+    .replace(/_{1,2}([^_]+)_{1,2}/g, '<em>$1</em>');
+}
+
+function markdownToHtml(text) {
+  if (!text) return '';
+  const lines = text.split('\n');
+  const out = [];
+  let inList = false;
+  let inNumberedList = false;
+
+  const closeList = () => {
+    if (inList)        { out.push('</ul>'); inList = false; }
+    if (inNumberedList){ out.push('</ol>'); inNumberedList = false; }
+  };
+
+  for (const line of lines) {
+    // Setext-style heading (underline ===)
+    // ATX headers
+    const h3 = line.match(/^###\s+(.+)$/);
+    const h2 = line.match(/^##\s+(.+)$/);
+    const h1 = line.match(/^#\s+(.+)$/);
+    if (h1 || h2 || h3) {
+      closeList();
+      const lv = h1 ? 1 : h2 ? 2 : 3;
+      const txt = (h1 || h2 || h3)[1];
+      const sz = lv === 1 ? '22px' : lv === 2 ? '18px' : '15px';
+      out.push(`<h${lv} style="margin:22px 0 6px;font-size:${sz};color:#1a1a2e;font-family:Georgia,serif">${inlineFormat(txt)}</h${lv}>`);
+      continue;
+    }
+
+    // Horizontal rule
+    if (line.match(/^[-*_]{3,}\s*$/)) {
+      closeList();
+      out.push('<hr style="border:none;border-top:1px solid #dde3f0;margin:18px 0">');
+      continue;
+    }
+
+    // Bullet list item
+    const bullet = line.match(/^[-*]\s+(.+)$/);
+    if (bullet) {
+      if (!inList) { out.push('<ul style="margin:6px 0 6px 0;padding-left:22px">'); inList = true; }
+      out.push(`<li style="margin:4px 0;color:#2d2d2d">${inlineFormat(bullet[1])}</li>`);
+      continue;
+    }
+
+    // Numbered list item
+    const numbered = line.match(/^\d+\.\s+(.+)$/);
+    if (numbered) {
+      if (!inNumberedList) { out.push('<ol style="margin:6px 0;padding-left:22px">'); inNumberedList = true; }
+      out.push(`<li style="margin:4px 0">${inlineFormat(numbered[1])}</li>`);
+      continue;
+    }
+
+    // Empty line
+    if (line.trim() === '') {
+      closeList();
+      out.push('<div style="height:8px"></div>');
+      continue;
+    }
+
+    // Italic-only line (e.g. *Confidential | Prepared exclusively for Scott*)
+    const italicLine = line.match(/^\*(.+)\*$/);
+    if (italicLine) {
+      closeList();
+      out.push(`<p style="margin:6px 0;color:#777;font-style:italic;font-size:13px">${inlineFormat(italicLine[1])}</p>`);
+      continue;
+    }
+
+    // Regular paragraph
+    closeList();
+    out.push(`<p style="margin:5px 0;color:#2d2d2d;line-height:1.6">${inlineFormat(line)}</p>`);
+  }
+  closeList();
+  return out.join('\n');
+}
+
+// Detect if text contains markdown (not already HTML)
+function hasMarkdown(text) {
+  return /^#{1,3}\s/m.test(text) || /\*\*/.test(text) || /^[-*]\s/m.test(text) || /^---/m.test(text);
+}
+
 function createOAuth2Client() {
   return new google.auth.OAuth2(
     process.env.GMAIL_CLIENT_ID,
@@ -70,7 +157,18 @@ function buildRawEmail({ from, to, subject, body, threadId, inReplyTo, trackingI
     ? `<img src="${baseUrl}/track/${trackingId}" width="1" height="1" style="display:none" />`
     : '';
 
-  const htmlBody = body.includes('<') ? body : body.replace(/\n/g, '<br>');
+  let htmlBody;
+  if (body.includes('<p') || body.includes('<h') || body.includes('<div')) {
+    // Already HTML
+    htmlBody = body;
+  } else if (hasMarkdown(body)) {
+    // Markdown → styled HTML (used for JD emails)
+    const converted = markdownToHtml(body);
+    htmlBody = `<div style="max-width:640px;margin:0 auto;font-family:Arial,Helvetica,sans-serif;font-size:15px;color:#2d2d2d;padding:24px 16px">${converted}</div>`;
+  } else {
+    // Plain text → preserve line breaks
+    htmlBody = `<div style="font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:1.6;color:#2d2d2d">${body.replace(/\n/g, '<br>')}</div>`;
+  }
   const fullHtml = `<html><body>${htmlBody}${pixel}</body></html>`;
 
   const headers = [
@@ -191,6 +289,9 @@ async function fetchUnreadReplies(userId) {
 
       const body = parseEmailBody(msgData.payload);
 
+      // Detect resume attachments (PDF / Word / RTF)
+      const resumeAttachment = await extractResumeAttachment(gmail, msg.id, msgData.payload);
+
       results.push({
         from,
         subject,
@@ -198,7 +299,8 @@ async function fetchUnreadReplies(userId) {
         gmailMessageId: msgData.id,
         gmailThreadId: msgData.threadId,
         timestamp: dateStr ? new Date(dateStr).toISOString() : new Date().toISOString(),
-        messageId: messageId ? messageId.replace(/[<>]/g, '') : ''
+        messageId: messageId ? messageId.replace(/[<>]/g, '') : '',
+        resumeAttachment   // { filename, mimeType, buffer } or null
       });
 
       // Mark as read
@@ -213,6 +315,49 @@ async function fetchUnreadReplies(userId) {
   }
 
   return results;
+}
+
+// Recursively find PDF/Word attachment parts in an email payload
+function getAttachmentParts(payload) {
+  const parts = [];
+  function walk(p) {
+    if (!p) return;
+    const mime = (p.mimeType || '').toLowerCase();
+    const resumeMimes = [
+      'application/pdf',
+      'application/msword',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'application/vnd.ms-word',
+      'application/rtf',
+      'text/rtf'
+    ];
+    if (resumeMimes.includes(mime) && p.body && p.body.attachmentId && p.filename) {
+      parts.push({ attachmentId: p.body.attachmentId, filename: p.filename, mimeType: mime });
+    }
+    if (p.parts) p.parts.forEach(walk);
+  }
+  walk(payload);
+  return parts;
+}
+
+async function extractResumeAttachment(gmail, messageId, payload) {
+  try {
+    const attParts = getAttachmentParts(payload);
+    if (attParts.length === 0) return null;
+    const info = attParts[0]; // take first resume-like attachment
+    const attRes = await gmail.users.messages.attachments.get({
+      userId: 'me',
+      messageId,
+      id: info.attachmentId
+    });
+    // Gmail returns base64url-encoded data
+    const base64 = attRes.data.data.replace(/-/g, '+').replace(/_/g, '/');
+    const buffer = Buffer.from(base64, 'base64');
+    return { filename: info.filename, mimeType: info.mimeType, buffer };
+  } catch (err) {
+    console.error('Could not download attachment:', err.message);
+    return null;
+  }
 }
 
 function parseEmailBody(payload) {

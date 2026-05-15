@@ -1,23 +1,6 @@
 const Anthropic = require('@anthropic-ai/sdk');
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-// Strip markdown symbols so JD emails arrive as clean readable text
-function stripMarkdown(text) {
-  return text
-    // ATX headers  → UPPERCASE plain line
-    .replace(/^#{1,6}\s+(.+)$/gm, (_, t) => t.toUpperCase())
-    // Bold / italic markers
-    .replace(/\*{1,3}([^*\n]+)\*{1,3}/g, '$1')
-    .replace(/_{1,2}([^_\n]+)_{1,2}/g, '$1')
-    // Horizontal rules
-    .replace(/^[-*_]{3,}\s*$/gm, '')
-    // Trailing spaces on lines
-    .replace(/ +$/gm, '')
-    // Collapse 3+ blank lines into 2
-    .replace(/\n{3,}/g, '\n\n')
-    .trim();
-}
-
 const MODEL = 'claude-sonnet-4-6';
 
 function formatCandidateContext(candidate) {
@@ -116,25 +99,48 @@ CANDIDATE INFORMATION:
 ${candidateInfo}
 
 INSTRUCTIONS:
-Create a detailed, personalized role description that feels written specifically for this person. Include these six sections, each separated by a blank line. DO NOT use any markdown formatting — no #, **, *, or --- symbols. Use plain text only. Use ALL CAPS for section headings.
+Create a detailed, personalized role description that feels written specifically for this person. Use markdown formatting — headers (##), bold (**text**), bullet points (-). Structure it as six sections:
 
-1. ROLE TITLE — create one that fits their background and Welltower's needs. Put it on its own line after the heading.
+## [Role Title] — craft a specific title based on their background and Welltower's needs
+**Welltower Inc. | Toledo, OH (Hybrid)**
 
-2. WHY THIS ROLE WAS CREATED WITH YOU IN MIND — reference their actual companies, roles, and transitions (2-3 sentences that feel deeply personal, not generic).
+---
 
-3. WHAT YOU WILL OWN — 8-10 specific bullet points (use a dash "-" prefix) covering strategic responsibilities tailored to their background.
+## Why This Role Was Created With You In Mind
+2-3 sentences that feel deeply personal — reference their actual companies, roles, and career transitions by name. Do not be generic.
 
-4. WHAT YOU BRING — 8-10 bullet points (use a dash "-" prefix) that mirror their actual experience and strengths, referencing real companies and roles they have held.
+---
 
-5. LEADERSHIP PROFILE — the kind of leader Welltower is looking for (3-4 sentences, specific to this candidate's style).
+## What You Will Own
+8-10 bullet points covering strategic responsibilities, each tailored specifically to this candidate's background.
 
-6. WHAT WELLTOWER OFFERS
-   - Compensation: Base salary $400,000 – $500,000 depending on experience, plus annual performance bonus (target 30–40% of base), long-term equity participation through Welltower stock grants, and a comprehensive executive benefits package including healthcare, 401(k) match, and executive life insurance.
-   - Mission: (2-3 sentences on Welltower's position in healthcare real estate)
-   - Team: (1-2 sentences on culture)
-   - Growth: (1-2 sentences on career trajectory)
+---
 
-Make it compelling and specific — not generic. Reference their real background throughout.
+## What You Bring
+8-10 bullet points mirroring their actual experience and strengths — reference real companies and roles they have held.
+
+---
+
+## Leadership Profile
+3-4 sentences describing the kind of leader Welltower is looking for, written to match this candidate's demonstrated style.
+
+---
+
+## What Welltower Offers
+
+**Compensation:** Base salary **$400,000 – $500,000** depending on experience, annual performance bonus targeting **30–40% of base**, long-term equity participation through Welltower stock grants (3-year vesting), and a full executive benefits package including healthcare, dental, vision, 401(k) with company match, and executive life insurance.
+
+**Mission:** 2-3 sentences on Welltower's unique position at the healthcare-real estate intersection.
+
+**Team:** 1-2 sentences on the collaborative, data-driven culture.
+
+**Growth:** 1-2 sentences on the clear trajectory toward a Chief Strategy or Chief Healthcare Officer seat.
+
+---
+
+*Confidential | Prepared exclusively for [candidate first name]*
+
+Make every section compelling and specific — not generic boilerplate. Reference their real background throughout. Output ONLY the role description, no additional commentary.
 
 Write the role description now:`;
 
@@ -144,7 +150,7 @@ Write the role description now:`;
     messages: [{ role: 'user', content: prompt }]
   });
 
-  return stripMarkdown(response.content[0].text.trim());
+  return response.content[0].text.trim();
 }
 
 async function generateResumeFeedback(candidate, user) {
@@ -274,7 +280,9 @@ INSTRUCTIONS — follow every rule:
 5. If resume was already requested and not yet received: keep the tone light, reference something they said, and follow up gently.
 6. Sound like a person having a real back-and-forth conversation — warm, unhurried, specific. NOT scripted. NOT formulaic.
 7. Under 180 words.
-8. Sign as: ${user.name}\\nRecruiter — Welltower Inc.
+8. End the reply with this exact signature on its own line:
+${user.name}
+Recruiter — Welltower Inc.
 9. Output ONLY the reply body. No subject line.
 
 Write the reply now:`;

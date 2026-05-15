@@ -2,6 +2,41 @@
    Welltower Recruiter — Pipeline, Cards, 7-Tab Candidate Modal
    ============================================================ */
 
+// Client-side markdown → HTML for JD preview pane
+function markdownToHtmlPreview(text) {
+  if (!text) return '';
+  const esc = s => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  const inline = s => s
+    .replace(/\*\*\*(.+?)\*\*\*/g,'<strong><em>$1</em></strong>')
+    .replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>')
+    .replace(/\*(.+?)\*/g,'<em>$1</em>')
+    .replace(/_{1,2}([^_]+)_{1,2}/g,'<em>$1</em>');
+  const lines = text.split('\n');
+  const out = [];
+  let inUl = false, inOl = false;
+  const closeList = () => {
+    if (inUl) { out.push('</ul>'); inUl = false; }
+    if (inOl) { out.push('</ol>'); inOl = false; }
+  };
+  for (const raw of lines) {
+    const line = raw;
+    const h3 = line.match(/^###\s+(.+)$/), h2 = line.match(/^##\s+(.+)$/), h1 = line.match(/^#\s+(.+)$/);
+    if (h1||h2||h3) { closeList(); const lv=h1?1:h2?2:3; const t=(h1||h2||h3)[1]; out.push(`<h${lv} style="margin:18px 0 4px;color:#1a1a2e">${inline(esc(t))}</h${lv}>`); continue; }
+    if (line.match(/^[-*_]{3,}\s*$/)) { closeList(); out.push('<hr style="border:none;border-top:1px solid #dde3f0;margin:14px 0">'); continue; }
+    const b = line.match(/^[-*]\s+(.+)$/);
+    if (b) { if (!inUl) { out.push('<ul style="padding-left:20px;margin:4px 0">'); inUl=true; } out.push(`<li>${inline(esc(b[1]))}</li>`); continue; }
+    const n = line.match(/^\d+\.\s+(.+)$/);
+    if (n) { if (!inOl) { out.push('<ol style="padding-left:20px;margin:4px 0">'); inOl=true; } out.push(`<li>${inline(esc(n[1]))}</li>`); continue; }
+    if (line.trim()==='') { closeList(); out.push('<br>'); continue; }
+    const it = line.match(/^\*(.+)\*$/);
+    if (it) { closeList(); out.push(`<p style="color:#777;font-style:italic;font-size:13px;margin:4px 0">${inline(esc(it[1]))}</p>`); continue; }
+    closeList();
+    out.push(`<p style="margin:4px 0;line-height:1.6">${inline(esc(line))}</p>`);
+  }
+  closeList();
+  return out.join('');
+}
+
 const STAGES = [
   'Imported',
   'Outreach Sent',
@@ -685,15 +720,22 @@ function renderRoleJDTab(body) {
         <div class="tab-section">
           <div class="draft-label">
             <h4>Role Description Draft</h4>
-            <span class="text-xs text-muted">Edit before sending</span>
+            <div style="display:flex;gap:8px;align-items:center">
+              <span class="text-xs text-muted">Markdown → formatted email on send</span>
+              <button class="btn btn-ghost btn-xs" id="jd-toggle-preview">👁 Preview</button>
+            </div>
           </div>
           <div class="form-group">
             <label>Subject Line</label>
             <input type="text" id="jd-subject" placeholder="The Welltower opportunity — created with you in mind" />
           </div>
-          <div class="form-group">
-            <label>Message</label>
-            <textarea id="jd-body" class="draft-textarea" style="min-height:380px"></textarea>
+          <div class="form-group" id="jd-edit-area">
+            <label>Message <span class="text-xs text-muted">(markdown)</span></label>
+            <textarea id="jd-body" class="draft-textarea" style="min-height:380px;font-family:monospace;font-size:13px"></textarea>
+          </div>
+          <div class="form-group" id="jd-preview-area" style="display:none">
+            <label>Formatted Preview <span class="text-xs text-muted">(how it looks in the email)</span></label>
+            <div id="jd-preview-content" style="border:1px solid var(--border);border-radius:8px;padding:20px;min-height:380px;overflow-y:auto;background:var(--bg-primary)"></div>
           </div>
           <div class="draft-actions">
             <button class="btn btn-ghost btn-sm" id="jd-regen">↺ Regenerate</button>
@@ -703,6 +745,25 @@ function renderRoleJDTab(body) {
       </div>
     </div>
   `;
+
+  // Preview toggle
+  const toggleBtn = body.querySelector('#jd-toggle-preview');
+  const editArea = body.querySelector('#jd-edit-area');
+  const previewArea = body.querySelector('#jd-preview-area');
+  const previewContent = body.querySelector('#jd-preview-content');
+  let showingPreview = false;
+  if (toggleBtn) {
+    toggleBtn.addEventListener('click', () => {
+      showingPreview = !showingPreview;
+      editArea.style.display = showingPreview ? 'none' : '';
+      previewArea.style.display = showingPreview ? '' : 'none';
+      toggleBtn.textContent = showingPreview ? '✏ Edit' : '👁 Preview';
+      if (showingPreview) {
+        const md = body.querySelector('#jd-body').value;
+        previewContent.innerHTML = markdownToHtmlPreview(md);
+      }
+    });
+  }
 
   wireAIDraft(body, {
     genBtnId: 'gen-jd-btn',
