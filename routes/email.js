@@ -76,15 +76,16 @@ router.post('/send', requireAuth, async (req, res) => {
       trackingId: candidate.trackingId
     };
 
-    // Threading — if replying to an existing thread
+    // Threading — pass threadId AND the correct SMTP Message-ID for In-Reply-To
     if (isReply && candidate.gmailThreadId) {
       sendParams.threadId = candidate.gmailThreadId;
     }
-    if (isReply && candidate.lastGmailMessageId) {
-      sendParams.inReplyTo = candidate.lastGmailMessageId;
+    // Use the SMTP Message-ID (not the Gmail API ID) for RFC-compliant threading
+    if (isReply && candidate.lastSmtpMessageId) {
+      sendParams.inReplyTo = candidate.lastSmtpMessageId;
     }
 
-    const { gmailMessageId, gmailThreadId } = await gmailService.sendEmail(req.session.userId, sendParams);
+    const { gmailMessageId, gmailThreadId, smtpMessageId } = await gmailService.sendEmail(req.session.userId, sendParams);
 
     // Add to thread
     const message = {
@@ -95,12 +96,14 @@ router.post('/send', requireAuth, async (req, res) => {
       timestamp: new Date().toISOString(),
       gmailMessageId,
       gmailThreadId,
+      smtpMessageId,
       read: true
     };
 
     if (!candidate.thread) candidate.thread = [];
     candidate.thread.push(message);
     candidate.lastGmailMessageId = gmailMessageId;
+    candidate.lastSmtpMessageId = smtpMessageId;
     candidate.lastSubject = subject;
 
     // Update gmailThreadId if this was the first send
@@ -160,6 +163,7 @@ router.post('/fetch', requireAuth, async (req, res) => {
         timestamp: reply.timestamp,
         gmailMessageId: reply.gmailMessageId,
         gmailThreadId: reply.gmailThreadId,
+        smtpMessageId: reply.messageId || '',
         read: false
       };
 
@@ -167,6 +171,8 @@ router.post('/fetch', requireAuth, async (req, res) => {
       candidate.thread.push(message);
       candidate.unread = true;
       candidate.lastGmailMessageId = reply.gmailMessageId;
+      // Store inbound SMTP Message-ID so next outbound reply threads correctly
+      if (reply.messageId) candidate.lastSmtpMessageId = reply.messageId;
 
       // Auto-advance stage to Replied (only upgrade, never downgrade)
       const stageOrder = ['Imported','Outreach Sent','Replied','Resume Requested','Resume Received','Interviewing','Closed'];

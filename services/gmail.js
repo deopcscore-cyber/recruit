@@ -82,8 +82,10 @@ function buildRawEmail({ from, to, subject, body, threadId, inReplyTo, trackingI
   ];
 
   if (inReplyTo) {
-    headers.push(`In-Reply-To: <${inReplyTo}>`);
-    headers.push(`References: <${inReplyTo}>`);
+    // inReplyTo must be the full SMTP Message-ID (may already include angle brackets)
+    const bracket = inReplyTo.startsWith('<') ? inReplyTo : `<${inReplyTo}>`;
+    headers.push(`In-Reply-To: ${bracket}`);
+    headers.push(`References: ${bracket}`);
   }
 
   const rawEmail = headers.join('\r\n') + '\r\n\r\n' + fullHtml;
@@ -124,9 +126,29 @@ async function sendEmail(userId, { to, subject, body, threadId, inReplyTo, track
     requestBody
   });
 
+  // Fetch the sent message to retrieve its SMTP Message-ID header.
+  // This is required for correct In-Reply-To / References threading in replies.
+  let smtpMessageId = '';
+  try {
+    const sent = await gmail.users.messages.get({
+      userId: 'me',
+      id: response.data.id,
+      format: 'metadata',
+      metadataHeaders: ['Message-ID']
+    });
+    const msgIdHeader = (sent.data.payload.headers || [])
+      .find(h => h.name.toLowerCase() === 'message-id');
+    if (msgIdHeader) {
+      smtpMessageId = msgIdHeader.value.replace(/^<|>$/g, '');
+    }
+  } catch (err) {
+    console.error('Could not fetch sent message SMTP Message-ID:', err.message);
+  }
+
   return {
     gmailMessageId: response.data.id,
-    gmailThreadId: response.data.threadId
+    gmailThreadId: response.data.threadId,
+    smtpMessageId
   };
 }
 

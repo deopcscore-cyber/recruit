@@ -130,7 +130,7 @@ router.put('/:id', async (req, res) => {
       'name', 'email', 'title', 'company', 'linkedin', 'background',
       'career', 'education', 'summary', 'stage', 'notes', 'tags',
       'stepsCompleted', 'followUpDate', 'gmailThreadId', 'lastGmailMessageId',
-      'lastSubject', 'unread', 'opened', 'openedAt', 'thread', 'resume'
+      'lastSmtpMessageId', 'lastSubject', 'unread', 'opened', 'openedAt', 'thread', 'resume'
     ];
 
     allowed.forEach(key => {
