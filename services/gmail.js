@@ -152,43 +152,77 @@ async function getAuthedClient(user) {
   return oauth2Client;
 }
 
+function stripToPlainText(body) {
+  return body
+    .replace(/<[^>]+>/g, '')          // strip HTML tags
+    .replace(/\*\*\*(.+?)\*\*\*/g, '$1') // strip bold+italic markdown
+    .replace(/\*\*(.+?)\*\*/g, '$1')  // strip bold markdown
+    .replace(/\*(.+?)\*/g, '$1')      // strip italic markdown
+    .replace(/^#{1,3}\s+/gm, '')      // strip ATX headers
+    .replace(/^[-*]\s+/gm, '• ')      // convert bullets to unicode
+    .replace(/^[-─═]{3,}\s*$/gm, '---') // convert horizontal rules
+    .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&nbsp;/g, ' ')
+    .replace(/\n{3,}/g, '\n\n')       // collapse excess blank lines
+    .trim();
+}
+
 function buildRawEmail({ from, to, subject, body, threadId, inReplyTo, references, trackingId, baseUrl }) {
+  const boundary = `_wt_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+
+  // ── Plain-text part (deliverability: HTML-only emails score higher in spam) ─
+  const plainText = stripToPlainText(body);
+
+  // ── HTML part ────────────────────────────────────────────────────────────────
   const pixel = trackingId
     ? `<img src="${baseUrl}/track/${trackingId}" width="1" height="1" style="display:none" />`
     : '';
 
   let htmlBody;
   if (body.includes('<p') || body.includes('<h') || body.includes('<div')) {
-    // Already HTML
     htmlBody = body;
   } else if (hasMarkdown(body)) {
-    // Markdown → styled HTML (used for JD emails)
     const converted = markdownToHtml(body);
     htmlBody = `<div style="max-width:640px;margin:0 auto;font-family:Arial,Helvetica,sans-serif;font-size:15px;color:#2d2d2d;padding:24px 16px">${converted}</div>`;
   } else {
-    // Plain text → preserve line breaks
     htmlBody = `<div style="font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:1.6;color:#2d2d2d">${body.replace(/\n/g, '<br>')}</div>`;
   }
   const fullHtml = `<html><body>${htmlBody}${pixel}</body></html>`;
 
+  // ── Headers ──────────────────────────────────────────────────────────────────
   const headers = [
     `From: ${from}`,
     `To: ${to}`,
+    `Date: ${new Date().toUTCString()}`,
     `Subject: ${subject}`,
     'MIME-Version: 1.0',
-    'Content-Type: text/html; charset=utf-8'
+    `Content-Type: multipart/alternative; boundary="${boundary}"`
   ];
 
   if (inReplyTo) {
     const bracket = inReplyTo.startsWith('<') ? inReplyTo : `<${inReplyTo}>`;
     headers.push(`In-Reply-To: ${bracket}`);
-    // Use full cumulative chain if available, else just this message
     headers.push(`References: ${references || bracket}`);
   }
 
-  const rawEmail = headers.join('\r\n') + '\r\n\r\n' + fullHtml;
+  // ── Assemble multipart/alternative body ──────────────────────────────────────
+  const rawEmail = [
+    headers.join('\r\n'),
+    '',
+    `--${boundary}`,
+    'Content-Type: text/plain; charset=utf-8',
+    'Content-Transfer-Encoding: 7bit',
+    '',
+    plainText,
+    '',
+    `--${boundary}`,
+    'Content-Type: text/html; charset=utf-8',
+    'Content-Transfer-Encoding: 7bit',
+    '',
+    fullHtml,
+    '',
+    `--${boundary}--`
+  ].join('\r\n');
 
-  // Base64url encode
   return Buffer.from(rawEmail)
     .toString('base64')
     .replace(/\+/g, '-')
@@ -203,7 +237,10 @@ async function sendEmail(userId, { to, subject, body, threadId, inReplyTo, refer
   const auth = await getAuthedClient(user);
   const gmail = google.gmail({ version: 'v1', auth });
 
-  const from = user.gmail.address || 'me';
+  // Build "Display Name <email>" — this is what recipients see as the sender name
+  const fromEmail = user.gmail.address || '';
+  const fromName  = user.name || '';
+  const from = fromName ? `"${fromName}" <${fromEmail}>` : fromEmail;
 
   const raw = buildRawEmail({ from, to, subject, body, threadId, inReplyTo, references, trackingId, baseUrl: BASE_URL });
 
