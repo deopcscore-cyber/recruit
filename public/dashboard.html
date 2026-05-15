@@ -309,23 +309,29 @@
 
 <!-- ========== BULK OUTREACH MODAL ========== -->
 <div class="modal-overlay" id="bulk-outreach-modal">
-  <div class="modal" style="max-width:620px">
+  <div class="modal" style="max-width:640px">
     <div class="modal-header">
       <h3>Bulk Outreach</h3>
       <button class="modal-close">&times;</button>
     </div>
     <div class="modal-body">
-      <p style="font-size:0.875rem;color:#475569;margin:0 0 16px;line-height:1.6">
-        Select <strong>Imported</strong> candidates to send personalized outreach emails. Each email is AI-generated individually and sent with a short delay. You can review the queue before starting.
+      <p style="font-size:0.875rem;color:#475569;margin:0 0 12px;line-height:1.6">
+        Each email is AI-generated individually. Emails are spaced <strong>3–8 minutes apart at random</strong> so they don't look automated. Keep this window open while the queue runs.
       </p>
-      <div id="bulk-outreach-list" style="max-height:280px;overflow-y:auto;border:1px solid #e2e8f0;border-radius:8px;padding:8px;display:flex;flex-direction:column;gap:4px"></div>
+      <div id="bulk-outreach-list" style="max-height:260px;overflow-y:auto;border:1px solid #e2e8f0;border-radius:8px;padding:8px;display:flex;flex-direction:column;gap:4px"></div>
+      <div id="bulk-schedule-preview" style="display:none;margin-top:12px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:12px">
+        <div style="font-size:0.78rem;font-weight:600;color:#475569;margin-bottom:8px;text-transform:uppercase;letter-spacing:0.05em">Send Schedule</div>
+        <div id="bulk-schedule-list" style="display:flex;flex-direction:column;gap:6px;font-size:0.82rem"></div>
+        <div style="margin-top:10px;font-size:0.78rem;color:#64748b" id="bulk-schedule-total"></div>
+      </div>
       <div style="margin-top:12px;display:flex;align-items:center;gap:10px">
-        <label style="font-size:0.8rem;font-weight:400;color:#64748b">Subject line:</label>
-        <input type="text" id="bulk-subject" value="A conversation about Welltower" style="flex:1" />
+        <label style="font-size:0.8rem;font-weight:400;color:#64748b;white-space:nowrap">Subject:</label>
+        <input type="text" id="bulk-subject" placeholder="Personalized per candidate" style="flex:1" />
+        <span style="font-size:0.75rem;color:#94a3b8;white-space:nowrap">Leave blank to auto-personalize</span>
       </div>
     </div>
     <div class="modal-footer">
-      <span id="bulk-progress" style="font-size:0.82rem;color:#64748b;margin-right:auto"></span>
+      <span id="bulk-progress" style="font-size:0.82rem;color:#64748b;margin-right:auto;flex:1"></span>
       <button class="btn btn-secondary" id="bulk-outreach-cancel-btn">Cancel</button>
       <button class="btn btn-primary" id="bulk-outreach-start-btn">Generate & Queue</button>
     </div>

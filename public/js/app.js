@@ -376,6 +376,24 @@ function exportCSV() {
 }
 
 // ---- Bulk Outreach ----
+let bulkQueueAborted = false;
+
+function randDelay() {
+  // Random delay between 3 and 8 minutes in milliseconds
+  return (Math.floor(Math.random() * 6) + 3) * 60 * 1000; // 3,4,5,6,7,8 min
+}
+
+function formatMins(ms) {
+  const m = Math.floor(ms / 60000);
+  return m === 1 ? '1 min' : `${m} mins`;
+}
+
+function formatCountdown(ms) {
+  const m = Math.floor(ms / 60000);
+  const s = Math.floor((ms % 60000) / 1000);
+  return `${m}:${String(s).padStart(2, '0')}`;
+}
+
 function openBulkOutreachModal() {
   const imported = allCandidates.filter(c => (c.stage || 'Imported') === 'Imported' && !(c.stepsCompleted || {}).outreach);
   const list = document.getElementById('bulk-outreach-list');
@@ -387,72 +405,156 @@ function openBulkOutreachModal() {
 
   list.innerHTML = imported.map(c => `
     <label style="display:flex;align-items:center;gap:8px;padding:7px 8px;border-radius:6px;cursor:pointer;font-size:0.85rem;color:var(--text)">
-      <input type="checkbox" class="bulk-cb" data-id="${c.id}" checked />
+      <input type="checkbox" class="bulk-cb" data-id="${c.id}" data-name="${escapeHtml(c.name||'')}" checked />
       <span style="font-weight:500">${escapeHtml(c.name||'Unknown')}</span>
-      <span style="color:var(--text-muted);font-size:0.78rem">${escapeHtml(c.title||'')}${c.company?' · '+c.company:''}</span>
+      <span style="color:var(--text-muted);font-size:0.78rem">${escapeHtml(c.title||'')}${c.company?' · '+escapeHtml(c.company):''}</span>
     </label>
   `).join('');
 
+  // Wire checkboxes to refresh schedule preview
+  list.querySelectorAll('.bulk-cb').forEach(cb => cb.addEventListener('change', updateSchedulePreview));
+
   document.getElementById('bulk-progress').textContent = '';
+  document.getElementById('bulk-schedule-preview').style.display = 'none';
   document.getElementById('bulk-outreach-start-btn').disabled = false;
   document.getElementById('bulk-outreach-start-btn').textContent = 'Generate & Queue';
+  bulkQueueAborted = false;
+  updateSchedulePreview();
   new Modal('bulk-outreach-modal').open();
+}
+
+function updateSchedulePreview() {
+  const checked = document.querySelectorAll('.bulk-cb:checked');
+  const preview = document.getElementById('bulk-schedule-preview');
+  const scheduleList = document.getElementById('bulk-schedule-list');
+  const totalEl = document.getElementById('bulk-schedule-total');
+
+  if (checked.length === 0) { preview.style.display = 'none'; return; }
+
+  // Build a stable schedule (re-generate delays only if count changed)
+  if (!window._bulkScheduleDelays || window._bulkScheduleDelays.length !== checked.length) {
+    window._bulkScheduleDelays = Array.from({ length: checked.length }, (_, i) => i === 0 ? 0 : randDelay());
+  }
+
+  const now = new Date();
+  let cumulativeMs = 0;
+  const rows = Array.from(checked).map((cb, i) => {
+    cumulativeMs += window._bulkScheduleDelays[i];
+    const sendTime = new Date(now.getTime() + cumulativeMs);
+    const timeStr = sendTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const gap = i === 0 ? 'Now' : `+${formatMins(window._bulkScheduleDelays[i])}`;
+    return `<div style="display:flex;align-items:center;gap:10px">
+      <span style="min-width:80px;color:#64748b">${timeStr}</span>
+      <span style="color:#94a3b8;min-width:52px;font-size:0.75rem">${gap}</span>
+      <span style="font-weight:500;color:var(--text)">${escapeHtml(cb.dataset.name)}</span>
+    </div>`;
+  });
+
+  scheduleList.innerHTML = rows.join('');
+  const totalMins = Math.round(cumulativeMs / 60000);
+  totalEl.textContent = `Total time: ~${totalMins} minute${totalMins !== 1 ? 's' : ''} for ${checked.length} email${checked.length !== 1 ? 's' : ''}`;
+  preview.style.display = 'block';
 }
 
 async function handleBulkOutreach() {
   const checked = document.querySelectorAll('.bulk-cb:checked');
   if (checked.length === 0) { Toast.warning('Select at least one candidate'); return; }
 
-  const ids = Array.from(checked).map(cb => cb.dataset.id);
-  const subject = document.getElementById('bulk-subject').value.trim() || 'A conversation about Welltower';
+  const ids        = Array.from(checked).map(cb => cb.dataset.id);
+  const delays     = window._bulkScheduleDelays || ids.map((_, i) => i === 0 ? 0 : randDelay());
+  const subjectTpl = document.getElementById('bulk-subject').value.trim(); // blank = auto-personalize
   const progressEl = document.getElementById('bulk-progress');
-  const startBtn = document.getElementById('bulk-outreach-start-btn');
+  const startBtn   = document.getElementById('bulk-outreach-start-btn');
 
   startBtn.disabled = true;
-  startBtn.textContent = 'Running…';
+  startBtn.textContent = 'Sending…';
+  bulkQueueAborted = false;
+
+  // Disable cancel button from closing while running — repurpose it as Stop
+  const cancelBtn = document.getElementById('bulk-outreach-cancel-btn');
+  cancelBtn.textContent = 'Stop Queue';
+  cancelBtn.onclick = () => { bulkQueueAborted = true; cancelBtn.textContent = 'Stopping…'; };
 
   let sent = 0, failed = 0;
+
   for (let i = 0; i < ids.length; i++) {
+    if (bulkQueueAborted) {
+      progressEl.textContent = `Stopped after ${sent} sent.`;
+      break;
+    }
+
     const candidate = allCandidates.find(c => c.id === ids[i]);
     if (!candidate) continue;
 
-    progressEl.textContent = `Sending ${i + 1} of ${ids.length}: ${candidate.name}…`;
+    // ── Wait with live countdown (skip for first email) ──────────────────
+    if (i > 0 && delays[i] > 0) {
+      await countdownWait(delays[i], (remaining) => {
+        const next = candidate.name.split(' ')[0];
+        progressEl.innerHTML = `<span>✅ ${sent} sent so far &nbsp;·&nbsp; Next: <strong>${escapeHtml(next)}</strong> in <strong>${formatCountdown(remaining)}</strong></span>`;
+      }, () => bulkQueueAborted);
+      if (bulkQueueAborted) break;
+    }
+
+    // ── Send this email ───────────────────────────────────────────────────
+    progressEl.textContent = `Generating email ${i + 1} of ${ids.length}: ${candidate.name}…`;
     try {
-      // Generate outreach
       const aiResult = await API.ai.outreach(ids[i]);
-      const draft = aiResult.draft;
+      const draft    = aiResult.draft;
 
-      // Send
+      // Subject: custom override OR auto-personalize with first name
+      const firstName = (candidate.name || '').split(' ')[0];
+      const subject   = subjectTpl || `Something Worth a Few Minutes of Your Time, ${firstName}`;
+
       await API.email.send({ candidateId: ids[i], subject, body: draft, isReply: false });
-
-      // Mark step
       await API.candidates.update(ids[i], {
         stepsCompleted: { ...(candidate.stepsCompleted || {}), outreach: true },
         stage: 'Outreach Sent'
       });
 
-      sent++;
+      // Mark this row as sent in the schedule preview
+      const schedRows = document.querySelectorAll('#bulk-schedule-list > div');
+      if (schedRows[i]) schedRows[i].style.opacity = '0.4';
 
-      // Small delay between sends to avoid rate limits
-      if (i < ids.length - 1) await delay(1500);
+      sent++;
+      progressEl.textContent = `Sent ${sent} of ${ids.length}: ${candidate.name} ✓`;
     } catch (err) {
       console.error(`Bulk outreach failed for ${candidate.name}:`, err);
       failed++;
+      progressEl.textContent = `Failed for ${candidate.name} — continuing…`;
+      await delay(2000);
     }
   }
 
-  progressEl.textContent = `Done: ${sent} sent${failed > 0 ? `, ${failed} failed` : ''}`;
+  const summary = `Done: ${sent} sent${failed > 0 ? `, ${failed} failed` : ''}`;
+  progressEl.textContent = summary;
   startBtn.textContent = 'Done';
+  cancelBtn.textContent = 'Close';
+  cancelBtn.onclick = () => new Modal('bulk-outreach-modal').close();
+  window._bulkScheduleDelays = null; // reset for next run
 
   if (sent > 0) {
     Toast.success(`${sent} outreach email${sent !== 1 ? 's' : ''} sent`);
     await loadCandidates();
-    setTimeout(() => new Modal('bulk-outreach-modal').close(), 1500);
-  } else {
+  } else if (!bulkQueueAborted) {
     Toast.error('No emails sent — check Gmail connection');
     startBtn.disabled = false;
     startBtn.textContent = 'Retry';
   }
+}
+
+// Counts down ms, calling onTick every second, resolves when done or aborted
+function countdownWait(ms, onTick, isAborted) {
+  return new Promise(resolve => {
+    const end = Date.now() + ms;
+    const tick = () => {
+      if (isAborted && isAborted()) { resolve(); return; }
+      const remaining = end - Date.now();
+      if (remaining <= 0) { resolve(); return; }
+      onTick(remaining);
+      setTimeout(tick, 500);
+    };
+    tick();
+  });
 }
 
 function delay(ms) { return new Promise(r => setTimeout(r, ms)); }
