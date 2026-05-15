@@ -183,83 +183,164 @@ router.post('/import', csvUpload.single('csv'), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: 'CSV file required' });
 
-    const csvText = req.file.buffer.toString('utf8');
+    // Strip UTF-8 BOM if present (common in ContactOut exports and Windows CSV files)
+    let csvText = req.file.buffer.toString('utf8');
+    if (csvText.charCodeAt(0) === 0xFEFF) csvText = csvText.slice(1);
+
     let records;
     try {
       records = parse(csvText, {
         columns: true,
         skip_empty_lines: true,
         trim: true,
-        relax_column_count: true
+        relax_column_count: true,
+        relax_quotes: true,
+        bom: true
       });
     } catch (parseErr) {
+      console.error('CSV parse error:', parseErr.message);
       return res.status(400).json({ error: `CSV parse error: ${parseErr.message}` });
     }
+
+    if (!records || records.length === 0) {
+      return res.status(400).json({ error: 'CSV file appears to be empty or has no data rows' });
+    }
+
+    // Log detected headers for debugging
+    const detectedHeaders = Object.keys(records[0] || {});
+    console.log('CSV import — detected headers:', detectedHeaders);
 
     const importedCandidates = [];
     let skipped = 0;
 
-    for (const row of records) {
-      // Helper to get first matching key (case-insensitive)
-      const get = (...keys) => {
-        for (const key of keys) {
-          const found = Object.keys(row).find(k => k.toLowerCase().trim() === key.toLowerCase());
-          if (found && row[found] && row[found].trim()) return row[found].trim();
-        }
-        return '';
-      };
+    // Build a normalized header map once (strips BOM, lowercases, trims)
+    const headerMap = {};
+    detectedHeaders.forEach(h => {
+      const normalized = h.replace(/^﻿/, '').toLowerCase().trim();
+      headerMap[normalized] = h;
+    });
 
-      // Name resolution
-      let name = get('Full Name', 'Name');
+    // Exact-match getter only — avoids false positives from contains
+    const getFromRow = (row, ...keywords) => {
+      for (const kw of keywords) {
+        const kwLower = kw.toLowerCase().trim();
+        const origKey = headerMap[kwLower];
+        if (origKey && row[origKey] && String(row[origKey]).trim()) {
+          return String(row[origKey]).trim();
+        }
+      }
+      return '';
+    };
+
+    // Find the best email — tries a wide range of column names in priority order
+    const getEmail = (row) => {
+      // Ordered priority: exact names first
+      const candidate = getFromRow(row,
+        'email', 'email address', 'primary email',
+        'work email', 'work email 1', 'work email 2',
+        'email 1', 'email 2', 'email 3',
+        'email1', 'email2',
+        'personal email', 'contact email', 'business email'
+      );
+      if (candidate && candidate.includes('@')) return candidate;
+
+      // Fallback: scan all columns whose name contains 'email' for any valid address
+      for (const [normKey, origKey] of Object.entries(headerMap)) {
+        if (normKey.includes('email')) {
+          const val = row[origKey] ? String(row[origKey]).trim() : '';
+          if (val.includes('@')) return val;
+        }
+      }
+      return '';
+    };
+
+    for (const row of records) {
+      // Name resolution — try combined first, then split first+last, then single-field
+      let name = getFromRow(row, 'full name', 'name', 'contact name', 'candidate name', 'person name');
       if (!name) {
-        const first = get('First Name', 'FirstName', 'First');
-        const last = get('Last Name', 'LastName', 'Last');
+        const first = getFromRow(row, 'first name', 'firstname', 'given name', 'first');
+        const last  = getFromRow(row, 'last name',  'lastname',  'family name', 'surname', 'last');
         if (first || last) name = `${first} ${last}`.trim();
       }
 
-      // Email resolution
-      const email = get('Email', 'Email Address', 'Work Email', 'Primary Email');
+      // Email — skip row if no valid email found
+      const email = getEmail(row);
       if (!email || !email.includes('@')) {
         skipped++;
-        continue; // Skip rows with no valid email
+        continue;
       }
 
-      const title = get('Title', 'Job Title', 'Current Title', 'Position');
-      const company = get('Company', 'Current Company', 'Organization', 'Employer');
-      const linkedin = get('LinkedIn URL', 'LinkedIn Profile', 'Profile URL', 'LinkedIn');
-      const summary = get('Summary', 'Headline', 'Bio', 'Description');
-      const background = get('Background', 'About', 'Overview');
+      // Core fields — ContactOut column names and common alternatives
+      const title = getFromRow(row,
+        'job title', 'title', 'current title', 'current job title',
+        'position', 'role', 'current position', 'occupation'
+      );
+      const company = getFromRow(row,
+        'company', 'company name', 'current company', 'current company name',
+        'organization', 'employer', 'account name', 'employer name'
+      );
+      const linkedin = getFromRow(row,
+        'linkedin url', 'linkedin profile url', 'linkedin profile',
+        'linkedin link', 'profile url', 'linkedin'
+      );
+      const summary = getFromRow(row,
+        'headline', 'summary', 'bio', 'description',
+        'professional summary', 'overview', 'about'
+      );
+      const background = getFromRow(row, 'background', 'notes', 'additional info', 'additional notes');
+      const location = getFromRow(row, 'location', 'city', 'region', 'country', 'geography');
 
-      // Try to parse career/experience
+      // Career / experience — ContactOut may export as JSON array or plain text
       let career = [];
-      const experienceRaw = get('Experience', 'Work Experience', 'Career History', 'Jobs');
+      const experienceRaw = getFromRow(row,
+        'experience', 'work experience', 'career history',
+        'jobs', 'employment', 'work history', 'positions'
+      );
       if (experienceRaw) {
-        if (experienceRaw.startsWith('[') || experienceRaw.startsWith('{')) {
-          try { career = JSON.parse(experienceRaw); } catch (e) {}
+        const trimmed = experienceRaw.trim();
+        if (trimmed.startsWith('[') || trimmed.startsWith('{')) {
+          try {
+            const parsed = JSON.parse(trimmed);
+            career = Array.isArray(parsed) ? parsed : [parsed];
+          } catch (e) {
+            career = [{ description: trimmed }];
+          }
         } else {
-          career = [{ description: experienceRaw }];
+          career = [{ description: trimmed }];
         }
       }
 
-      // Try to parse education
+      // Education
       let education = [];
-      const educationRaw = get('Education', 'Education History', 'Schools');
+      const educationRaw = getFromRow(row,
+        'education', 'education history', 'schools',
+        'university', 'degree', 'academic background'
+      );
       if (educationRaw) {
-        if (educationRaw.startsWith('[') || educationRaw.startsWith('{')) {
-          try { education = JSON.parse(educationRaw); } catch (e) {}
+        const trimmed = educationRaw.trim();
+        if (trimmed.startsWith('[') || trimmed.startsWith('{')) {
+          try {
+            const parsed = JSON.parse(trimmed);
+            education = Array.isArray(parsed) ? parsed : [parsed];
+          } catch (e) {
+            education = [{ school: trimmed }];
+          }
         } else {
-          education = [{ description: educationRaw }];
+          education = [{ school: trimmed }];
         }
       }
+
+      // Build full summary including location if available
+      const fullSummary = [summary, location ? `Location: ${location}` : ''].filter(Boolean).join(' | ');
 
       const candidate = {
         ...makeDefaultCandidate(req.session.userId),
-        name: name || email,
-        email: email.toLowerCase(),
+        name: name || email.split('@')[0],
+        email: email.toLowerCase().trim(),
         title,
         company,
         linkedin,
-        summary,
+        summary: fullSummary || summary,
         background,
         career: Array.isArray(career) ? career : [],
         education: Array.isArray(education) ? education : []
@@ -268,6 +349,8 @@ router.post('/import', csvUpload.single('csv'), async (req, res) => {
       await storage.saveCandidate(candidate);
       importedCandidates.push(candidate);
     }
+
+    console.log(`CSV import complete: ${importedCandidates.length} imported, ${skipped} skipped`);
 
     return res.json({
       imported: importedCandidates.length,
