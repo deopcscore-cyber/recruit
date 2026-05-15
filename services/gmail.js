@@ -1,8 +1,6 @@
 const { google } = require('googleapis');
 const storage = require('./storage');
-
-const DATA_DIR = process.env.DATA_DIR || require('path').join(__dirname, '..', 'data');
-const BASE_URL = process.env.BASE_URL || 'http://localhost:3000';
+const { BASE_URL } = require('../config');
 
 function createOAuth2Client() {
   return new google.auth.OAuth2(
