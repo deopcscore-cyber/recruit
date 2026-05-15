@@ -58,6 +58,7 @@ app.use('/api/email',      require('./routes/email'));
 app.use('/api/settings',   require('./routes/settings'));
 app.use('/api/ai',         require('./routes/ai'));
 app.use('/api/analytics',  require('./routes/analytics'));
+app.use('/api/queue',      require('./routes/queue'));
 
 // ─── Email open tracking pixel ────────────────────────────────────────────────
 const BLANK_GIF = Buffer.from('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7', 'base64');
@@ -107,6 +108,85 @@ app.listen(PORT, () => {
     console.error('Users will not be able to register or log in!');
   }
 });
+
+// ─── Bulk outreach queue processor ───────────────────────────────────────────
+const queueSvc  = require('./services/queue');
+const claudeSvc = require('./services/claude');
+const gmailSvc2 = require('./services/gmail');
+const { v4: queueUuid } = require('uuid');
+
+let queueBusy = false;
+
+async function processQueueJob() {
+  if (queueBusy) return;
+  const job = queueSvc.getNextDueJob();
+  if (!job) return;
+
+  queueBusy = true;
+  queueSvc.updateJob(job.id, { status: 'sending' });
+
+  try {
+    const storageSvc = require('./services/storage');
+    const user      = await storageSvc.getUserById(job.userId);
+    const candidate = await storageSvc.getCandidateById(job.candidateId);
+
+    if (!user || !candidate) throw new Error('User or candidate not found');
+    if (!user.gmail || !user.gmail.connected) throw new Error('Gmail not connected');
+
+    // Generate personalised outreach
+    const draft = await claudeSvc.generateOutreach(candidate, user);
+
+    // Send via Gmail
+    const { gmailMessageId, gmailThreadId, smtpMessageId } =
+      await gmailSvc2.sendEmail(job.userId, {
+        to:      candidate.email,
+        subject: job.subject,
+        body:    draft,
+        trackingId: candidate.trackingId
+      });
+
+    // Update candidate (mirrors email send route logic)
+    const msg = {
+      id: queueUuid(), direction: 'outbound',
+      subject: job.subject, body: draft,
+      timestamp: new Date().toISOString(),
+      gmailMessageId, gmailThreadId, smtpMessageId, read: true
+    };
+    if (!candidate.thread) candidate.thread = [];
+    candidate.thread.push(msg);
+    candidate.lastGmailMessageId = gmailMessageId;
+    candidate.lastSmtpMessageId  = smtpMessageId;
+    candidate.lastSubject        = job.subject;
+    candidate.stepsCompleted     = { ...(candidate.stepsCompleted || {}), outreach: true };
+    candidate.stage              = 'Outreach Sent';
+    if (!candidate.gmailThreadId)  candidate.gmailThreadId  = gmailThreadId;
+    if (!candidate.originalSubject) candidate.originalSubject = job.subject;
+    if (!candidate.followUpDate) {
+      const fu = new Date(); fu.setDate(fu.getDate() + 5);
+      candidate.followUpDate = fu.toISOString();
+    }
+    if (smtpMessageId) {
+      const newRef = `<${smtpMessageId.replace(/^<|>$/g, '')}>`;
+      candidate.gmailReferences = candidate.gmailReferences
+        ? `${candidate.gmailReferences} ${newRef}` : newRef;
+      candidate.lastSmtpMessageId = smtpMessageId;
+    }
+    await storageSvc.saveCandidate(candidate);
+
+    queueSvc.updateJob(job.id, { status: 'sent', sentAt: new Date().toISOString() });
+    console.log(`Queue: outreach sent → ${candidate.name} <${candidate.email}>`);
+  } catch (err) {
+    console.error(`Queue job ${job.id} failed: ${err.message}`);
+    queueSvc.updateJob(job.id, { status: 'failed', error: err.message });
+  } finally {
+    queueBusy = false;
+  }
+}
+
+// Check for due jobs every 30 seconds
+setInterval(processQueueJob, 30 * 1000);
+// Prune old completed jobs every 6 hours
+setInterval(() => queueSvc.pruneOld(), 6 * 60 * 60 * 1000);
 
 // ─── Auto-fetch emails every 10 minutes ──────────────────────────────────────
 const AUTO_FETCH_MS = 10 * 60 * 1000;

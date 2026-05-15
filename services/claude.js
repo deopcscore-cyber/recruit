@@ -99,8 +99,12 @@ PARAGRAPH 3 — Bridge their background to Welltower's need:
 - "We're looking for [type of professional that matches their background] who understand what it takes to [do the specific thing they've done] — not just support one from the outside — and who bring the hands-on [operational/strategic/clinical] knowledge that comes from having [done what they've done]."
 - Follow with: "Your background across [their specific domains, named] gives you a [grounded/rare/distinctive] view of [the relevant ecosystem] that translates well into the environments we manage."
 
-PARAGRAPH 4 — Soft CTA (use this exactly):
-"If any of this resonates, feel free to reply here and I'd be happy to share more about what we're working on."
+PARAGRAPH 4 — Curiosity CTA (use this structure — make them want to know more):
+Do NOT use the passive "If any of this resonates." Instead, create a knowledge gap that makes them curious about what you haven't told them yet. Structure it like this:
+- One sentence that hints there is something specific you deliberately left out of this email — something that "lands differently once you see the full picture" or that is "easier to show than describe"
+- Then the ask: "If any part of this caught your attention — even just part of it — reply here and I'll send it over."
+- Then remove all friction: "No calls to schedule, no forms — just a reply."
+Example: "There is one part of what we are building right now that I kept out of this email on purpose — the kind of detail that is easier to show than describe, and that I think lands differently once you see the full picture. If any part of this caught your attention, reply here and I will send it over. No calls to schedule, no commitments — just a reply."
 
 SIGNATURE (after one blank line):
 ${user.name}

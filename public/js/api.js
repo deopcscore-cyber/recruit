@@ -69,6 +69,13 @@ const API = {
     score(candidateId) { return API.post('/api/ai/score', { candidateId }); }
   },
 
+  // Bulk outreach queue (server-side)
+  queue: {
+    create(jobs) { return API.post('/api/queue/outreach', { jobs }); },
+    status()     { return API.get('/api/queue/outreach'); },
+    cancel()     { return API.delete('/api/queue/outreach'); }
+  },
+
   // Analytics
   analytics: {
     get() { return API.get('/api/analytics'); }
