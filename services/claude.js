@@ -365,150 +365,36 @@ async function generateReply(candidate, user, lastMessage) {
   const lastMsg = lastMessage || (threadContext.length > 0 ? threadContext[threadContext.length - 1].body : '');
   const stepsCompleted = candidate.stepsCompleted || {};
 
-  // ── Stage detection ──────────────────────────────────────────────────────
-  let stageInstructions = '';
-
+  // What is the next pipeline step we are working toward?
+  let nextStep = '';
   if (!stepsCompleted.roleJD) {
-    // STAGE 1: Candidate replied to outreach, JD not sent yet
-    // → Quote their vision beautifully, pivot to "please review the JD below"
-    stageInstructions = `
-STAGE: FIRST REPLY AFTER OUTREACH — JD HAS NOT BEEN SENT YET
-
-GOLD STANDARD for this stage (Jill → Tomeka after Tomeka's first reply):
----
-Dear Tomeka,
-
-Thank you for your beautifully expressed reply and for articulating your vision so clearly: ensuring the aging and disabled receive person-centered care with dignity, respect, and compassion. That is not a mission statement borrowed from a handbook. It is the conviction of someone who has built their entire professional life around it, from owning The Wright Manor to the work you continue today. I am glad this resonated.
-
-Before we schedule time to connect, I'd like to kindly ask you to review the job description below. Please take a moment to consider whether this role aligns with your vision and career aspirations. If you feel it's a meaningful match, we can proceed and get a call on the calendar. If not, no worries at all, I'd be happy to explore other opportunities within the organization that may better align with where you want to make your impact. Looking forward to your feedback.
-
-[ROLE DESCRIPTION BELOW]
-
-${user.name}
-${recruiterTitle} at Welltower™ Inc.
----
-
-WRITE THIS STAGE FOLLOWING THIS EXACT STRUCTURE:
-1. "Dear [First Name],"
-2. Quote or closely paraphrase something specific they said about their vision, values, or motivation — elevate it: "That is not a mission statement borrowed from a handbook. It is the conviction of someone who has built their entire professional life around it, from [specific role/company in their background] to the work you continue today."
-3. "I am glad this resonated."
-4. "Before we schedule time to connect, I'd like to kindly ask you to review the job description below."
-5. "Please take a moment to consider whether this role aligns with your vision and career aspirations. If you feel it's a meaningful match, we can proceed and get a call on the calendar. If not, no worries at all, I'd be happy to explore other opportunities within the organization that may better align with where you want to make your impact."
-6. "Looking forward to your feedback."
-7. "[ROLE DESCRIPTION BELOW]" — this placeholder tells the recruiter where to paste the JD
-8. Signature
-
-DO NOT ask for resume. DO NOT schedule a call. The JD review must come first.`;
-
-  } else if (stepsCompleted.roleJD && !stepsCompleted.resumeRequested) {
-    // STAGE 2: JD sent, candidate expressed interest / asked for scheduling
-    // → "before we schedule, please send your resume" with positioning explanation
-    stageInstructions = `
-STAGE: JD SENT, CANDIDATE IS INTERESTED — REQUEST RESUME
-
-GOLD STANDARD for this stage (Jill → Tomeka after Tomeka expressed interest in JD and offered availability):
----
-Dear Tomeka,
-
-Great to hear this resonates so strongly with you, that is always a very encouraging sign.
-
-I would genuinely love to jump on a call with you and explore this further. Before we schedule time, though, there are a few details and questions I'd like to review first so I can make sure we position you as strongly as possible going into the process.
-
-Could you send me your current resume when you have a moment?
-
-There is an early screening step on these opportunities that can sometimes be stricter than people expect, and I have seen very strong candidates get overlooked simply because certain aspects of their leadership background, operational scope, or measurable impact were not coming through clearly enough on paper.
-
-Given the depth and uniqueness of your background, from owning and operating The Wright Manor, to home care leadership, elder care advising, member navigation, and safety instruction, I want to make sure the full strength of your experience is being communicated in the clearest and most compelling way possible before anything formally moves forward.
-
-Once I've had the chance to review it, I can advise you on next steps very quickly and we can move straight into scheduling time to connect.
-
-Looking forward to seeing it, Tomeka.
-
-${user.name}
-${recruiterTitle} at Welltower™ Inc.
----
-
-WRITE THIS STAGE FOLLOWING THIS EXACT STRUCTURE:
-1. "Dear [First Name],"
-2. Acknowledge their enthusiasm briefly — reference something specific they said (their phrasing about why it resonates, their availability they mentioned, their excitement)
-3. "I would genuinely love to jump on a call with you and explore this further. Before we schedule time, though, there are a few details and questions I'd like to review first so I can make sure we position you as strongly as possible going into the process."
-4. "Could you send me your current resume when you have a moment?"
-5. Explain WHY (early screening step, strong candidates get overlooked when experience isn't communicated clearly on paper)
-6. Reference their SPECIFIC background by name (actual companies and roles from their profile) — "from [specific ownership/company], to [other roles]"
-7. "Once I've had the chance to review it, I can advise you on next steps very quickly and we can move straight into scheduling time to connect."
-8. "Looking forward to seeing it, [First Name]."
-9. Signature
-
-DO NOT promise specific call times. DO NOT mention Victory or resume consultants yet.`;
-
+    nextStep = `NEXT PIPELINE STEP: Get the candidate to review the Role JD.
+After fully addressing whatever they said, transition toward: "Before we schedule time to connect, I'd like to kindly ask you to review the job description below. Please take a moment to consider whether this role aligns with your vision and career aspirations. If you feel it's a meaningful match, we can proceed and get a call on the calendar. If not, no worries at all, I'd be happy to explore other opportunities within the organization that may better align with where you want to make your impact. Looking forward to your feedback." Then add [ROLE DESCRIPTION BELOW] as a placeholder on its own line.
+IMPORTANT: Only pivot to the JD if the candidate's message has been properly addressed first. If they asked a question or raised a concern, answer it completely before pivoting.`;
+  } else if (!stepsCompleted.resumeRequested) {
+    nextStep = `NEXT PIPELINE STEP: Ask for their resume.
+After fully addressing whatever they said, transition toward requesting their resume — warmly, with an explanation: "I would genuinely love to jump on a call with you and explore this further. Before we schedule time, though, there are a few details I'd like to review first so I can make sure we position you as strongly as possible going into the process. Could you send me your current resume when you have a moment?" Then explain WHY: there's an early screening step, strong candidates get overlooked when their background isn't communicated clearly on paper. Reference their specific background (companies, roles). End: "Once I've had the chance to review it, I can advise you on next steps very quickly and we can move straight into scheduling time to connect."
+IMPORTANT: Only pivot to the resume request if the candidate's message has been properly addressed first.`;
   } else if (stepsCompleted.resumeReceived && !stepsCompleted.reviewSent) {
-    // STAGE 3: Resume received — acknowledge receipt + ask 2 clarifying questions
-    stageInstructions = `
-STAGE: RESUME RECEIVED — ACKNOWLEDGE AND ASK TWO CLARIFYING QUESTIONS
-
-GOLD STANDARD for this stage (Jill → Tomeka after Tomeka sent resume):
----
-Dear Tomeka,
-
-I've successfully received your resume, thank you for sending that over.
-
-I'm currently reviewing your background against the specific operational leadership and portfolio-level requirements tied to this opportunity. My goal is to ensure your narrative fully bridges your hands-on senior care leadership experience with the type of strategic operational credibility these teams are looking for at the national portfolio level.
-
-Before I finalize my internal assessment and prepare my recommendations for next steps, I wanted to clarify a couple of details to ensure we position you as strongly as possible:
-
-• Recency: Is this the most current and fully updated version of your resume for an active executive-level opportunity?
-
-• Comprehensive Scope: Does this version fully capture the breadth of your leadership journey and your most significant operational accomplishments to date — particularly your ownership responsibilities at Wright Manor, your home care leadership work, consulting scope, and any measurable growth, compliance, staffing, or care quality outcomes tied to those experiences?
-
-I ask because backgrounds like yours are often much stronger in practice than what initially appears on paper, especially when someone has worn as many operational hats as you have across residential care, home care, member navigation, and caregiver education.
-
-I want to ensure we are not leaving any valuable experience, leadership scope, or strategic impact understated before anything moves forward internally.
-
-Once you confirm those details, I'll finalize my feedback and we can discuss the specific areas we may want to strengthen further to maximize how your background is received during early review.
-
-Looking forward to hearing back from you, Tomeka.
-
-${user.name}
-${recruiterTitle} at Welltower™ Inc.
----
-
-WRITE THIS STAGE FOLLOWING THIS EXACT STRUCTURE:
-1. "Dear [First Name],"
-2. "I've successfully received your resume, thank you for sending that over."
-3. "I'm currently reviewing your background against the specific [type of requirements] tied to this opportunity. My goal is to ensure your narrative fully bridges your [specific type of experience] with the type of [strategic/operational/clinical] credibility these teams are looking for."
-4. "Before I finalize my internal assessment and prepare my recommendations for next steps, I wanted to clarify a couple of details to ensure we position you as strongly as possible:"
-5. TWO specific bullet questions:
-   • Recency: Is this the most current and fully updated version?
-   • Comprehensive Scope: Does it fully capture [reference their SPECIFIC background by name — actual companies, roles, accomplishments from their profile]?
-6. "I ask because backgrounds like yours are often much stronger in practice than what initially appears on paper, especially when someone has [reference their specific multi-dimensional career path]."
-7. "I want to ensure we are not leaving any valuable experience, leadership scope, or strategic impact understated before anything moves forward internally."
-8. "Once you confirm those details, I'll finalize my feedback and we can discuss the specific areas we may want to strengthen further to maximize how your background is received during early review."
-9. "Looking forward to hearing back from you, [First Name]."
-10. Signature
-
-DO NOT give resume feedback yet. DO NOT mention Victory or consultants yet.`;
-
+    nextStep = `NEXT PIPELINE STEP: Acknowledge resume receipt and ask two clarifying questions.
+If they just sent their resume or are referencing it, structure your reply as: (1) "I've successfully received your resume, thank you for sending that over." (2) Say you're reviewing against specific requirements. (3) Ask exactly two bullet questions before finalizing feedback: Recency (is this the most current version?) and Comprehensive Scope (does it fully capture their ownership at [company], home care leadership, and other key accomplishments — reference their actual background). (4) "I ask because backgrounds like yours are often much stronger in practice than what initially appears on paper." (5) "Once you confirm those details, I'll finalize my feedback."
+IMPORTANT: Only use this structure if the resume is what they're talking about. Otherwise address their actual message first.`;
   } else {
-    // STAGE 4: General reply — context-appropriate
-    stageInstructions = `
-STAGE: GENERAL REPLY — respond appropriately based on the full conversation context
-
-INSTRUCTIONS:
-1. OPEN by quoting or closely paraphrasing something SPECIFIC from their last message — not generic
-2. Address any specific things they mentioned (questions, concerns, timing, feedback)
-3. Move the conversation naturally toward the next step
-4. Warm, specific, human — not scripted`;
+    nextStep = `NEXT PIPELINE STEP: Keep the conversation warm and moving forward naturally based on context. Address whatever they said, then guide gently toward the logical next step.`;
   }
 
-  const prompt = `You are ${user.name}, ${recruiterTitle} at Welltower Inc., writing a reply to an executive candidate. This is a real ongoing conversation. Follow the gold standard and stage instructions below exactly.
+  const prompt = `You are ${user.name}, ${recruiterTitle} at Welltower Inc., writing a reply to an executive candidate. This is a real, ongoing conversation. Your reply must do TWO things in order:
+
+1. FIRST — Read and respond directly to what the candidate actually said in their last message
+2. THEN — Once their message is addressed, naturally transition to the next pipeline step
 
 CANDIDATE INFORMATION:
 ${candidateInfo}
 
-CONVERSATION HISTORY (most recent last):
+FULL CONVERSATION HISTORY (most recent last):
 ${JSON.stringify(threadContext, null, 2)}
 
-MOST RECENT MESSAGE FROM CANDIDATE:
+CANDIDATE'S LAST MESSAGE:
 ${lastMsg}
 
 PIPELINE STATUS:
@@ -518,20 +404,53 @@ PIPELINE STATUS:
 - Resume received: ${stepsCompleted.resumeReceived ? 'Yes' : 'No'}
 - Resume review sent: ${stepsCompleted.reviewSent ? 'Yes' : 'No'}
 - Victory intro sent: ${stepsCompleted.victorySent ? 'Yes' : 'No'}
-${stageInstructions}
 
-CRITICAL RULES (all stages):
-- NEVER open with "Thank you for getting back to me" or "I hope this finds you well" or any generic opener
-- NEVER be vague — always reference their actual background, companies, and words
-- Sound like a real human — warm, deliberate, specific
-- Signature: ${user.name}\n${recruiterTitle} at Welltower™ Inc.
-- Output ONLY the email body starting with "Dear [First Name]," — no subject line, no commentary
+${nextStep}
+
+HOW TO HANDLE COMMON CANDIDATE RESPONSES:
+
+If they expressed enthusiasm or said this resonates:
+→ Acknowledge it warmly and specifically — quote their exact words, then move to next step.
+
+If they asked about salary or compensation:
+→ "That's a great question — once I've had a chance to review your full background, I'd be happy to walk you through the complete compensation structure in detail. It's a strong package and I want to make sure we're having that conversation with the full picture on both sides." Then move to next step.
+
+If they said they're not actively looking:
+→ "I completely understand, and I genuinely appreciate your honesty. Most of the people I reach out to aren't actively looking — that's actually part of why I'm reaching out to you specifically. I'm not asking you to make any decisions today, just asking you to take a look at what we're working on and see if it's worth a conversation." Then move to next step.
+
+If they asked about the team, culture, or what the role looks like day-to-day:
+→ Speak to Welltower's mission-driven culture, the scale (1,500+ properties, global portfolio), the collaborative and data-driven environment, and the fact that this is a company where operational leaders have genuine influence. Don't overpromise specifics — say "I'd love to walk you through the team structure and what the day-to-day looks like on a call." Then move to next step.
+
+If they raised a concern about location, travel, or relocation:
+→ Acknowledge it directly, note that Welltower has flexible hybrid/remote arrangements and they work with candidates on logistics. "Let's not let location be a blocker before we've even had a chance to talk — these are details we can work through together." Then move to next step.
+
+If they asked about the hiring timeline or process:
+→ "We're in early stages of identifying the right person for this — which is actually a good place to be, because it means there's still time to position your background properly before formal review begins. That's exactly why I want to make sure [next step]."
+
+If they said they need to think about it or haven't decided:
+→ "Absolutely, take whatever time you need — there's no pressure here at all. What I'd suggest in the meantime is [next step], so that if you do decide this is worth exploring further, we're not starting from scratch."
+
+If they pushed back, were skeptical, or asked how you found them:
+→ Be honest and warm. "I was genuinely drawn to your background — [specific thing from their profile]. I don't reach out to everyone, and I don't reach out without reading someone's background carefully first." Then move to next step.
+
+If they gave specific availability for a call:
+→ Acknowledge it warmly ("Thursday after 3pm and next Friday all day — noted, and I appreciate you making that easy."), but explain that before locking in time, you want to [next step] so the call is as productive as possible.
+
+CRITICAL RULES:
+- ALWAYS address what they actually said BEFORE pivoting to the next step
+- NEVER skip over a question, concern, or hesitation to get to the template
+- NEVER open with "Thank you for getting back to me" or any generic filler
+- NEVER sound like a script — sound like a real person who read their message carefully
+- Reference their actual background (specific companies, roles, words they used) throughout
+- Keep it focused — don't try to do too much in one email
+- Signature at the end: ${user.name}\n${recruiterTitle} at Welltower™ Inc.
+- Output ONLY the email body starting with "Dear [First Name]," — no subject line, no extra commentary
 
 Write the reply now:`;
 
   const response = await client.messages.create({
     model: MODEL,
-    max_tokens: 800,
+    max_tokens: 900,
     messages: [{ role: 'user', content: prompt }]
   });
 
