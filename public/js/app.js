@@ -557,6 +557,25 @@ function initSettingsPage() {
     finally { btn.disabled = false; btn.textContent = 'Send Test Email'; }
   });
 
+  document.getElementById('profile-form').addEventListener('submit', async e => {
+    e.preventDefault();
+    const btn = e.target.querySelector('[type=submit]');
+    btn.disabled = true; btn.textContent = 'Saving…';
+    try {
+      const data = {
+        name: document.getElementById('profile-name').value.trim(),
+        title: document.getElementById('profile-title').value.trim()
+      };
+      await API.settings.update(data);
+      if (currentUser) {
+        if (data.name) currentUser.name = data.name;
+        currentUser.title = data.title;
+      }
+      Toast.success('Profile saved');
+    } catch (err) { Toast.error(err.message); }
+    finally { btn.disabled = false; btn.textContent = 'Save Profile'; }
+  });
+
   document.getElementById('style-form').addEventListener('submit', async e => {
     e.preventDefault();
     const btn = e.target.querySelector('[type=submit]');
@@ -595,6 +614,8 @@ function initSettingsPage() {
 async function loadSettingsPage() {
   try {
     const style = await API.settings.get();
+    document.getElementById('profile-name').value = style.name || (currentUser && currentUser.name) || '';
+    document.getElementById('profile-title').value = style.title || (currentUser && currentUser.title) || '';
     document.getElementById('style-tone').value = style.tone || 'warm';
     document.getElementById('style-notes').value = style.notes || '';
     document.getElementById('style-use').value = (style.use || []).join(', ');

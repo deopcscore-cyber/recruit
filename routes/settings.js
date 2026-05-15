@@ -13,7 +13,11 @@ router.get('/', async (req, res) => {
   try {
     const user = await storage.getUserById(req.session.userId);
     if (!user) return res.status(404).json({ error: 'User not found' });
-    return res.json(user.style || { tone: 'warm', notes: '', use: [], avoid: [] });
+    return res.json({
+      ...(user.style || { tone: 'warm', notes: '', use: [], avoid: [] }),
+      name: user.name || '',
+      title: user.title || ''
+    });
   } catch (err) {
     console.error('Get settings error:', err);
     return res.status(500).json({ error: 'Failed to get settings' });
@@ -26,7 +30,7 @@ router.put('/', async (req, res) => {
     const user = await storage.getUserById(req.session.userId);
     if (!user) return res.status(404).json({ error: 'User not found' });
 
-    const { tone, notes, use, avoid } = req.body;
+    const { tone, notes, use, avoid, name, title } = req.body;
 
     user.style = user.style || {};
     if (tone !== undefined) user.style.tone = tone;
@@ -34,8 +38,16 @@ router.put('/', async (req, res) => {
     if (use !== undefined) user.style.use = Array.isArray(use) ? use : [];
     if (avoid !== undefined) user.style.avoid = Array.isArray(avoid) ? avoid : [];
 
+    // Profile fields
+    if (name && name.trim()) user.name = name.trim();
+    if (title !== undefined) user.title = title.trim();
+
     await storage.saveUser(user);
-    return res.json(user.style);
+    return res.json({
+      ...user.style,
+      name: user.name || '',
+      title: user.title || ''
+    });
   } catch (err) {
     console.error('Update settings error:', err);
     return res.status(500).json({ error: 'Failed to update settings' });

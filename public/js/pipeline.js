@@ -723,7 +723,7 @@ function renderOutreachTab(body) {
           </div>
           <div class="form-group">
             <label>Subject Line</label>
-            <input type="text" id="outreach-subject" placeholder="A conversation about Welltower" />
+            <input type="text" id="outreach-subject" placeholder="Something Worth a Few Minutes of Your Time, [Name]" />
           </div>
           <div class="form-group">
             <label>Message</label>
@@ -765,7 +765,7 @@ function renderOutreachTab(body) {
     bodyId: 'outreach-body',
     regenBtnId: 'outreach-regen',
     sendBtnId: 'outreach-send',
-    defaultSubject: `A conversation about Welltower`,
+    defaultSubject: `Something Worth a Few Minutes of Your Time, ${c.name.split(' ')[0]}`,
     stepKey: 'outreach',
     stageTo: 'Outreach Sent',
     generate: () => API.ai.outreach(c.id)
@@ -1210,7 +1210,7 @@ function renderThreadTab(body) {
       if (result && result.draft) {
         body.querySelector('#th-body').value = result.draft;
         if (type === 'outreach' && !body.querySelector('#th-subject').value) {
-          body.querySelector('#th-subject').value = 'A conversation about Welltower';
+          body.querySelector('#th-subject').value = `Something Worth a Few Minutes of Your Time, ${c.name.split(' ')[0]}`;
         }
         body.querySelector('#th-body').focus();
       }
