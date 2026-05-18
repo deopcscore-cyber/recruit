@@ -435,6 +435,7 @@ html, body {
 .btn-ghost { background: transparent; color: var(--text-mid); }
 .btn-ghost:hover:not(:disabled) { background: var(--bg); }
 .btn-sm { padding: 5px 10px; font-size: 0.8rem; min-height: 30px; }
+.btn-xs { padding: 3px 8px; font-size: 0.75rem; min-height: 24px; border-radius: 5px; }
 
 /* ---- Forms ---- */
 .form-group { margin-bottom: 14px; }

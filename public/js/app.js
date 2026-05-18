@@ -385,6 +385,18 @@ function fmtMins(ms) {
   return m === 1 ? '1 min' : `${m} mins`;
 }
 
+function applyBulkLimit(n) {
+  // n = number or null/0 = all
+  const cbs = [...document.querySelectorAll('.bulk-cb')];
+  cbs.forEach((cb, i) => {
+    cb.checked = (!n || n <= 0) ? true : i < n;
+  });
+  const limitInput = document.getElementById('bulk-limit-input');
+  if (limitInput) limitInput.value = (n && n > 0) ? n : '';
+  window._bulkDelays = null;
+  buildSchedulePreview();
+}
+
 function openBulkOutreachModal() {
   const imported = allCandidates.filter(c => (c.stage || 'Imported') === 'Imported' && !(c.stepsCompleted || {}).outreach);
   const list = document.getElementById('bulk-outreach-list');
@@ -402,7 +414,41 @@ function openBulkOutreachModal() {
     </label>
   `).join('');
 
-  list.querySelectorAll('.bulk-cb').forEach(cb => cb.addEventListener('change', buildSchedulePreview));
+  list.querySelectorAll('.bulk-cb').forEach(cb => cb.addEventListener('change', () => {
+    // Sync the limit input to match checked count
+    const checkedCount = document.querySelectorAll('.bulk-cb:checked').length;
+    const limitInput = document.getElementById('bulk-limit-input');
+    if (limitInput) limitInput.value = checkedCount < imported.length ? checkedCount : '';
+    window._bulkDelays = null;
+    buildSchedulePreview();
+  }));
+
+  // "of N candidates" label
+  const ofEl = document.getElementById('bulk-limit-of');
+  if (ofEl) ofEl.textContent = `of ${imported.length} candidate${imported.length !== 1 ? 's' : ''}`;
+
+  // Limit input — typing a number checks/unchecks accordingly
+  const limitInput = document.getElementById('bulk-limit-input');
+  if (limitInput) {
+    limitInput.value = '';
+    // Remove old listener by cloning
+    const fresh = limitInput.cloneNode(true);
+    limitInput.parentNode.replaceChild(fresh, limitInput);
+    fresh.addEventListener('input', () => {
+      const v = parseInt(fresh.value, 10);
+      applyBulkLimit(isNaN(v) ? 0 : Math.min(v, imported.length));
+    });
+  }
+
+  // Quick-select chips
+  document.querySelectorAll('.bulk-quick-btn').forEach(btn => {
+    const clone = btn.cloneNode(true);
+    btn.parentNode.replaceChild(clone, btn);
+    clone.addEventListener('click', () => {
+      const n = clone.dataset.n === 'all' ? 0 : parseInt(clone.dataset.n, 10);
+      applyBulkLimit(n);
+    });
+  });
 
   document.getElementById('bulk-progress').textContent = '';
   document.getElementById('bulk-schedule-preview').style.display = 'none';

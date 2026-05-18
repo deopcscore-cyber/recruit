@@ -379,7 +379,21 @@
       <p style="font-size:0.875rem;color:#475569;margin:0 0 12px;line-height:1.6">
         Each email is AI-generated individually. Emails are spaced <strong>3–8 minutes apart at random</strong> so they don't look automated. Keep this window open while the queue runs.
       </p>
-      <div id="bulk-outreach-list" style="max-height:260px;overflow-y:auto;border:1px solid #e2e8f0;border-radius:8px;padding:8px;display:flex;flex-direction:column;gap:4px"></div>
+      <!-- Limit + select controls -->
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap">
+        <span style="font-size:0.8rem;color:#64748b;white-space:nowrap">Send to:</span>
+        <input type="number" id="bulk-limit-input" min="1" placeholder="All"
+               style="width:72px;font-size:0.85rem;padding:5px 8px;border:1px solid #e2e8f0;border-radius:6px;text-align:center" />
+        <span id="bulk-limit-of" style="font-size:0.8rem;color:#94a3b8"></span>
+        <div style="display:flex;gap:5px;margin-left:auto">
+          <button type="button" class="bulk-quick-btn btn btn-secondary btn-xs" data-n="10">10</button>
+          <button type="button" class="bulk-quick-btn btn btn-secondary btn-xs" data-n="20">20</button>
+          <button type="button" class="bulk-quick-btn btn btn-secondary btn-xs" data-n="25">25</button>
+          <button type="button" class="bulk-quick-btn btn btn-secondary btn-xs" data-n="50">50</button>
+          <button type="button" class="bulk-quick-btn btn btn-secondary btn-xs" data-n="all">All</button>
+        </div>
+      </div>
+      <div id="bulk-outreach-list" style="max-height:240px;overflow-y:auto;border:1px solid #e2e8f0;border-radius:8px;padding:8px;display:flex;flex-direction:column;gap:4px"></div>
       <div id="bulk-schedule-preview" style="display:none;margin-top:12px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:12px">
         <div style="font-size:0.78rem;font-weight:600;color:#475569;margin-bottom:8px;text-transform:uppercase;letter-spacing:0.05em">Send Schedule</div>
         <div id="bulk-schedule-list" style="display:flex;flex-direction:column;gap:6px;font-size:0.82rem"></div>
