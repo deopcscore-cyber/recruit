@@ -709,6 +709,80 @@ function initSettingsPage() {
     } catch (err) { Toast.error(err.message); }
     finally { btn.disabled = false; btn.textContent = 'Create Account'; }
   });
+
+  // ── Signature form ──────────────────────────────────────────────────────────
+  document.getElementById('signature-form').addEventListener('submit', async e => {
+    e.preventDefault();
+    const btn = e.target.querySelector('[type=submit]');
+    btn.disabled = true; btn.textContent = 'Saving…';
+    try {
+      await API.settings.update({
+        signature: {
+          enabled:    document.getElementById('sig-enabled').checked,
+          photoUrl:   document.getElementById('sig-photo').value.trim(),
+          website:    document.getElementById('sig-website').value.trim(),
+          location:   document.getElementById('sig-location').value.trim(),
+          linkedin:   document.getElementById('sig-linkedin').value.trim(),
+          facebook:   document.getElementById('sig-facebook').value.trim(),
+          twitter:    document.getElementById('sig-twitter').value.trim(),
+          disclaimer: document.getElementById('sig-disclaimer').value.trim()
+        }
+      });
+      Toast.success('Signature saved');
+    } catch (err) { Toast.error(err.message); }
+    finally { btn.disabled = false; btn.textContent = 'Save Signature'; }
+  });
+
+  document.getElementById('sig-preview-btn').addEventListener('click', () => {
+    const box = document.getElementById('sig-preview-box');
+    const content = document.getElementById('sig-preview-content');
+    const name    = document.getElementById('profile-name').value.trim() || (currentUser && currentUser.name) || 'Your Name';
+    const title   = document.getElementById('profile-title').value.trim() || 'Senior Talent Acquisition Coordinator';
+    const photo   = document.getElementById('sig-photo').value.trim();
+    const website = document.getElementById('sig-website').value.trim();
+    const location= document.getElementById('sig-location').value.trim();
+    const linkedin= document.getElementById('sig-linkedin').value.trim();
+    const facebook= document.getElementById('sig-facebook').value.trim();
+    const twitter = document.getElementById('sig-twitter').value.trim();
+    const disclaimer = document.getElementById('sig-disclaimer').value.trim();
+
+    const badge = (href, bg, label) => href
+      ? `<a href="${href}" target="_blank" style="display:inline-block;background:${bg};color:#fff;font-size:11px;font-weight:700;letter-spacing:.4px;padding:4px 10px;border-radius:4px;text-decoration:none;margin-right:5px">${label}</a>`
+      : '';
+
+    const photoHtml = photo
+      ? `<img src="${photo}" width="64" height="64" style="border-radius:50%;object-fit:cover;border:2px solid #e2e8f0;margin-right:14px;vertical-align:top" />`
+      : '';
+
+    const infoLines = [
+      `<strong style="font-size:14px;color:#1a1a2e">${name}</strong>`,
+      `<span style="font-size:12px;color:#475569">${title}</span>`,
+      `<span style="font-size:12px;color:#475569">Welltower Inc. | NYSE: WELL</span>`,
+      website  ? `<span style="font-size:12px;color:#475569">🌐 <a href="${website}" style="color:#1a3e72;text-decoration:none">${website.replace(/^https?:\/\//, '')}</a></span>` : '',
+      location ? `<span style="font-size:12px;color:#475569">📍 ${location}</span>` : ''
+    ].filter(Boolean).join('<br>');
+
+    const socialHtml = (linkedin || facebook || twitter)
+      ? `<div style="margin-top:8px">${badge(linkedin,'#0077B5','LinkedIn')}${badge(facebook,'#1877F2','Facebook')}${badge(twitter,'#000','𝕏')}</div>`
+      : '';
+
+    const btnHtml = website
+      ? `<div style="margin-top:10px"><a href="${website}" target="_blank" style="display:inline-block;background:#1a3e72;color:#fff;font-size:12px;font-weight:600;padding:6px 16px;border-radius:5px;text-decoration:none">Visit Website</a></div>`
+      : '';
+
+    const discHtml = disclaimer
+      ? `<p style="margin:10px 0 0;font-size:10px;color:#94a3b8;line-height:1.5;border-top:1px solid #e2e8f0;padding-top:8px">${disclaimer}</p>`
+      : '';
+
+    content.innerHTML = `
+      <p style="font-style:italic;font-family:Georgia,serif;color:#2d2d2d;margin:0 0 10px">Sincerely,</p>
+      <div style="display:flex;align-items:flex-start">
+        ${photoHtml}
+        <div style="line-height:1.8">${infoLines}</div>
+      </div>
+      ${socialHtml}${btnHtml}${discHtml}`;
+    box.style.display = 'block';
+  });
 }
 
 async function loadSettingsPage() {
@@ -720,6 +794,18 @@ async function loadSettingsPage() {
     document.getElementById('style-notes').value = style.notes || '';
     document.getElementById('style-use').value = (style.use || []).join(', ');
     document.getElementById('style-avoid').value = (style.avoid || []).join(', ');
+
+    // Signature fields
+    const sig = style.signature || {};
+    document.getElementById('sig-enabled').checked       = !!sig.enabled;
+    document.getElementById('sig-photo').value           = sig.photoUrl   || '';
+    document.getElementById('sig-website').value         = sig.website    || '';
+    document.getElementById('sig-location').value        = sig.location   || '';
+    document.getElementById('sig-linkedin').value        = sig.linkedin   || '';
+    document.getElementById('sig-facebook').value        = sig.facebook   || '';
+    document.getElementById('sig-twitter').value         = sig.twitter    || '';
+    document.getElementById('sig-disclaimer').value      = sig.disclaimer || '';
+
     await updateGmailStatus();
   } catch (err) {
     Toast.error('Failed to load settings');

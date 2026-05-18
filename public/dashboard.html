@@ -161,6 +161,67 @@
         </div>
 
         <div class="settings-card">
+          <div class="settings-card-header">
+            <h3>Email Signature</h3>
+          </div>
+          <div class="settings-card-body">
+            <form id="signature-form">
+              <div class="form-group" style="margin-bottom:14px">
+                <label style="display:flex;align-items:center;gap:10px;cursor:pointer">
+                  <input type="checkbox" id="sig-enabled" style="width:16px;height:16px" />
+                  <span>Enable signature on all outgoing emails</span>
+                </label>
+              </div>
+
+              <div id="sig-fields">
+                <div class="form-row">
+                  <div class="form-group">
+                    <label>Profile Photo URL <span class="text-muted text-xs">(direct image link)</span></label>
+                    <input type="url" id="sig-photo" placeholder="https://example.com/photo.jpg" />
+                  </div>
+                  <div class="form-group">
+                    <label>Location</label>
+                    <input type="text" id="sig-location" placeholder="Toledo, OH" />
+                  </div>
+                </div>
+                <div class="form-group">
+                  <label>Website URL</label>
+                  <input type="url" id="sig-website" placeholder="https://welltower.com" />
+                </div>
+                <div class="form-row">
+                  <div class="form-group">
+                    <label>LinkedIn URL</label>
+                    <input type="url" id="sig-linkedin" placeholder="https://linkedin.com/in/yourprofile" />
+                  </div>
+                  <div class="form-group">
+                    <label>Facebook URL</label>
+                    <input type="url" id="sig-facebook" placeholder="https://facebook.com/yourpage" />
+                  </div>
+                </div>
+                <div class="form-group">
+                  <label>X / Twitter URL</label>
+                  <input type="url" id="sig-twitter" placeholder="https://x.com/yourhandle" />
+                </div>
+                <div class="form-group">
+                  <label>Legal Disclaimer <span class="text-muted text-xs">(optional)</span></label>
+                  <textarea id="sig-disclaimer" placeholder="This email and any attachments are intended only for the use of the individual or entity to which they are addressed…" style="min-height:70px"></textarea>
+                </div>
+
+                <div id="sig-preview-box" style="display:none;margin-top:16px;padding:18px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px">
+                  <p style="font-size:11px;color:#94a3b8;text-transform:uppercase;letter-spacing:.5px;margin:0 0 10px;font-weight:600">Signature Preview</p>
+                  <div id="sig-preview-content"></div>
+                </div>
+              </div>
+
+              <div style="display:flex;gap:8px;margin-top:14px">
+                <button type="submit" class="btn btn-primary btn-sm">Save Signature</button>
+                <button type="button" id="sig-preview-btn" class="btn btn-secondary btn-sm">Preview</button>
+              </div>
+            </form>
+          </div>
+        </div>
+
+        <div class="settings-card">
           <div class="settings-card-header"><h3>Gmail Integration</h3></div>
           <div class="settings-card-body">
             <div id="gmail-status-indicator" class="gmail-status disconnected" style="margin-bottom:16px">

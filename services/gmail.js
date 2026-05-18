@@ -166,11 +166,11 @@ function stripToPlainText(body) {
     .trim();
 }
 
-function buildRawEmail({ from, to, subject, body, threadId, inReplyTo, references, trackingId, baseUrl }) {
+function buildRawEmail({ from, to, subject, body, extraPlain = '', threadId, inReplyTo, references, trackingId, baseUrl }) {
   const boundary = `_wt_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
 
   // ── Plain-text part (deliverability: HTML-only emails score higher in spam) ─
-  const plainText = stripToPlainText(body);
+  const plainText = stripToPlainText(body) + (extraPlain || '');
 
   // ── HTML part ────────────────────────────────────────────────────────────────
   const pixel = trackingId
@@ -242,7 +242,14 @@ async function sendEmail(userId, { to, subject, body, threadId, inReplyTo, refer
   const fromName  = user.name || '';
   const from = fromName ? `"${fromName}" <${fromEmail}>` : fromEmail;
 
-  const raw = buildRawEmail({ from, to, subject, body, threadId, inReplyTo, references, trackingId, baseUrl: BASE_URL });
+  // Append email signature if enabled
+  const sigHtml  = buildSignatureHtml(user);
+  const sigPlain = buildSignaturePlainText(user);
+  const bodyWithSig = sigHtml
+    ? body + sigHtml
+    : body;
+
+  const raw = buildRawEmail({ from, to, subject, body: bodyWithSig, extraPlain: sigPlain, threadId, inReplyTo, references, trackingId, baseUrl: BASE_URL });
 
   const requestBody = { raw };
   if (threadId) requestBody.threadId = threadId;
@@ -287,7 +294,7 @@ async function fetchUnreadReplies(userId) {
 
   const listResponse = await gmail.users.messages.list({
     userId: 'me',
-    q: 'is:unread in:inbox',
+    q: 'is:unread -from:me newer_than:30d',  // catches inbox + spam, excludes own sent
     maxResults: 50
   });
 
@@ -420,6 +427,104 @@ function parseEmailBody(payload) {
   }
 
   return '';
+}
+
+// ─── Email Signature Builder ───────────────────────────────────────────────────
+function buildSignatureHtml(user) {
+  const sig = user.signature || {};
+  if (!sig.enabled) return '';
+
+  const name    = user.name  || '';
+  const title   = user.title || 'Senior Talent Acquisition Coordinator';
+  const company = 'Welltower Inc. | NYSE: WELL';
+  const photo   = sig.photoUrl  || '';
+  const website = sig.website   || '';
+  const location= sig.location  || '';
+  const linkedin= sig.linkedin  || '';
+  const facebook= sig.facebook  || '';
+  const twitter = sig.twitter   || '';
+  const disclaimer = sig.disclaimer || '';
+
+  // ── Photo cell (only if a URL is provided) ───────────────────────────────
+  const photoCell = photo
+    ? `<td style="padding:0 16px 0 0;vertical-align:top">
+         <img src="${photo}" width="72" height="72"
+              style="border-radius:50%;object-fit:cover;display:block;border:2px solid #e2e8f0" />
+       </td>`
+    : '';
+
+  // ── Social badge helper ───────────────────────────────────────────────────
+  const badge = (href, bg, label) => href
+    ? `<a href="${href}" target="_blank" style="display:inline-block;background:${bg};color:#fff;font-size:11px;font-weight:700;
+         letter-spacing:.4px;padding:4px 10px;border-radius:4px;text-decoration:none;margin-right:5px;font-family:Arial,sans-serif">${label}</a>`
+    : '';
+
+  const socialRow = (linkedin || facebook || twitter)
+    ? `<tr><td colspan="2" style="padding-top:10px">
+         ${badge(linkedin, '#0077B5', 'LinkedIn')}
+         ${badge(facebook, '#1877F2', 'Facebook')}
+         ${badge(twitter,  '#000000', '𝕏')}
+       </td></tr>`
+    : '';
+
+  const websiteBtn = website
+    ? `<tr><td colspan="2" style="padding-top:10px">
+         <a href="${website}" target="_blank"
+            style="display:inline-block;background:#1a3e72;color:#fff;font-size:12px;font-weight:600;
+            padding:7px 18px;border-radius:5px;text-decoration:none;font-family:Arial,sans-serif">
+           Visit Website
+         </a>
+       </td></tr>`
+    : '';
+
+  const infoLines = [
+    `<span style="font-size:15px;font-weight:700;color:#1a1a2e;font-family:Arial,sans-serif">${name}</span>`,
+    `<span style="font-size:12px;color:#475569;font-family:Arial,sans-serif">${title}</span>`,
+    `<span style="font-size:12px;color:#475569;font-family:Arial,sans-serif">${company}</span>`,
+    website  ? `<span style="font-size:12px;color:#475569;font-family:Arial,sans-serif">🌐 <a href="${website}" style="color:#1a3e72;text-decoration:none">${website.replace(/^https?:\/\//, '')}</a></span>` : '',
+    location ? `<span style="font-size:12px;color:#475569;font-family:Arial,sans-serif">📍 ${location}</span>` : ''
+  ].filter(Boolean).join('<br>');
+
+  const disclaimerBlock = disclaimer
+    ? `<tr><td colspan="2" style="padding-top:14px;border-top:1px solid #e2e8f0">
+         <p style="margin:10px 0 0;font-size:10px;color:#94a3b8;line-height:1.5;font-family:Arial,sans-serif">${disclaimer}</p>
+       </td></tr>`
+    : '';
+
+  return `
+<div style="margin-top:28px;padding-top:18px;border-top:1px solid #dde3f0;max-width:560px">
+  <p style="margin:0 0 14px;font-size:15px;font-family:Georgia,'Times New Roman',serif;color:#2d2d2d;font-style:italic">Sincerely,</p>
+  <table border="0" cellpadding="0" cellspacing="0" style="border-collapse:collapse">
+    <tr>
+      ${photoCell}
+      <td style="vertical-align:top;line-height:1.8">
+        ${infoLines}
+      </td>
+    </tr>
+    ${socialRow}
+    ${websiteBtn}
+    ${disclaimerBlock}
+  </table>
+</div>`;
+}
+
+function buildSignaturePlainText(user) {
+  const sig = user.signature || {};
+  if (!sig.enabled) return '';
+  const name    = user.name  || '';
+  const title   = user.title || 'Senior Talent Acquisition Coordinator';
+  const lines = [
+    '',
+    '—',
+    name,
+    title,
+    'Welltower Inc. | NYSE: WELL'
+  ];
+  if (sig.website)  lines.push(sig.website);
+  if (sig.location) lines.push(sig.location);
+  if (sig.linkedin) lines.push('LinkedIn: ' + sig.linkedin);
+  if (sig.disclaimer) { lines.push(''); lines.push(sig.disclaimer); }
+  return '\n' + lines.join('\n');
 }
 
 module.exports = {

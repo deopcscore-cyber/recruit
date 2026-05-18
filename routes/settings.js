@@ -16,7 +16,8 @@ router.get('/', async (req, res) => {
     return res.json({
       ...(user.style || { tone: 'warm', notes: '', use: [], avoid: [] }),
       name: user.name || '',
-      title: user.title || ''
+      title: user.title || '',
+      signature: user.signature || { enabled: false, photoUrl: '', website: '', location: '', linkedin: '', facebook: '', twitter: '', disclaimer: '' }
     });
   } catch (err) {
     console.error('Get settings error:', err);
@@ -30,7 +31,7 @@ router.put('/', async (req, res) => {
     const user = await storage.getUserById(req.session.userId);
     if (!user) return res.status(404).json({ error: 'User not found' });
 
-    const { tone, notes, use, avoid, name, title } = req.body;
+    const { tone, notes, use, avoid, name, title, signature } = req.body;
 
     user.style = user.style || {};
     if (tone !== undefined) user.style.tone = tone;
@@ -42,11 +43,19 @@ router.put('/', async (req, res) => {
     if (name && name.trim()) user.name = name.trim();
     if (title !== undefined) user.title = title.trim();
 
+    // Signature fields
+    if (signature !== undefined) {
+      user.signature = user.signature || {};
+      const fields = ['enabled', 'photoUrl', 'website', 'location', 'linkedin', 'facebook', 'twitter', 'disclaimer'];
+      fields.forEach(f => { if (signature[f] !== undefined) user.signature[f] = signature[f]; });
+    }
+
     await storage.saveUser(user);
     return res.json({
       ...user.style,
       name: user.name || '',
-      title: user.title || ''
+      title: user.title || '',
+      signature: user.signature || {}
     });
   } catch (err) {
     console.error('Update settings error:', err);
