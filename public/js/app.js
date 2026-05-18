@@ -398,8 +398,16 @@ function applyBulkLimit(n) {
 }
 
 function openBulkOutreachModal() {
-  const imported = allCandidates.filter(c => (c.stage || 'Imported') === 'Imported' && !(c.stepsCompleted || {}).outreach);
+  // Exclude anyone already contacted: stage advanced past Imported, outreach step done,
+  // OR any outbound thread message (covers sends via thread tab or external tracking)
+  const imported = allCandidates.filter(c => {
+    if ((c.stage || 'Imported') !== 'Imported') return false;
+    if ((c.stepsCompleted || {}).outreach) return false;
+    if ((c.thread || []).some(m => m.direction === 'outbound')) return false;
+    return true;
+  });
   const list = document.getElementById('bulk-outreach-list');
+  const checkBanner = document.getElementById('bulk-gmail-check');
 
   if (imported.length === 0) {
     Toast.warning('No Imported candidates without outreach already sent');
@@ -407,12 +415,55 @@ function openBulkOutreachModal() {
   }
 
   list.innerHTML = imported.map(c => `
-    <label style="display:flex;align-items:center;gap:8px;padding:7px 8px;border-radius:6px;cursor:pointer;font-size:0.85rem;color:var(--text)">
-      <input type="checkbox" class="bulk-cb" data-id="${c.id}" data-name="${escapeHtml(c.name||'')}" checked />
+    <label style="display:flex;align-items:center;gap:8px;padding:7px 8px;border-radius:6px;cursor:pointer;font-size:0.85rem;color:var(--text)" data-email="${escapeHtml(c.email||'')}">
+      <input type="checkbox" class="bulk-cb" data-id="${c.id}" data-name="${escapeHtml(c.name||'')}" data-email="${escapeHtml(c.email||'')}" checked />
       <span style="font-weight:500">${escapeHtml(c.name||'Unknown')}</span>
       <span style="color:var(--text-muted);font-size:0.78rem">${escapeHtml(c.title||'')}${c.company?' · '+escapeHtml(c.company):''}</span>
+      <span class="prior-contact-badge" style="display:none;margin-left:auto;font-size:0.72rem;color:#b45309;background:#fef3c7;border:1px solid #fcd34d;padding:1px 7px;border-radius:10px;white-space:nowrap">⚠ Already emailed</span>
     </label>
   `).join('');
+
+  // ── Gmail sent-history check ─────────────────────────────────────────────
+  checkBanner.style.display = 'none';
+  const emails = imported.map(c => c.email).filter(Boolean);
+  if (emails.length > 0) {
+    checkBanner.style.display = 'block';
+    checkBanner.style.cssText = 'display:block;font-size:0.8rem;padding:7px 10px;border-radius:6px;margin-bottom:8px;background:#f0f9ff;border:1px solid #bae6fd;color:#0369a1';
+    checkBanner.textContent = '🔍 Checking Gmail sent history for prior contacts…';
+
+    API.email.checkPriorContact(emails).then(result => {
+      const contacted = new Set((result.contacted || []).map(e => e.toLowerCase()));
+      if (contacted.size === 0) {
+        checkBanner.style.cssText = 'display:block;font-size:0.8rem;padding:7px 10px;border-radius:6px;margin-bottom:8px;background:#f0fdf4;border:1px solid #bbf7d0;color:#15803d';
+        checkBanner.textContent = '✓ No prior contacts found in Gmail — all clear';
+        return;
+      }
+
+      let skipped = 0;
+      list.querySelectorAll('.bulk-cb').forEach(cb => {
+        const email = (cb.dataset.email || '').toLowerCase();
+        if (contacted.has(email)) {
+          cb.checked = false;
+          cb.closest('label').style.opacity = '0.5';
+          cb.closest('label').querySelector('.prior-contact-badge').style.display = 'inline';
+          skipped++;
+        }
+      });
+
+      checkBanner.style.cssText = 'display:block;font-size:0.8rem;padding:7px 10px;border-radius:6px;margin-bottom:8px;background:#fffbeb;border:1px solid #fcd34d;color:#92400e';
+      checkBanner.innerHTML = `⚠ <strong>${skipped} candidate${skipped !== 1 ? 's' : ''}</strong> unchecked — prior email found in Gmail sent history. Re-check to include them anyway.`;
+
+      // Sync limit input and preview after unchecking
+      const checkedCount = document.querySelectorAll('.bulk-cb:checked').length;
+      const limitInput = document.getElementById('bulk-limit-input');
+      if (limitInput) limitInput.value = checkedCount < imported.length ? checkedCount : '';
+      window._bulkDelays = null;
+      buildSchedulePreview();
+    }).catch(() => {
+      checkBanner.style.cssText = 'display:block;font-size:0.8rem;padding:7px 10px;border-radius:6px;margin-bottom:8px;background:#f8fafc;border:1px solid #e2e8f0;color:#64748b';
+      checkBanner.textContent = 'Gmail check unavailable — verify manually before sending';
+    });
+  }
 
   list.querySelectorAll('.bulk-cb').forEach(cb => cb.addEventListener('change', () => {
     // Sync the limit input to match checked count

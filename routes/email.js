@@ -3,6 +3,7 @@ const router = express.Router();
 const path = require('path');
 const fs = require('fs');
 const { v4: uuidv4 } = require('uuid');
+const { google } = require('googleapis');
 const gmailService = require('../services/gmail');
 const storage = require('../services/storage');
 const requireAuth = require('../middleware/auth');
@@ -318,6 +319,67 @@ router.post('/test', requireAuth, async (req, res) => {
   } catch (err) {
     console.error('Test email error:', err);
     return res.status(500).json({ error: 'Test email failed: ' + err.message });
+  }
+});
+
+// POST /api/email/check-prior-contact — scan Gmail sent folder for prior sends to given addresses
+router.post('/check-prior-contact', requireAuth, async (req, res) => {
+  try {
+    const { emails } = req.body;
+    if (!emails || !Array.isArray(emails) || emails.length === 0) {
+      return res.json({ contacted: [] });
+    }
+
+    const user = await storage.getUserById(req.session.userId);
+    if (!user || !user.gmail || !user.gmail.connected) {
+      return res.json({ contacted: [] });
+    }
+
+    const auth   = await gmailService.getAuthedClient(user);
+    const gmail  = google.gmail({ version: 'v1', auth });
+    const contacted = new Set();
+
+    // Batch query: 15 addresses per query to stay within Gmail query limits
+    const BATCH = 15;
+    for (let i = 0; i < emails.length; i += BATCH) {
+      const batch = emails.slice(i, i + BATCH).map(e => e.toLowerCase().trim()).filter(Boolean);
+      if (batch.length === 0) continue;
+
+      const query = `in:sent (${batch.map(e => `to:${e}`).join(' OR ')})`;
+      try {
+        const listRes = await gmail.users.messages.list({
+          userId: 'me',
+          q: query,
+          maxResults: 20
+        });
+
+        const messages = listRes.data.messages || [];
+        if (messages.length === 0) continue;
+
+        // Fetch To header for each matched message to identify which address was hit
+        for (const msg of messages.slice(0, 8)) {
+          try {
+            const msgRes = await gmail.users.messages.get({
+              userId: 'me',
+              id: msg.id,
+              format: 'metadata',
+              metadataHeaders: ['To']
+            });
+            const toHeader = (msgRes.data.payload?.headers || [])
+              .find(h => h.name.toLowerCase() === 'to');
+            if (toHeader) {
+              const found = toHeader.value.match(/[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/g) || [];
+              found.forEach(e => contacted.add(e.toLowerCase()));
+            }
+          } catch { /* skip individual message errors */ }
+        }
+      } catch { /* skip batch errors */ }
+    }
+
+    return res.json({ contacted: [...contacted] });
+  } catch (err) {
+    console.error('check-prior-contact error:', err);
+    return res.json({ contacted: [] }); // non-fatal — don't block the modal
   }
 });
 

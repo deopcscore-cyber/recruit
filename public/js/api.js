@@ -56,7 +56,8 @@ const API = {
     getConnectUrl() { return API.get('/api/email/connect'); },
     send(data) { return API.post('/api/email/send', data); },
     fetch() { return API.post('/api/email/fetch'); },
-    test() { return API.post('/api/email/test'); }
+    test() { return API.post('/api/email/test'); },
+    checkPriorContact(emails) { return API.post('/api/email/check-prior-contact', { emails }); }
   },
 
   // AI
