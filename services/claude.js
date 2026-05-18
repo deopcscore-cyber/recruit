@@ -8,6 +8,7 @@ function formatCandidateContext(candidate) {
   lines.push(`Name: ${candidate.name || 'Unknown'}`);
   if (candidate.title) lines.push(`Current Title: ${candidate.title}`);
   if (candidate.company) lines.push(`Current Company: ${candidate.company}`);
+  if (candidate.location) lines.push(`Location: ${candidate.location}`);
   if (candidate.email) lines.push(`Email: ${candidate.email}`);
   if (candidate.linkedin) lines.push(`LinkedIn: ${candidate.linkedin}`);
   if (candidate.summary) lines.push(`Summary/Headline: ${candidate.summary}`);
@@ -134,6 +135,10 @@ async function generateRoleJD(candidate, user) {
   const candidateInfo = formatCandidateContext(candidate);
   const styleInfo = formatUserStyle(user);
 
+  // Derive a readable location for the JD header
+  const candidateLocation = (candidate.location || '').trim();
+  const jdLocation = candidateLocation ? candidateLocation : 'Remote / Hybrid';
+
   const prompt = `You are creating a tailored leadership role description for Welltower Inc. to present to a specific executive candidate.
 
 RECRUITER STYLE:
@@ -146,7 +151,7 @@ INSTRUCTIONS:
 Create a detailed, personalized role description that feels written specifically for this person. Use markdown formatting — headers (##), bold (**text**), bullet points (-). Structure it as six sections:
 
 ## [Role Title] — craft a specific title based on their background and Welltower's needs
-**Welltower Inc. | Toledo, OH (Hybrid)**
+**Welltower Inc. | ${jdLocation} (Hybrid)**
 
 ---
 
@@ -190,7 +195,7 @@ Write the role description now:`;
 
   const response = await client.messages.create({
     model: MODEL,
-    max_tokens: 1500,
+    max_tokens: 3000,
     messages: [{ role: 'user', content: prompt }]
   });
 
@@ -273,7 +278,7 @@ Return ONLY the JSON object, no markdown, no extra text.`;
 
   const response = await client.messages.create({
     model: MODEL,
-    max_tokens: 800,
+    max_tokens: 2500,
     messages: [{ role: 'user', content: prompt }]
   });
 
@@ -349,7 +354,7 @@ Write the introduction email now:`;
 
   const response = await client.messages.create({
     model: MODEL,
-    max_tokens: 500,
+    max_tokens: 800,
     messages: [{ role: 'user', content: prompt }]
   });
 
