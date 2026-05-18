@@ -166,27 +166,32 @@ function stripToPlainText(body) {
     .trim();
 }
 
-function buildRawEmail({ from, to, subject, body, extraPlain = '', threadId, inReplyTo, references, trackingId, baseUrl }) {
+function buildRawEmail({ from, to, subject, body, signatureHtml = '', signaturePlain = '', threadId, inReplyTo, references, trackingId, baseUrl }) {
   const boundary = `_wt_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
 
-  // ── Plain-text part (deliverability: HTML-only emails score higher in spam) ─
-  const plainText = stripToPlainText(body) + (extraPlain || '');
+  // ── Plain-text part ───────────────────────────────────────────────────────────
+  // Strip only the email body — signature plain text is appended separately
+  const plainText = stripToPlainText(body) + (signaturePlain || '');
 
-  // ── HTML part ────────────────────────────────────────────────────────────────
+  // ── HTML part — detect format of body ONLY (never include signature in detection) ──
   const pixel = trackingId
     ? `<img src="${baseUrl}/track/${trackingId}" width="1" height="1" style="display:none" />`
     : '';
 
   let htmlBody;
   if (body.includes('<p') || body.includes('<h') || body.includes('<div')) {
+    // Already HTML
     htmlBody = body;
   } else if (hasMarkdown(body)) {
     const converted = markdownToHtml(body);
     htmlBody = `<div style="max-width:640px;margin:0 auto;font-family:Arial,Helvetica,sans-serif;font-size:15px;color:#2d2d2d;padding:24px 16px">${converted}</div>`;
   } else {
+    // Plain text — convert newlines to <br>
     htmlBody = `<div style="font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:1.6;color:#2d2d2d">${body.replace(/\n/g, '<br>')}</div>`;
   }
-  const fullHtml = `<html><body>${htmlBody}${pixel}</body></html>`;
+
+  // Signature is appended AFTER body conversion, separately from detection above
+  const fullHtml = `<html><body>${htmlBody}${signatureHtml}${pixel}</body></html>`;
 
   // ── Headers ──────────────────────────────────────────────────────────────────
   const headers = [
@@ -242,14 +247,11 @@ async function sendEmail(userId, { to, subject, body, threadId, inReplyTo, refer
   const fromName  = user.name || '';
   const from = fromName ? `"${fromName}" <${fromEmail}>` : fromEmail;
 
-  // Append email signature if enabled
-  const sigHtml  = buildSignatureHtml(user);
-  const sigPlain = buildSignaturePlainText(user);
-  const bodyWithSig = sigHtml
-    ? body + sigHtml
-    : body;
+  // Signature is passed separately so buildRawEmail can detect the body format correctly
+  const signatureHtml  = buildSignatureHtml(user);
+  const signaturePlain = buildSignaturePlainText(user);
 
-  const raw = buildRawEmail({ from, to, subject, body: bodyWithSig, extraPlain: sigPlain, threadId, inReplyTo, references, trackingId, baseUrl: BASE_URL });
+  const raw = buildRawEmail({ from, to, subject, body, signatureHtml, signaturePlain, threadId, inReplyTo, references, trackingId, baseUrl: BASE_URL });
 
   const requestBody = { raw };
   if (threadId) requestBody.threadId = threadId;
@@ -429,80 +431,104 @@ function parseEmailBody(payload) {
   return '';
 }
 
-// ─── Email Signature Builder ───────────────────────────────────────────────────
+// ─── Email Signature Builder (premium) ────────────────────────────────────────
 function buildSignatureHtml(user) {
   const sig = user.signature || {};
   if (!sig.enabled) return '';
 
-  const name    = user.name  || '';
-  const title   = user.title || 'Senior Talent Acquisition Coordinator';
-  const company = 'Welltower Inc. | NYSE: WELL';
-  const photo   = sig.photoUrl  || '';
-  const website = sig.website   || '';
-  const location= sig.location  || '';
-  const linkedin= sig.linkedin  || '';
-  const facebook= sig.facebook  || '';
-  const twitter = sig.twitter   || '';
-  const disclaimer = sig.disclaimer || '';
+  const name       = (user.name  || '').trim();
+  const title      = (user.title || 'Senior Talent Acquisition Coordinator').trim();
+  const company    = 'Welltower Inc.';
+  const ticker     = 'NYSE: WELL';
+  const photo      = (sig.photoUrl  || '').trim();
+  const website    = (sig.website   || '').trim();
+  const location   = (sig.location  || '').trim();
+  const linkedin   = (sig.linkedin  || '').trim();
+  const facebook   = (sig.facebook  || '').trim();
+  const twitter    = (sig.twitter   || '').trim();
+  const disclaimer = (sig.disclaimer|| '').trim();
 
-  // ── Photo cell (only if a URL is provided) ───────────────────────────────
+  // ── Circular photo ────────────────────────────────────────────────────────
   const photoCell = photo
-    ? `<td style="padding:0 16px 0 0;vertical-align:top">
-         <img src="${photo}" width="72" height="72"
-              style="border-radius:50%;object-fit:cover;display:block;border:2px solid #e2e8f0" />
+    ? `<td width="80" style="padding:0 18px 0 0;vertical-align:top">
+         <img src="${photo}" width="72" height="72" alt="${name}"
+              style="display:block;border-radius:50%;width:72px;height:72px;object-fit:cover;
+                     border:3px solid #1a3e72;box-shadow:0 2px 10px rgba(26,62,114,.18)" />
        </td>`
     : '';
 
-  // ── Social badge helper ───────────────────────────────────────────────────
-  const badge = (href, bg, label) => href
-    ? `<a href="${href}" target="_blank" style="display:inline-block;background:${bg};color:#fff;font-size:11px;font-weight:700;
-         letter-spacing:.4px;padding:4px 10px;border-radius:4px;text-decoration:none;margin-right:5px;font-family:Arial,sans-serif">${label}</a>`
+  // ── Contact links line ────────────────────────────────────────────────────
+  const contactParts = [];
+  if (website)  contactParts.push(`<a href="${website}" target="_blank" style="color:#1a3e72;text-decoration:none;font-family:Arial,sans-serif;font-size:12px">&#127758;&nbsp;${website.replace(/^https?:\/\//, '')}</a>`);
+  if (location) contactParts.push(`<span style="color:#64748b;font-family:Arial,sans-serif;font-size:12px">&#128205;&nbsp;${location}</span>`);
+  const contactLine = contactParts.length
+    ? `<p style="margin:5px 0 0;line-height:1.6">${contactParts.join('&nbsp;&nbsp;|&nbsp;&nbsp;')}</p>`
     : '';
 
-  const socialRow = (linkedin || facebook || twitter)
-    ? `<tr><td colspan="2" style="padding-top:10px">
-         ${badge(linkedin, '#0077B5', 'LinkedIn')}
-         ${badge(facebook, '#1877F2', 'Facebook')}
-         ${badge(twitter,  '#000000', '𝕏')}
-       </td></tr>`
+  // ── Social icon badges (rounded squares) ─────────────────────────────────
+  const iconBadge = (href, bg, letter, title_) => href
+    ? `<a href="${href}" target="_blank" title="${title_}"
+          style="display:inline-block;background:${bg};color:#fff;width:28px;height:28px;line-height:28px;
+                 text-align:center;border-radius:6px;font-family:Arial,sans-serif;font-size:13px;
+                 font-weight:800;text-decoration:none;margin-right:6px">${letter}</a>`
     : '';
 
-  const websiteBtn = website
-    ? `<tr><td colspan="2" style="padding-top:10px">
+  const socialIcons = (linkedin || facebook || twitter)
+    ? `<td style="vertical-align:middle;padding-left:12px">
+         ${iconBadge(linkedin, '#0077B5', 'in', 'LinkedIn')}
+         ${iconBadge(facebook, '#1877F2', 'f',  'Facebook')}
+         ${iconBadge(twitter,  '#111111', '&#120143;', 'X / Twitter')}
+       </td>`
+    : '';
+
+  // ── Visit Website CTA ─────────────────────────────────────────────────────
+  const ctaBtn = website
+    ? `<td style="vertical-align:middle;padding-left:10px">
          <a href="${website}" target="_blank"
-            style="display:inline-block;background:#1a3e72;color:#fff;font-size:12px;font-weight:600;
-            padding:7px 18px;border-radius:5px;text-decoration:none;font-family:Arial,sans-serif">
-           Visit Website
+            style="display:inline-block;background:#1a3e72;color:#fff;font-family:Arial,sans-serif;
+                   font-size:11px;font-weight:700;letter-spacing:.4px;text-transform:uppercase;
+                   padding:7px 15px;border-radius:5px;text-decoration:none;white-space:nowrap">
+           Visit Website &#8594;
          </a>
+       </td>`
+    : '';
+
+  const actionsRow = (linkedin || facebook || twitter || website)
+    ? `<tr><td colspan="2" style="padding-top:12px">
+         <table border="0" cellpadding="0" cellspacing="0"><tr>
+           ${socialIcons}
+           ${ctaBtn}
+         </tr></table>
        </td></tr>`
     : '';
 
-  const infoLines = [
-    `<span style="font-size:15px;font-weight:700;color:#1a1a2e;font-family:Arial,sans-serif">${name}</span>`,
-    `<span style="font-size:12px;color:#475569;font-family:Arial,sans-serif">${title}</span>`,
-    `<span style="font-size:12px;color:#475569;font-family:Arial,sans-serif">${company}</span>`,
-    website  ? `<span style="font-size:12px;color:#475569;font-family:Arial,sans-serif">🌐 <a href="${website}" style="color:#1a3e72;text-decoration:none">${website.replace(/^https?:\/\//, '')}</a></span>` : '',
-    location ? `<span style="font-size:12px;color:#475569;font-family:Arial,sans-serif">📍 ${location}</span>` : ''
-  ].filter(Boolean).join('<br>');
-
+  // ── Disclaimer ────────────────────────────────────────────────────────────
   const disclaimerBlock = disclaimer
-    ? `<tr><td colspan="2" style="padding-top:14px;border-top:1px solid #e2e8f0">
-         <p style="margin:10px 0 0;font-size:10px;color:#94a3b8;line-height:1.5;font-family:Arial,sans-serif">${disclaimer}</p>
+    ? `<tr><td colspan="2">
+         <div style="margin-top:14px;padding-top:10px;border-top:1px solid #e8edf4">
+           <p style="margin:0;font-size:9.5px;color:#94a3b8;line-height:1.55;font-family:Arial,sans-serif">${disclaimer}</p>
+         </div>
        </td></tr>`
     : '';
 
   return `
-<div style="margin-top:28px;padding-top:18px;border-top:1px solid #dde3f0;max-width:560px">
-  <p style="margin:0 0 14px;font-size:15px;font-family:Georgia,'Times New Roman',serif;color:#2d2d2d;font-style:italic">Sincerely,</p>
+<div style="margin-top:30px;max-width:580px">
+  <!--  gradient accent bar  -->
+  <div style="height:3px;background:linear-gradient(90deg,#1a3e72 0%,#3b6dc7 60%,rgba(59,109,199,0) 100%);margin-bottom:20px;border-radius:2px"></div>
+
+  <p style="margin:0 0 18px;font-size:16px;font-family:Georgia,'Times New Roman',serif;color:#2d2d2d;font-style:italic;font-weight:400">Sincerely,</p>
+
   <table border="0" cellpadding="0" cellspacing="0" style="border-collapse:collapse">
     <tr>
       ${photoCell}
-      <td style="vertical-align:top;line-height:1.8">
-        ${infoLines}
+      <td style="vertical-align:top;border-left:3px solid #1a3e72;padding-left:14px">
+        <p style="margin:0;font-size:16px;font-weight:700;color:#0f172a;font-family:Arial,sans-serif;letter-spacing:-.2px;line-height:1.3">${name}</p>
+        <p style="margin:3px 0 0;font-size:12px;color:#475569;font-family:Arial,sans-serif;line-height:1.4">${title}</p>
+        <p style="margin:3px 0 0;font-size:12px;font-weight:600;color:#1a3e72;font-family:Arial,sans-serif;line-height:1.4">${company}&nbsp;&nbsp;<span style="color:#94a3b8;font-weight:400">|</span>&nbsp;&nbsp;<span style="color:#64748b;font-weight:500">${ticker}</span></p>
+        ${contactLine}
       </td>
     </tr>
-    ${socialRow}
-    ${websiteBtn}
+    ${actionsRow}
     ${disclaimerBlock}
   </table>
 </div>`;

@@ -734,53 +734,63 @@ function initSettingsPage() {
   });
 
   document.getElementById('sig-preview-btn').addEventListener('click', () => {
-    const box = document.getElementById('sig-preview-box');
+    const box     = document.getElementById('sig-preview-box');
     const content = document.getElementById('sig-preview-content');
-    const name    = document.getElementById('profile-name').value.trim() || (currentUser && currentUser.name) || 'Your Name';
+    const name    = document.getElementById('profile-name').value.trim()  || (currentUser && currentUser.name) || 'Your Name';
     const title   = document.getElementById('profile-title').value.trim() || 'Senior Talent Acquisition Coordinator';
     const photo   = document.getElementById('sig-photo').value.trim();
     const website = document.getElementById('sig-website').value.trim();
-    const location= document.getElementById('sig-location').value.trim();
+    const loc     = document.getElementById('sig-location').value.trim();
     const linkedin= document.getElementById('sig-linkedin').value.trim();
     const facebook= document.getElementById('sig-facebook').value.trim();
     const twitter = document.getElementById('sig-twitter').value.trim();
-    const disclaimer = document.getElementById('sig-disclaimer').value.trim();
-
-    const badge = (href, bg, label) => href
-      ? `<a href="${href}" target="_blank" style="display:inline-block;background:${bg};color:#fff;font-size:11px;font-weight:700;letter-spacing:.4px;padding:4px 10px;border-radius:4px;text-decoration:none;margin-right:5px">${label}</a>`
-      : '';
+    const disc    = document.getElementById('sig-disclaimer').value.trim();
 
     const photoHtml = photo
-      ? `<img src="${photo}" width="64" height="64" style="border-radius:50%;object-fit:cover;border:2px solid #e2e8f0;margin-right:14px;vertical-align:top" />`
+      ? `<img src="${photo}" width="72" height="72" style="border-radius:50%;object-fit:cover;display:block;border:3px solid #1a3e72;box-shadow:0 2px 10px rgba(26,62,114,.18)" />`
       : '';
 
-    const infoLines = [
-      `<strong style="font-size:14px;color:#1a1a2e">${name}</strong>`,
-      `<span style="font-size:12px;color:#475569">${title}</span>`,
-      `<span style="font-size:12px;color:#475569">Welltower Inc. | NYSE: WELL</span>`,
-      website  ? `<span style="font-size:12px;color:#475569">🌐 <a href="${website}" style="color:#1a3e72;text-decoration:none">${website.replace(/^https?:\/\//, '')}</a></span>` : '',
-      location ? `<span style="font-size:12px;color:#475569">📍 ${location}</span>` : ''
-    ].filter(Boolean).join('<br>');
+    const contactParts = [];
+    if (website) contactParts.push(`<a href="${website}" style="color:#1a3e72;text-decoration:none;font-size:12px">🌐 ${website.replace(/^https?:\/\//, '')}</a>`);
+    if (loc)     contactParts.push(`<span style="color:#64748b;font-size:12px">📍 ${loc}</span>`);
+    const contactLine = contactParts.length ? `<p style="margin:5px 0 0">${contactParts.join(' &nbsp;|&nbsp; ')}</p>` : '';
+
+    const iconBadge = (href, bg, letter) => href
+      ? `<a href="${href}" target="_blank" style="display:inline-block;background:${bg};color:#fff;width:28px;height:28px;line-height:28px;text-align:center;border-radius:6px;font-weight:800;font-size:13px;text-decoration:none;margin-right:6px">${letter}</a>`
+      : '';
 
     const socialHtml = (linkedin || facebook || twitter)
-      ? `<div style="margin-top:8px">${badge(linkedin,'#0077B5','LinkedIn')}${badge(facebook,'#1877F2','Facebook')}${badge(twitter,'#000','𝕏')}</div>`
+      ? `<div style="margin-top:12px">${iconBadge(linkedin,'#0077B5','in')}${iconBadge(facebook,'#1877F2','f')}${iconBadge(twitter,'#111','𝕏')}</div>`
       : '';
 
-    const btnHtml = website
-      ? `<div style="margin-top:10px"><a href="${website}" target="_blank" style="display:inline-block;background:#1a3e72;color:#fff;font-size:12px;font-weight:600;padding:6px 16px;border-radius:5px;text-decoration:none">Visit Website</a></div>`
+    const ctaHtml = website
+      ? `<a href="${website}" target="_blank" style="display:inline-block;background:#1a3e72;color:#fff;font-size:11px;font-weight:700;letter-spacing:.4px;text-transform:uppercase;padding:7px 15px;border-radius:5px;text-decoration:none;margin-left:10px">Visit Website →</a>`
       : '';
 
-    const discHtml = disclaimer
-      ? `<p style="margin:10px 0 0;font-size:10px;color:#94a3b8;line-height:1.5;border-top:1px solid #e2e8f0;padding-top:8px">${disclaimer}</p>`
+    const actionsHtml = (linkedin || facebook || twitter || website)
+      ? `<div style="margin-top:12px;display:flex;align-items:center">${(linkedin||facebook||twitter)?`<span>${iconBadge(linkedin,'#0077B5','in')}${iconBadge(facebook,'#1877F2','f')}${iconBadge(twitter,'#111','𝕏')}</span>`:''} ${ctaHtml}</div>`
+      : '';
+
+    const discHtml = disc
+      ? `<div style="margin-top:14px;padding-top:10px;border-top:1px solid #e8edf4"><p style="margin:0;font-size:9.5px;color:#94a3b8;line-height:1.55">${disc}</p></div>`
       : '';
 
     content.innerHTML = `
-      <p style="font-style:italic;font-family:Georgia,serif;color:#2d2d2d;margin:0 0 10px">Sincerely,</p>
-      <div style="display:flex;align-items:flex-start">
-        ${photoHtml}
-        <div style="line-height:1.8">${infoLines}</div>
-      </div>
-      ${socialHtml}${btnHtml}${discHtml}`;
+      <div style="max-width:540px">
+        <div style="height:3px;background:linear-gradient(90deg,#1a3e72 0%,#3b6dc7 60%,rgba(59,109,199,0) 100%);margin-bottom:20px;border-radius:2px"></div>
+        <p style="margin:0 0 18px;font-size:16px;font-family:Georgia,serif;color:#2d2d2d;font-style:italic">Sincerely,</p>
+        <div style="display:flex;align-items:flex-start">
+          ${photo ? `<div style="flex-shrink:0;margin-right:18px">${photoHtml}</div>` : ''}
+          <div style="border-left:3px solid #1a3e72;padding-left:14px;line-height:1.4">
+            <p style="margin:0;font-size:16px;font-weight:700;color:#0f172a;letter-spacing:-.2px">${name}</p>
+            <p style="margin:3px 0 0;font-size:12px;color:#475569">${title}</p>
+            <p style="margin:3px 0 0;font-size:12px;font-weight:600;color:#1a3e72">Welltower Inc. &nbsp;<span style="color:#94a3b8;font-weight:400">|</span>&nbsp; <span style="color:#64748b;font-weight:500">NYSE: WELL</span></p>
+            ${contactLine}
+          </div>
+        </div>
+        ${actionsHtml}
+        ${discHtml}
+      </div>`;
     box.style.display = 'block';
   });
 }
