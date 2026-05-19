@@ -136,6 +136,12 @@ async function processQueueJob() {
     // Generate personalised outreach
     const draft = await claudeSvc.generateOutreach(candidate, user);
 
+    // Fresh tracking pixel — resets opened badge for this new email
+    const { v4: queueUuidV4 } = require('uuid');
+    candidate.trackingId = queueUuidV4();
+    candidate.opened     = false;
+    candidate.openedAt   = null;
+
     // Send via Gmail
     const { gmailMessageId, gmailThreadId, smtpMessageId } =
       await gmailSvc2.sendEmail(job.userId, {

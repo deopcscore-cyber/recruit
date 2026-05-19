@@ -73,6 +73,11 @@ router.post('/send', requireAuth, async (req, res) => {
       return res.status(400).json({ error: 'Gmail not connected' });
     }
 
+    // Fresh tracking pixel for every outbound email — resets the opened badge
+    candidate.trackingId = uuidv4();
+    candidate.opened     = false;
+    candidate.openedAt   = null;
+
     const sendParams = {
       to: candidate.email,
       subject,
