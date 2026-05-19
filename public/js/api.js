@@ -67,6 +67,7 @@ const API = {
     resumeReview(candidateId) { return API.post('/api/ai/resume-review', { candidateId }); },
     victory(candidateId) { return API.post('/api/ai/victory', { candidateId }); },
     reply(candidateId, lastMessage) { return API.post('/api/ai/reply', { candidateId, lastMessage }); },
+    followup(candidateId) { return API.post('/api/ai/followup', { candidateId }); },
     score(candidateId) { return API.post('/api/ai/score', { candidateId }); }
   },
 

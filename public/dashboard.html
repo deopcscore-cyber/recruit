@@ -23,6 +23,11 @@
         <span>Candidates</span>
         <span class="badge hidden" id="unread-badge">0</span>
       </div>
+      <div class="nav-item" data-page="followups">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        <span>Follow-Ups</span>
+        <span class="badge hidden" id="followup-badge">0</span>
+      </div>
       <div class="nav-item" data-page="analytics">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
         <span>Analytics</span>
@@ -293,6 +298,29 @@
 
       </div>
     </div><!-- /page-settings -->
+
+    <!-- ===== FOLLOW-UPS PAGE ===== -->
+    <div class="page" id="page-followups">
+      <div class="topbar">
+        <div class="topbar-title">
+          Follow-Ups
+          <span id="followups-count" style="font-size:0.8rem;font-weight:400;color:#94a3b8;margin-left:6px"></span>
+        </div>
+        <button class="btn btn-secondary btn-sm" id="followup-refresh-btn">↺ Refresh</button>
+      </div>
+
+      <div style="padding:24px 28px">
+        <!-- Empty state -->
+        <div id="followup-empty" style="display:none;text-align:center;padding:60px 0;color:#94a3b8">
+          <div style="font-size:2.5rem;margin-bottom:12px">🎉</div>
+          <p style="font-size:1rem;font-weight:500;color:#64748b">You're all caught up</p>
+          <p style="font-size:0.875rem">No follow-ups are due right now. Check back tomorrow.</p>
+        </div>
+
+        <!-- Follow-up rows -->
+        <div id="followup-list" style="display:flex;flex-direction:column;gap:14px"></div>
+      </div>
+    </div><!-- /page-followups -->
 
   </div><!-- /main-content -->
 </div><!-- /app -->

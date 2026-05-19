@@ -39,6 +39,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     item.addEventListener('click', () => {
       navigateTo(item.dataset.page);
       if (item.dataset.page === 'analytics') loadAnalyticsPage();
+      if (item.dataset.page === 'followups') loadFollowUpPage();
     });
   });
 
@@ -139,6 +140,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       allCandidates = fresh;
       renderCandidates();
       updateUnreadBadge();
+      updateFollowUpBadge();
     } catch { /* silent */ }
   }, 2 * 60 * 1000);
 });
@@ -155,7 +157,8 @@ function applyTheme(theme) {
 function navigateTo(page) {
   document.querySelectorAll('.nav-item').forEach(i => i.classList.toggle('active', i.dataset.page === page));
   document.querySelectorAll('.page').forEach(p => p.classList.toggle('active', p.id === `page-${page}`));
-  if (page === 'settings') loadSettingsPage();
+  if (page === 'settings')  loadSettingsPage();
+  if (page === 'followups') loadFollowUpPage();
 }
 
 // ---- View switching ----
@@ -174,6 +177,7 @@ async function loadCandidates() {
     allCandidates = await API.candidates.list();
     renderCandidates();
     updateUnreadBadge();
+    updateFollowUpBadge();
   } catch (err) {
     Toast.error('Failed to load candidates: ' + err.message);
   }
@@ -220,6 +224,19 @@ function updateUnreadBadge() {
     badge.textContent = count;
     badge.classList.toggle('hidden', count === 0);
     badge.style.background = count > 0 ? '#ef4444' : '';
+  }
+}
+
+function updateFollowUpBadge() {
+  const now = new Date();
+  const count = allCandidates.filter(c =>
+    c.followUpDate && new Date(c.followUpDate) <= now && c.stage !== 'Closed'
+  ).length;
+  const badge = document.getElementById('followup-badge');
+  if (badge) {
+    badge.textContent = count;
+    badge.classList.toggle('hidden', count === 0);
+    badge.style.background = count > 0 ? '#f97316' : '';
   }
 }
 
@@ -653,6 +670,196 @@ function renderQueueStatus(jobs) {
 }
 
 function delay(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+// ---- Follow-Up Hub ----
+function loadFollowUpPage() {
+  const now = new Date();
+  const due = allCandidates
+    .filter(c => c.followUpDate && new Date(c.followUpDate) <= now && c.stage !== 'Closed')
+    .sort((a, b) => new Date(a.followUpDate) - new Date(b.followUpDate)); // most overdue first
+
+  const listEl   = document.getElementById('followup-list');
+  const emptyEl  = document.getElementById('followup-empty');
+  const countEl  = document.getElementById('followups-count');
+  if (!listEl) return;
+
+  // Refresh button
+  const refreshBtn = document.getElementById('followup-refresh-btn');
+  if (refreshBtn) { refreshBtn.onclick = () => loadFollowUpPage(); }
+
+  if (due.length === 0) {
+    listEl.innerHTML = '';
+    emptyEl.style.display = 'block';
+    countEl.textContent = '';
+    updateFollowUpBadge();
+    return;
+  }
+
+  emptyEl.style.display = 'none';
+  countEl.textContent = `${due.length} due`;
+
+  listEl.innerHTML = due.map(c => {
+    const daysOver = Math.floor((now - new Date(c.followUpDate)) / 86400000);
+    const overdueLabel = daysOver === 0 ? 'Due today' : `${daysOver}d overdue`;
+    const overdueColor = daysOver === 0 ? '#d97706' : '#ef4444';
+    const lastMsg = [...(c.thread || [])].reverse()[0];
+    const preview  = lastMsg ? preview55(lastMsg.body) : (c.summary ? preview55(c.summary) : '');
+    const lastDir  = lastMsg ? (lastMsg.direction === 'inbound' ? '← They said:' : '→ You said:') : '';
+
+    // Context label
+    const steps = c.stepsCompleted || {};
+    let contextLabel = 'General follow-up';
+    if (steps.resumeRequested && !steps.resumeReceived) contextLabel = 'Waiting for resume';
+    else if (steps.roleJD && !(c.thread||[]).some(m => m.direction==='inbound')) contextLabel = 'No reply after JD sent';
+    else if (steps.outreach && !(c.thread||[]).some(m => m.direction==='inbound')) contextLabel = 'No reply to outreach';
+
+    return `
+    <div class="settings-card" id="fu-card-${c.id}" style="margin:0">
+      <div class="settings-card-body" style="padding:16px 20px">
+        <div style="display:flex;align-items:flex-start;gap:14px;flex-wrap:wrap">
+          <!-- Left: info -->
+          <div style="flex:1;min-width:200px">
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:4px">
+              <span style="font-weight:600;font-size:0.95rem;color:var(--text)">${escapeHtml(c.name||'Unknown')}</span>
+              <span style="font-size:0.75rem;font-weight:600;color:${overdueColor};background:${overdueColor}18;border:1px solid ${overdueColor}40;padding:1px 8px;border-radius:10px">${overdueLabel}</span>
+              <span style="font-size:0.72rem;color:#94a3b8;background:#f1f5f9;padding:1px 7px;border-radius:10px">${escapeHtml(contextLabel)}</span>
+            </div>
+            <div style="font-size:0.8rem;color:var(--text-muted);margin-bottom:6px">${escapeHtml(c.title||'')}${c.company?` · ${escapeHtml(c.company)}`:''} · <span style="color:#64748b">${escapeHtml(c.stage||'Imported')}</span></div>
+            ${preview ? `<div style="font-size:0.8rem;color:#94a3b8;font-style:italic"><span style="color:#64748b">${lastDir}</span> ${escapeHtml(preview)}</div>` : ''}
+          </div>
+          <!-- Right: actions -->
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;flex-shrink:0">
+            <button class="btn btn-primary btn-sm fu-draft-btn" data-id="${c.id}" style="white-space:nowrap">✦ AI Draft</button>
+            <button class="btn btn-secondary btn-sm fu-snooze-btn" data-id="${c.id}" data-days="3" style="white-space:nowrap">Snooze 3d</button>
+            <button class="btn btn-secondary btn-sm fu-snooze-btn" data-id="${c.id}" data-days="7" style="white-space:nowrap">Snooze 7d</button>
+            <button class="btn btn-ghost btn-sm fu-done-btn" data-id="${c.id}" style="white-space:nowrap;color:#94a3b8">✓ Done</button>
+          </div>
+        </div>
+        <!-- Inline draft panel (hidden by default) -->
+        <div class="fu-draft-panel" id="fu-draft-${c.id}" style="display:none;margin-top:14px;border-top:1px solid var(--border);padding-top:14px">
+          <div style="margin-bottom:8px;display:flex;align-items:center;gap:8px">
+            <label style="font-size:0.78rem;color:#64748b;white-space:nowrap">Subject:</label>
+            <input type="text" id="fu-subject-${c.id}" style="flex:1;font-size:0.85rem"
+              value="Re: ${escapeHtml(c.originalSubject || `Something Worth a Few Minutes of Your Time, ${(c.name||'').split(' ')[0]}`)}" />
+          </div>
+          <textarea id="fu-body-${c.id}" style="width:100%;min-height:200px;font-size:0.85rem;line-height:1.6;resize:vertical;font-family:inherit" placeholder="Generating…"></textarea>
+          <div style="display:flex;gap:8px;margin-top:10px;align-items:center">
+            <button class="btn btn-primary btn-sm fu-send-btn" data-id="${c.id}">Send Follow-Up</button>
+            <button class="btn btn-ghost btn-sm fu-discard-btn" data-id="${c.id}">Discard</button>
+            <button class="btn btn-ghost btn-sm fu-regen-btn" data-id="${c.id}" style="margin-left:auto;color:#94a3b8">↺ Regenerate</button>
+          </div>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+
+  // ── Wire up all row actions ─────────────────────────────────────────────
+  listEl.querySelectorAll('.fu-draft-btn').forEach(btn => {
+    btn.addEventListener('click', () => openFollowUpDraft(btn.dataset.id));
+  });
+
+  listEl.querySelectorAll('.fu-regen-btn').forEach(btn => {
+    btn.addEventListener('click', () => openFollowUpDraft(btn.dataset.id, true));
+  });
+
+  listEl.querySelectorAll('.fu-snooze-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const days = parseInt(btn.dataset.days, 10);
+      const snoozeDate = new Date(Date.now() + days * 86400000).toISOString();
+      btn.disabled = true; btn.textContent = 'Snoozing…';
+      try {
+        await API.candidates.update(btn.dataset.id, { followUpDate: snoozeDate });
+        const c = allCandidates.find(x => x.id === btn.dataset.id);
+        if (c) c.followUpDate = snoozeDate;
+        Toast.success(`Follow-up snoozed ${days} days`);
+        loadFollowUpPage();
+      } catch (err) { Toast.error(err.message); btn.disabled = false; btn.textContent = `Snooze ${days}d`; }
+    });
+  });
+
+  listEl.querySelectorAll('.fu-done-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      btn.disabled = true; btn.textContent = 'Marking…';
+      try {
+        await API.candidates.update(btn.dataset.id, { followUpDate: null });
+        const c = allCandidates.find(x => x.id === btn.dataset.id);
+        if (c) c.followUpDate = null;
+        Toast.success('Follow-up marked done');
+        loadFollowUpPage();
+      } catch (err) { Toast.error(err.message); btn.disabled = false; btn.textContent = '✓ Done'; }
+    });
+  });
+
+  listEl.querySelectorAll('.fu-discard-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const panel = document.getElementById(`fu-draft-${btn.dataset.id}`);
+      if (panel) panel.style.display = 'none';
+    });
+  });
+
+  listEl.querySelectorAll('.fu-send-btn').forEach(btn => {
+    btn.addEventListener('click', () => sendFollowUpEmail(btn.dataset.id));
+  });
+
+  updateFollowUpBadge();
+}
+
+async function openFollowUpDraft(candidateId, regen = false) {
+  const panel   = document.getElementById(`fu-draft-${candidateId}`);
+  const bodyEl  = document.getElementById(`fu-body-${candidateId}`);
+  const draftBtn = document.querySelector(`.fu-draft-btn[data-id="${candidateId}"]`);
+  if (!panel || !bodyEl) return;
+
+  panel.style.display = 'block';
+  bodyEl.value = 'Generating…';
+  bodyEl.disabled = true;
+  if (draftBtn) { draftBtn.disabled = true; draftBtn.textContent = 'Generating…'; }
+
+  try {
+    const result = await API.ai.followup(candidateId);
+    bodyEl.value = result.draft || '';
+    bodyEl.disabled = false;
+  } catch (err) {
+    bodyEl.value = '';
+    bodyEl.disabled = false;
+    Toast.error('Failed to generate follow-up: ' + err.message);
+  } finally {
+    if (draftBtn) { draftBtn.disabled = false; draftBtn.textContent = '✦ AI Draft'; }
+  }
+}
+
+async function sendFollowUpEmail(candidateId) {
+  const bodyEl    = document.getElementById(`fu-body-${candidateId}`);
+  const subjectEl = document.getElementById(`fu-subject-${candidateId}`);
+  const sendBtn   = document.querySelector(`.fu-send-btn[data-id="${candidateId}"]`);
+  if (!bodyEl || !subjectEl) return;
+
+  const body    = bodyEl.value.trim();
+  const subject = subjectEl.value.trim();
+  if (!body) { Toast.warning('Draft is empty'); return; }
+
+  const candidate = allCandidates.find(c => c.id === candidateId);
+  if (!candidate) return;
+
+  sendBtn.disabled = true; sendBtn.textContent = 'Sending…';
+  try {
+    await API.email.send({
+      candidateId,
+      subject,
+      body,
+      isReply: !!(candidate.gmailThreadId)
+    });
+    // Clear the follow-up date and refresh
+    await API.candidates.update(candidateId, { followUpDate: null });
+    if (candidate) candidate.followUpDate = null;
+    Toast.success(`Follow-up sent to ${candidate.name}`);
+    allCandidates = await API.candidates.list();
+    loadFollowUpPage();
+  } catch (err) {
+    Toast.error('Failed to send: ' + err.message);
+    sendBtn.disabled = false; sendBtn.textContent = 'Send Follow-Up';
+  }
+}
 
 // ---- Analytics Page ----
 async function loadAnalyticsPage() {

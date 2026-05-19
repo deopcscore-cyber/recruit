@@ -114,6 +114,20 @@ router.post('/score', async (req, res) => {
   }
 });
 
+// POST /api/ai/followup
+router.post('/followup', async (req, res) => {
+  try {
+    const ctx = await getContext(req, res);
+    if (!ctx) return;
+
+    const draft = await claude.generateFollowUp(ctx.candidate, ctx.user);
+    return res.json({ draft });
+  } catch (err) {
+    console.error('AI followup error:', err);
+    return res.status(500).json({ error: 'Failed to generate follow-up: ' + err.message });
+  }
+});
+
 // POST /api/ai/reply
 router.post('/reply', async (req, res) => {
   try {

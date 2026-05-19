@@ -466,6 +466,106 @@ Write the reply now:`;
   return response.content[0].text.trim();
 }
 
+async function generateFollowUp(candidate, user) {
+  const candidateInfo = formatCandidateContext(candidate);
+  const recruiterTitle = (user.title && user.title.trim()) ? user.title.trim() : 'Senior Talent Acquisition Coordinator';
+  const firstName = (candidate.name || '').split(' ')[0];
+  const steps = candidate.stepsCompleted || {};
+  const thread = candidate.thread || [];
+
+  // Last outbound message + days since
+  const lastOut = [...thread].reverse().find(m => m.direction === 'outbound');
+  const daysSince = lastOut ? Math.floor((Date.now() - new Date(lastOut.timestamp)) / 86400000) : null;
+  const daysSinceStr = daysSince != null ? `${daysSince} day${daysSince !== 1 ? 's' : ''} ago` : 'recently';
+  const lastOutBody = lastOut ? lastOut.body.substring(0, 600) : '';
+
+  // Has the candidate ever replied?
+  const hasReplied = thread.some(m => m.direction === 'inbound');
+
+  // Determine the specific follow-up context
+  let scenarioInstructions;
+
+  if (steps.resumeRequested && !steps.resumeReceived) {
+    // Waiting for resume
+    scenarioInstructions = `FOLLOW-UP SCENARIO: Resume requested, not yet received.
+You asked ${firstName} for their resume ${daysSinceStr} and haven't received it yet.
+
+WHAT TO WRITE (keep it to 3-4 short paragraphs):
+1. Open with "Dear ${firstName}," — a warm, non-pressuring opener that references the resume you asked for. Don't say "just following up" — say something more human.
+2. Acknowledge they're likely busy. Make it easy to respond — offer to answer questions if they have concerns about their resume before sending it.
+3. Remind them briefly why the resume matters at this stage: early screening, want to position them well.
+4. Soft close: "Whenever you have a moment" — no hard deadline, no pressure.
+Signature: ${user.name}\n${recruiterTitle} at Welltower™ Inc.`;
+
+  } else if (steps.roleJD && !hasReplied) {
+    // JD sent, no response at all
+    scenarioInstructions = `FOLLOW-UP SCENARIO: Role description was sent, no response yet.
+You sent ${firstName} the detailed role description ${daysSinceStr} and they haven't responded.
+
+WHAT TO WRITE (keep it to 3-4 short paragraphs):
+1. Open with "Dear ${firstName}," — reference the role description you shared. Don't say "just following up."
+2. Acknowledge it's a lot to read and timing isn't always right. Say something like "I didn't want it to get buried."
+3. Lower the bar: even a quick "not the right fit" helps you — but you're hoping they'll find it worth a conversation. Reference one specific thing from their background that makes them relevant.
+4. Soft CTA: "A quick reply either way tells me where you're at."
+Signature: ${user.name}\n${recruiterTitle} at Welltower™ Inc.`;
+
+  } else if (steps.outreach && !hasReplied) {
+    // Initial outreach, never replied
+    scenarioInstructions = `FOLLOW-UP SCENARIO: Initial outreach was sent, no reply yet.
+You sent ${firstName} an outreach email ${daysSinceStr} about Welltower and they haven't responded.
+
+WHAT TO WRITE (keep it to 3-4 short paragraphs):
+1. Open with "Dear ${firstName}," — acknowledge that your first message may have gotten buried or the timing wasn't right. Don't open with an apology or "I wanted to follow up."
+2. One sentence re-sparking the curiosity hook — hint there's a specific detail about what Welltower is building that you still haven't shared. Don't repeat the full outreach.
+3. Lower the bar even further: "Even a one-line reply tells me whether it's worth five minutes of your time."
+4. Warmly close — no pressure, no deadline.
+Signature: ${user.name}\n${recruiterTitle} at Welltower™ Inc.
+
+LAST OUTREACH BODY (for reference — do NOT repeat it, just draw from it):
+${lastOutBody}`;
+
+  } else {
+    // General follow-up (had some interaction, conversation stalled)
+    const lastInbound = [...thread].reverse().find(m => m.direction === 'inbound');
+    const lastMsg = lastInbound ? lastInbound.body.substring(0, 400) : '';
+    scenarioInstructions = `FOLLOW-UP SCENARIO: Conversation has stalled — checking in warmly.
+The last touchpoint with ${firstName} was ${daysSinceStr}. The conversation has gone quiet.
+
+WHAT TO WRITE (keep it to 3 short paragraphs):
+1. Open with "Dear ${firstName}," — a brief, warm check-in that references where the conversation left off. Don't use "touching base" or "circling back."
+2. Keep things alive without pressure — remind them of one specific reason this opportunity is relevant to their background.
+3. Simple CTA: ask if they'd like to continue the conversation.
+Signature: ${user.name}\n${recruiterTitle} at Welltower™ Inc.
+
+LAST MESSAGE FROM CANDIDATE (for reference):
+${lastMsg}`;
+  }
+
+  const prompt = `You are ${user.name}, ${recruiterTitle} at Welltower Inc., writing a follow-up email to an executive candidate. Follow-up emails must be SHORT (under 150 words in the body), warm, human, and specific to this person's background. Never sound like a template. Never use hollow phrases like "I hope this message finds you well" or "just touching base."
+
+CANDIDATE INFORMATION:
+${candidateInfo}
+
+${scenarioInstructions}
+
+CRITICAL RULES:
+- Keep the entire email body under 150 words
+- Sound like a real person — specific, warm, not robotic
+- Reference this candidate's actual background (companies, roles) at least once
+- Do NOT repeat everything from the outreach — assume they read it
+- Output ONLY the email body starting with "Dear ${firstName}," — no subject line, no commentary
+
+Write the follow-up email now:`;
+
+  const response = await client.messages.create({
+    model: MODEL,
+    max_tokens: 600,
+    messages: [{ role: 'user', content: prompt }]
+  });
+
+  return response.content[0].text.trim();
+}
+
 async function scoreCandidate(candidate, user) {
   const candidateInfo = formatCandidateContext(candidate);
 
@@ -508,5 +608,6 @@ module.exports = {
   generateResumeFeedback,
   generateVictoryEmail,
   generateReply,
+  generateFollowUp,
   scoreCandidate
 };
