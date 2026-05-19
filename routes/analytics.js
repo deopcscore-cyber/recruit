@@ -29,11 +29,15 @@ router.get('/', async (req, res) => {
     const opened = candidates.filter(c => c.opened).length;
     const openRate = withOutreach > 0 ? Math.round((opened / withOutreach) * 100) : 0;
 
-    // Follow-ups due (overdue and not closed/interviewing)
-    const followUpsDue = candidates.filter(c =>
-      c.followUpDate && new Date(c.followUpDate) <= now &&
-      !['Closed', 'Interviewing'].includes(c.stage)
-    );
+    // Follow-ups due: explicit overdue reminder OR stuck in active stage with no reminder set
+    const ACTIVE_STAGES = ['Outreach Sent', 'Replied', 'Resume Requested', 'Resume Received', 'Interviewing'];
+    const followUpsDue = candidates.filter(c => {
+      const stage = c.stage || 'Imported';
+      if (stage === 'Closed' || stage === 'Imported') return false;
+      if (c.followUpDate && new Date(c.followUpDate) <= now) return true;
+      if (ACTIVE_STAGES.includes(stage) && !c.followUpDate) return true;
+      return false;
+    });
 
     // Unread
     const unreadCount = candidates.filter(c => c.unread).length;

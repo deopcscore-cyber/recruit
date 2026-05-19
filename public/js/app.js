@@ -187,7 +187,14 @@ function getFilteredCandidates() {
   let filtered = [...allCandidates];
   if (currentFilter.stage === '__followup__') {
     const now = new Date();
-    filtered = filtered.filter(c => c.followUpDate && new Date(c.followUpDate) <= now && c.stage !== 'Closed');
+    const ACT = ['Outreach Sent', 'Replied', 'Resume Requested', 'Resume Received', 'Interviewing'];
+    filtered = filtered.filter(c => {
+      const stage = c.stage || 'Imported';
+      if (stage === 'Closed' || stage === 'Imported') return false;
+      if (c.followUpDate && new Date(c.followUpDate) <= now) return true;
+      if (ACT.includes(stage) && !c.followUpDate) return true;
+      return false;
+    });
   } else if (currentFilter.stage) {
     filtered = filtered.filter(c => c.stage === currentFilter.stage);
   }
@@ -229,9 +236,14 @@ function updateUnreadBadge() {
 
 function updateFollowUpBadge() {
   const now = new Date();
-  const count = allCandidates.filter(c =>
-    c.followUpDate && new Date(c.followUpDate) <= now && c.stage !== 'Closed'
-  ).length;
+  const ACTIVE_STAGES = ['Outreach Sent', 'Replied', 'Resume Requested', 'Resume Received', 'Interviewing'];
+  const count = allCandidates.filter(c => {
+    const stage = c.stage || 'Imported';
+    if (stage === 'Closed' || stage === 'Imported') return false;
+    if (c.followUpDate && new Date(c.followUpDate) <= now) return true;
+    if (ACTIVE_STAGES.includes(stage) && !c.followUpDate) return true;
+    return false;
+  }).length;
   const badge = document.getElementById('followup-badge');
   if (badge) {
     badge.textContent = count;
@@ -674,9 +686,25 @@ function delay(ms) { return new Promise(r => setTimeout(r, ms)); }
 // ---- Follow-Up Hub ----
 function loadFollowUpPage() {
   const now = new Date();
+  // Active stages that mean "this candidate is in the pipeline and needs attention"
+  const ACTIVE_STAGES = ['Outreach Sent', 'Replied', 'Resume Requested', 'Resume Received', 'Interviewing'];
+
   const due = allCandidates
-    .filter(c => c.followUpDate && new Date(c.followUpDate) <= now && c.stage !== 'Closed')
-    .sort((a, b) => new Date(a.followUpDate) - new Date(b.followUpDate)); // most overdue first
+    .filter(c => {
+      const stage = c.stage || 'Imported';
+      if (stage === 'Closed' || stage === 'Imported') return false;
+      // Explicit reminder that's now due
+      if (c.followUpDate && new Date(c.followUpDate) <= now) return true;
+      // In an active stage with no reminder set at all → needs attention
+      if (ACTIVE_STAGES.includes(stage) && !c.followUpDate) return true;
+      return false;
+    })
+    .sort((a, b) => {
+      // Overdue with date first (sorted by date), then no-date entries
+      const aDate = a.followUpDate ? new Date(a.followUpDate) : new Date(0);
+      const bDate = b.followUpDate ? new Date(b.followUpDate) : new Date(0);
+      return aDate - bDate;
+    });
 
   const listEl   = document.getElementById('followup-list');
   const emptyEl  = document.getElementById('followup-empty');
@@ -699,9 +727,9 @@ function loadFollowUpPage() {
   countEl.textContent = `${due.length} due`;
 
   listEl.innerHTML = due.map(c => {
-    const daysOver = Math.floor((now - new Date(c.followUpDate)) / 86400000);
-    const overdueLabel = daysOver === 0 ? 'Due today' : `${daysOver}d overdue`;
-    const overdueColor = daysOver === 0 ? '#d97706' : '#ef4444';
+    const daysOver = c.followUpDate ? Math.floor((now - new Date(c.followUpDate)) / 86400000) : null;
+    const overdueLabel = daysOver === null ? 'No reminder set' : daysOver === 0 ? 'Due today' : `${daysOver}d overdue`;
+    const overdueColor = daysOver === null ? '#64748b' : daysOver === 0 ? '#d97706' : '#ef4444';
     const lastMsg = [...(c.thread || [])].reverse()[0];
     const preview  = lastMsg ? preview55(lastMsg.body) : (c.summary ? preview55(c.summary) : '');
     const lastDir  = lastMsg ? (lastMsg.direction === 'inbound' ? '← They said:' : '→ You said:') : '';
