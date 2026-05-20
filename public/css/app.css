@@ -925,15 +925,15 @@ select { appearance: auto; }
 .settings-tab-btn:hover  { color: var(--text); }
 .settings-tab-btn.active { color: var(--blue); border-bottom-color: var(--blue); }
 
-/* Tab panels — hidden by default, active uses display:contents so cards flow into wrapper */
-.settings-tab-panel         { display: none; }
-.settings-tab-panel.active  { display: contents; }
+/* Tab panels — each active panel is its own scrollable flex column */
+.settings-tab-panel        { display: none; }
+.settings-tab-panel.active { display: flex; flex-direction: column; gap: 16px; padding: 20px; overflow-y: auto; flex: 1; }
 
-/* 2-column grid for short side-by-side cards */
+/* 2-column grid for side-by-side cards */
 .settings-2col { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
 @media (max-width: 860px) { .settings-2col { grid-template-columns: 1fr; } }
 
-.settings-wrapper { padding: 20px; overflow-y: auto; flex: 1; display: flex; flex-direction: column; gap: 16px; }
+.settings-wrapper { flex: 1; overflow: hidden; display: flex; flex-direction: column; }
 .settings-card {
   background: var(--surface);
   border: 1px solid var(--border);
