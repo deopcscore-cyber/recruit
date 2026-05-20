@@ -901,6 +901,38 @@ select { appearance: auto; }
 /* ================================================================
    SETTINGS PAGE
    ================================================================ */
+
+/* Tab bar */
+.settings-tabs {
+  display: flex;
+  padding: 0 20px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+  flex-shrink: 0;
+}
+.settings-tab-btn {
+  padding: 12px 20px;
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--text-muted);
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  transition: color var(--transition), border-color var(--transition);
+  white-space: nowrap;
+}
+.settings-tab-btn:hover  { color: var(--text); }
+.settings-tab-btn.active { color: var(--blue); border-bottom-color: var(--blue); }
+
+/* Tab panels — hidden by default, active uses display:contents so cards flow into wrapper */
+.settings-tab-panel         { display: none; }
+.settings-tab-panel.active  { display: contents; }
+
+/* 2-column grid for short side-by-side cards */
+.settings-2col { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+@media (max-width: 860px) { .settings-2col { grid-template-columns: 1fr; } }
+
 .settings-wrapper { padding: 20px; overflow-y: auto; flex: 1; display: flex; flex-direction: column; gap: 16px; }
 .settings-card {
   background: var(--surface);

@@ -961,6 +961,24 @@ async function loadAnalyticsPage() {
 
 // ---- Settings ----
 function initSettingsPage() {
+  // ── Tab switching ─────────────────────────────────────────────────────────
+  const tabBtns   = document.querySelectorAll('.settings-tab-btn');
+  const tabPanels = document.querySelectorAll('.settings-tab-panel');
+
+  function activateTab(tabName) {
+    tabBtns.forEach(b => b.classList.toggle('active', b.dataset.tab === tabName));
+    tabPanels.forEach(p => p.classList.toggle('active', p.dataset.panel === tabName));
+    try { localStorage.setItem('settings-tab', tabName); } catch (_) {}
+  }
+
+  tabBtns.forEach(btn => btn.addEventListener('click', () => activateTab(btn.dataset.tab)));
+
+  // Restore last active tab
+  const savedTab = (() => { try { return localStorage.getItem('settings-tab'); } catch (_) { return null; } })();
+  if (savedTab && [...tabBtns].some(b => b.dataset.tab === savedTab)) {
+    activateTab(savedTab);
+  }
+
   document.getElementById('connect-gmail-btn').addEventListener('click', async () => {
     try {
       const { url } = await API.email.getConnectUrl();
