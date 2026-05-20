@@ -961,23 +961,33 @@ async function loadAnalyticsPage() {
 
 // ---- Settings ----
 function initSettingsPage() {
-  // ── Tab switching ─────────────────────────────────────────────────────────
-  const tabBtns   = document.querySelectorAll('.settings-tab-btn');
-  const tabPanels = document.querySelectorAll('.settings-tab-panel');
+  // ── Tab switching — driven entirely by JS so CSS caching can never break it ──
+  const tabBtns   = Array.from(document.querySelectorAll('.settings-tab-btn'));
+  const tabPanels = Array.from(document.querySelectorAll('.settings-tab-panel'));
 
   function activateTab(tabName) {
-    tabBtns.forEach(b => b.classList.toggle('active', b.dataset.tab === tabName));
-    tabPanels.forEach(p => p.classList.toggle('active', p.dataset.panel === tabName));
+    tabBtns.forEach(b => {
+      b.classList.toggle('active', b.dataset.tab === tabName);
+    });
+    tabPanels.forEach(p => {
+      const isActive = p.dataset.panel === tabName;
+      p.style.display   = isActive ? 'flex'  : 'none';
+      p.style.flexDirection = isActive ? 'column' : '';
+      p.style.gap           = isActive ? '16px'  : '';
+      p.style.padding       = isActive ? '20px'  : '';
+      p.style.overflowY     = isActive ? 'auto'  : '';
+      p.style.flex          = isActive ? '1'     : '';
+      p.classList.toggle('active', isActive);
+    });
     try { localStorage.setItem('settings-tab', tabName); } catch (_) {}
   }
 
-  tabBtns.forEach(btn => btn.addEventListener('click', () => activateTab(btn.dataset.tab)));
-
-  // Restore last active tab
+  // Force-initialise immediately — hide every panel, then show the right one
   const savedTab = (() => { try { return localStorage.getItem('settings-tab'); } catch (_) { return null; } })();
-  if (savedTab && [...tabBtns].some(b => b.dataset.tab === savedTab)) {
-    activateTab(savedTab);
-  }
+  const startTab = (savedTab && tabBtns.some(b => b.dataset.tab === savedTab)) ? savedTab : 'account';
+  activateTab(startTab);
+
+  tabBtns.forEach(btn => btn.addEventListener('click', () => activateTab(btn.dataset.tab)));
 
   document.getElementById('connect-gmail-btn').addEventListener('click', async () => {
     try {
