@@ -17,7 +17,8 @@ router.get('/', async (req, res) => {
       ...(user.style || { tone: 'warm', notes: '', use: [], avoid: [] }),
       name: user.name || '',
       title: user.title || '',
-      signature: user.signature || { enabled: false, photoUrl: '', website: '', location: '', linkedin: '', facebook: '', twitter: '', disclaimer: '' }
+      signature: user.signature || { enabled: false, photoUrl: '', website: '', location: '', linkedin: '', facebook: '', twitter: '', disclaimer: '' },
+      secondaryTestEmail: user.secondaryTestEmail || ''
     });
   } catch (err) {
     console.error('Get settings error:', err);
@@ -31,7 +32,7 @@ router.put('/', async (req, res) => {
     const user = await storage.getUserById(req.session.userId);
     if (!user) return res.status(404).json({ error: 'User not found' });
 
-    const { tone, notes, use, avoid, name, title, signature } = req.body;
+    const { tone, notes, use, avoid, name, title, signature, secondaryTestEmail } = req.body;
 
     user.style = user.style || {};
     if (tone !== undefined) user.style.tone = tone;
@@ -42,6 +43,9 @@ router.put('/', async (req, res) => {
     // Profile fields
     if (name && name.trim()) user.name = name.trim();
     if (title !== undefined) user.title = title.trim();
+
+    // Secondary test email
+    if (secondaryTestEmail !== undefined) user.secondaryTestEmail = secondaryTestEmail.trim();
 
     // Signature fields
     if (signature !== undefined) {
@@ -55,7 +59,8 @@ router.put('/', async (req, res) => {
       ...user.style,
       name: user.name || '',
       title: user.title || '',
-      signature: user.signature || {}
+      signature: user.signature || {},
+      secondaryTestEmail: user.secondaryTestEmail || ''
     });
   } catch (err) {
     console.error('Update settings error:', err);

@@ -989,82 +989,226 @@ function initSettingsPage() {
     finally { btn.disabled = false; btn.textContent = 'Send Test Email'; }
   });
 
-  // ── Deliverability Test ────────────────────────────────────────────────────
-  document.getElementById('deliverability-run-btn').addEventListener('click', async () => {
-    const btn       = document.getElementById('deliverability-run-btn');
-    const resultBox = document.getElementById('deliverability-result');
-    const statusEl  = document.getElementById('deliverability-status');
-    const tipsEl    = document.getElementById('deliverability-tips');
+  // ════════════════════════════════════════════════════════════════════════════
+  // DELIVERABILITY DASHBOARD
+  // ════════════════════════════════════════════════════════════════════════════
 
-    btn.disabled = true;
-    btn.textContent = 'Sending test email…';
-    resultBox.style.display = 'none';
+  // ── ① Content Score ────────────────────────────────────────────────────────
+  function analyzeEmailContent(subject, body) {
+    const issues = [];
+    let score = 100;
 
-    let threadId;
-    try {
-      const res = await API.email.deliverabilityTest();
-      threadId = res.threadId;
-    } catch (err) {
-      btn.disabled = false; btn.textContent = 'Run Deliverability Test';
-      Toast.error('Could not send test: ' + err.message);
-      return;
+    const flag = (sev, text, deduct) => { issues.push({ sev, text }); score -= deduct; };
+
+    const subj = subject || '';
+    const bod  = body    || '';
+    const subjL = subj.toLowerCase();
+    const bodL  = bod.toLowerCase();
+
+    // ── Subject checks ───────────────────────────────────────────────────────
+    if (subj.length > 70)          flag('warning', `Subject is ${subj.length} chars — keep under 70 to avoid being cut off`, 5);
+    if (/[A-Z]{4,}/.test(subj))    flag('error',   'ALL CAPS word in subject line — strong spam signal', 15);
+    if (/[!]{2,}/.test(subj))      flag('error',   'Multiple exclamation marks in subject line', 10);
+    if (/[$%]/.test(subj))         flag('warning',  'Dollar or percent sign in subject — common spam pattern', 10);
+    if (/^(re:|fw:|fwd:)/i.test(subj) && !subj.match(/^re:\s+\w/i)) flag('warning', 'Fake Re:/Fwd: prefix looks deceptive to filters', 8);
+
+    // ── Body checks ──────────────────────────────────────────────────────────
+    const words     = bod.split(/\s+/).filter(Boolean);
+    const capsWords = words.filter(w => w.length > 3 && w === w.toUpperCase() && /[A-Z]/.test(w));
+    if (capsWords.length > 2) flag('warning', `${capsWords.length} ALL CAPS words in body (${capsWords.slice(0,3).join(', ')}) — reduce to 0`, 8);
+
+    const bangs = (bod.match(/!/g) || []).length;
+    if (bangs > 2)  flag('warning', `${bangs} exclamation marks — keep to 1 or fewer in professional email`, Math.min(12, (bangs - 2) * 4));
+
+    const links = (bod.match(/https?:\/\//g) || []).length;
+    if (links > 3)  flag('warning', `${links} links detected — more than 3 raises spam probability`, links > 5 ? 15 : 8);
+
+    const dollars = (bod.match(/\$/g) || []).length;
+    if (dollars > 2) flag('warning', `${dollars} dollar signs — where possible use "six-figure" instead of exact amounts`, 6);
+
+    if (bod.length < 150) flag('warning', 'Very short email body — may trigger phishing detection', 8);
+    if (bod.length > 3000) flag('warning', 'Very long email body — keep outreach under ~500 words', 5);
+
+    // Spam trigger words — context-tuned for professional recruiting
+    const SPAM_WORDS = [
+      ['click here',        12], ['act now',          12], ['limited time',     10],
+      ['urgent',             8], ['guaranteed',       10], ['make money',       12],
+      ['risk free',         10], ['no obligation',     8], ['special offer',    10],
+      ['earn money',        12], ['cash bonus',       10], ['buy now',          12],
+      ['order now',         12], ['dear friend',       8], ['this is not spam',15],
+      ['not junk',          12], ['while supplies',    8], ['you have been selected', 12],
+      ['congratulations',    6], ['double your',       8], ['100% free',        12],
+      ['no cost',            6], ['winner',            8], ['prize',             8],
+    ];
+    for (const [word, penalty] of SPAM_WORDS) {
+      if (subjL.includes(word)) flag('error',   `Spam trigger word in subject: "${word}"`, penalty + 4);
+      else if (bodL.includes(word)) flag('error', `Spam trigger word in body: "${word}"`, penalty);
     }
 
-    // Poll for result — Gmail needs a few seconds to deliver to self
-    btn.textContent = 'Checking where it landed…';
+    // ── Positive signals ─────────────────────────────────────────────────────
+    const positives = [];
+    if (!/<script/i.test(bod))                       positives.push('No script tags');
+    if (bod.length >= 200 && bod.length <= 2000)     positives.push('Good email length');
+    if (capsWords.length === 0)                      positives.push('No ALL CAPS words');
+    if (bangs <= 1)                                  positives.push('Minimal exclamation marks');
+    if (links <= 2)                                  positives.push('Low link count');
+    if (!SPAM_WORDS.some(([w]) => bodL.includes(w))) positives.push('No spam trigger words found');
+
+    score = Math.max(0, Math.round(score));
+
+    return { score, issues, positives };
+  }
+
+  document.getElementById('content-score-btn').addEventListener('click', () => {
+    const subject = document.getElementById('cs-subject').value.trim();
+    const body    = document.getElementById('cs-body').value.trim();
+    const resultEl = document.getElementById('cs-result');
+
+    // Fall back to standard outreach template if fields are empty
+    const analyzeSubject = subject || 'Something Worth a Few Minutes of Your Time';
+    const analyzeBody    = body    || `Dear [First Name],\n\nYour career in senior living leadership reflects something most professionals in this field never develop — a genuine combination of operational depth, strategic perspective, and direct care experience built across multiple environments over time.\n\nI'm reaching out on behalf of Welltower Inc. (NYSE: WELL) — a company that operates at a truly unique intersection: healthcare and real estate. We own and manage a global portfolio of senior housing communities, post-acute care facilities, and outpatient medical properties, and the work we do shapes how millions of people experience care and community as they age.\n\nWe're looking for senior living professionals who understand what it takes to lead a care environment — not just support one from the outside. There is one part of what we are building right now that I kept out of this email on purpose — the kind of detail that is easier to show than describe. If any part of this caught your attention, reply here and I will send it over. No calls to schedule, no commitments — just a reply.\n\nJill Barror\nSenior Talent Acquisition Coordinator at Welltower™ Inc.`;
+
+    const { score, issues, positives } = analyzeEmailContent(analyzeSubject, analyzeBody);
+
+    const scoreColor = score >= 85 ? '#15803d' : score >= 65 ? '#d97706' : '#b91c1c';
+    const scoreBg    = score >= 85 ? '#f0fdf4' : score >= 65 ? '#fffbeb' : '#fef2f2';
+    const scoreBorder= score >= 85 ? '#86efac' : score >= 65 ? '#fcd34d' : '#fca5a5';
+    const scoreLabel = score >= 85 ? 'Good' : score >= 65 ? 'Needs work' : 'High risk';
+    const barWidth   = score + '%';
+
+    const issueHtml = issues.length
+      ? issues.map(i => `<div style="display:flex;gap:8px;align-items:flex-start;padding:4px 0">
+          <span style="flex-shrink:0;color:${i.sev === 'error' ? '#ef4444' : '#f59e0b'}">${i.sev === 'error' ? '●' : '◐'}</span>
+          <span style="font-size:0.8rem;color:#374151">${i.text}</span>
+        </div>`).join('')
+      : '';
+
+    const posHtml = positives.map(p =>
+      `<div style="display:flex;gap:8px;align-items:center;padding:3px 0">
+         <span style="color:#22c55e;flex-shrink:0">✓</span>
+         <span style="font-size:0.8rem;color:#374151">${p}</span>
+       </div>`).join('');
+
+    resultEl.style.display = 'block';
+    resultEl.innerHTML = `
+      <div style="padding:14px 16px;border-radius:10px;background:${scoreBg};border:1px solid ${scoreBorder}">
+        <div style="display:flex;align-items:center;gap:14px;margin-bottom:10px">
+          <div style="font-size:2rem;font-weight:800;color:${scoreColor};line-height:1">${score}</div>
+          <div>
+            <div style="font-size:0.9rem;font-weight:600;color:${scoreColor}">${scoreLabel}</div>
+            <div style="font-size:0.75rem;color:#64748b">out of 100${!subject && !body ? ' — standard outreach template' : ''}</div>
+          </div>
+          <div style="flex:1;height:8px;background:#e2e8f0;border-radius:4px;overflow:hidden;margin-left:auto;max-width:140px">
+            <div style="height:100%;width:${barWidth};background:${scoreColor};border-radius:4px;transition:width .4s"></div>
+          </div>
+        </div>
+        ${issues.length ? `<div style="margin-bottom:8px">${issueHtml}</div>` : ''}
+        ${positives.length ? `<div>${posHtml}</div>` : ''}
+      </div>`;
+  });
+
+  // ── ② Inbox / Spam Test ────────────────────────────────────────────────────
+  // Save secondary email
+  document.getElementById('save-secondary-btn').addEventListener('click', async () => {
+    const email = document.getElementById('secondary-test-email').value.trim();
+    const btn = document.getElementById('save-secondary-btn');
+    btn.disabled = true; btn.textContent = 'Saving…';
+    try {
+      await API.settings.update({ secondaryTestEmail: email });
+      Toast.success(email ? 'Secondary inbox saved' : 'Secondary inbox cleared');
+    } catch (err) { Toast.error(err.message); }
+    finally { btn.disabled = false; btn.textContent = 'Save'; }
+  });
+
+  document.getElementById('deliverability-run-btn').addEventListener('click', async () => {
+    const btn          = document.getElementById('deliverability-run-btn');
+    const resultBox    = document.getElementById('deliverability-result');
+    const statusEl     = document.getElementById('deliverability-status');
+    const tipsEl       = document.getElementById('deliverability-tips');
+    const secNote      = document.getElementById('deliverability-secondary-note');
+    const inclSecondary= document.getElementById('include-secondary-cb').checked;
+
+    btn.disabled = true; btn.textContent = 'Sending…';
+    resultBox.style.display = 'none'; secNote.style.display = 'none';
+
+    let threadId, sends = [], mailtesterName = null;
+    try {
+      const res = await API.email.deliverabilityTest({ includeSecondary: inclSecondary });
+      threadId = res.threadId; sends = res.sends || []; mailtesterName = res.mailtesterName;
+    } catch (err) {
+      btn.disabled = false; btn.textContent = 'Send Test Emails';
+      Toast.error('Could not send test: ' + err.message); return;
+    }
+
+    btn.textContent = 'Checking Gmail…';
     resultBox.style.display = 'block';
-    statusEl.style.cssText = 'display:flex;align-items:center;gap:12px;padding:14px 16px;border-radius:10px;background:#f0f9ff;border:1px solid #bae6fd;color:#0369a1;font-size:0.9rem;font-weight:500';
-    statusEl.innerHTML = '<span style="font-size:1.4rem">🔍</span> Waiting for Gmail to deliver the test message…';
+    statusEl.style.cssText = 'display:flex;align-items:center;gap:12px;padding:14px 16px;border-radius:10px;background:#f0f9ff;border:1px solid #bae6fd;color:#0369a1;font-size:0.875rem;font-weight:500';
+    statusEl.innerHTML = '<span style="font-size:1.3rem">🔍</span> Waiting for Gmail to deliver the test message…';
     tipsEl.innerHTML = '';
 
-    let attempts = 0;
-    const maxAttempts = 12; // 12 × 5s = 60 seconds max
+    // Show secondary note immediately if sent
+    const secSend = sends.find(s => s.label === 'Secondary inbox');
+    if (secSend) {
+      secNote.style.display = 'block';
+      const domain = secSend.to.split('@')[1] || 'your secondary inbox';
+      secNote.innerHTML = `📬 <strong>Secondary inbox:</strong> Test sent to <strong>${secSend.to}</strong> — check both <em>Inbox</em> and <em>Spam/Junk</em> in ${domain} manually. This gives you a cross-provider signal Gmail can't tell you.`;
+    }
+
+    let attempts = 0; const maxAttempts = 14;
     const poll = setInterval(async () => {
       attempts++;
       try {
         const r = await API.email.deliverabilityResult(threadId);
-
-        if (r.result === 'pending' && attempts < maxAttempts) return; // keep polling
+        if (r.result === 'pending' && attempts < maxAttempts) return;
 
         clearInterval(poll);
-        btn.disabled = false; btn.textContent = 'Run Deliverability Test';
+        btn.disabled = false; btn.textContent = 'Send Test Emails';
 
-        if (r.result === 'inbox') {
-          statusEl.style.cssText = 'display:flex;align-items:center;gap:12px;padding:14px 16px;border-radius:10px;background:#f0fdf4;border:1px solid #86efac;color:#15803d;font-size:0.9rem;font-weight:600';
-          statusEl.innerHTML = '<span style="font-size:1.6rem">✅</span> <div><div>Landed in Inbox</div><div style="font-weight:400;font-size:0.8rem;margin-top:2px">Your emails are delivering correctly to the main inbox.</div></div>';
-          tipsEl.innerHTML = `<strong>Keep it up:</strong> Continue using plain text + HTML emails, a real sender name, and personalised content. Avoid sending too many at once — use the 3–8 min delay spacing.`;
+        const configs = {
+          inbox: { bg:'#f0fdf4', border:'#86efac', color:'#15803d', icon:'✅', label:'Landed in Gmail Inbox', sub:'Your Gmail deliverability looks good.', tips: '• Keep using the 3–8 min delay between bulk sends<br>• Use personalised subject lines and first names<br>• Monitor open rates — a drop can signal reputation issues' },
+          tabs:  { bg:'#fffbeb', border:'#fcd34d', color:'#92400e', icon:'📂', label:'Landed in Promotions / Updates tab', sub:"Not spam, but not the main inbox either.", tips: '• Remove or reduce links in outreach emails<br>• Avoid marketing-style language and HTML formatting<br>• Ask recipients to reply — engagement signals move you to Primary<br>• Reduce image count in your signature' },
+          spam:  { bg:'#fef2f2', border:'#fca5a5', color:'#b91c1c', icon:'🚨', label:'Landed in Spam', sub:'Emails are being filtered before recipients see them.', tips: '<strong>Common causes:</strong><br>• Sending volume too high — use the 3–8 min delay<br>• New Gmail account — warm it up with normal emails first<br>• Spam trigger words in body or subject — run the Content Score above<br>• No prior relationship with recipients<br><br><strong>Immediate actions:</strong> Reduce batch size, increase delay, check content score.' },
+        };
+        const cfg = configs[r.result] || { bg:'#f8fafc', border:'#e2e8f0', color:'#64748b', icon:'⏳', label: attempts >= maxAttempts ? 'Timed out — Gmail still processing' : 'Result unclear', sub:'Try again in a minute.', tips:'' };
 
-        } else if (r.result === 'tabs') {
-          statusEl.style.cssText = 'display:flex;align-items:center;gap:12px;padding:14px 16px;border-radius:10px;background:#fffbeb;border:1px solid #fcd34d;color:#92400e;font-size:0.9rem;font-weight:600';
-          statusEl.innerHTML = '<span style="font-size:1.6rem">📂</span> <div><div>Landed in Promotions / Updates tab</div><div style="font-weight:400;font-size:0.8rem;margin-top:2px">Not spam, but not the main inbox either.</div></div>';
-          tipsEl.innerHTML = `<strong>Tips to land in the main inbox:</strong><br>
-• Avoid links in outreach emails if possible<br>
-• Keep the email personal and conversational — avoid marketing-style language<br>
-• Ask recipients to reply or move your email to Primary<br>
-• Reduce the number of images and formatted HTML sections`;
-
-        } else if (r.result === 'spam') {
-          statusEl.style.cssText = 'display:flex;align-items:center;gap:12px;padding:14px 16px;border-radius:10px;background:#fef2f2;border:1px solid #fca5a5;color:#b91c1c;font-size:0.9rem;font-weight:600';
-          statusEl.innerHTML = '<span style="font-size:1.6rem">🚨</span> <div><div>Landed in Spam</div><div style="font-weight:400;font-size:0.8rem;margin-top:2px">Your emails are being filtered before recipients see them.</div></div>';
-          tipsEl.innerHTML = `<strong>Action needed — common causes:</strong><br>
-• <strong>Sending volume too high</strong> — use the 3–8 min delay between sends<br>
-• <strong>Gmail account reputation</strong> — if this is a new Gmail, warm it up with normal personal emails first<br>
-• <strong>SPF/DKIM not set up</strong> — only affects custom domains (not @gmail.com)<br>
-• <strong>Spam trigger words</strong> in the email body or subject<br>
-• <strong>No prior relationship</strong> — cold outreach at scale triggers spam filters<br><br>
-<strong>Immediate fixes:</strong> Reduce batch size, increase delay spacing, use a warmed-up Gmail account.`;
-
-        } else {
-          statusEl.style.cssText = 'display:flex;align-items:center;gap:12px;padding:14px 16px;border-radius:10px;background:#f8fafc;border:1px solid #e2e8f0;color:#64748b;font-size:0.9rem;font-weight:500';
-          statusEl.innerHTML = `<span style="font-size:1.6rem">⏳</span> <div><div>Result unclear${attempts >= maxAttempts ? ' — timed out' : ''}</div><div style="font-weight:400;font-size:0.8rem;margin-top:2px">Gmail may still be processing. Try again in a minute.</div></div>`;
-        }
-      } catch {
-        if (attempts >= maxAttempts) {
-          clearInterval(poll);
-          btn.disabled = false; btn.textContent = 'Run Deliverability Test';
-        }
-      }
+        statusEl.style.cssText = `display:flex;align-items:center;gap:12px;padding:14px 16px;border-radius:10px;background:${cfg.bg};border:1px solid ${cfg.border};color:${cfg.color};font-size:0.875rem;font-weight:600`;
+        statusEl.innerHTML = `<span style="font-size:1.5rem">${cfg.icon}</span><div><div>${cfg.label}</div><div style="font-weight:400;font-size:0.78rem;margin-top:2px;opacity:.85">${cfg.sub}</div></div>`;
+        tipsEl.innerHTML = cfg.tips ? `<div style="font-size:0.8rem;color:#475569;line-height:1.8;padding:10px 14px;background:#f8fafc;border-radius:8px;border:1px solid #e2e8f0">${cfg.tips}</div>` : '';
+      } catch { if (attempts >= maxAttempts) { clearInterval(poll); btn.disabled = false; btn.textContent = 'Send Test Emails'; } }
     }, 5000);
+  });
+
+  // ── ③ Mail-Tester ──────────────────────────────────────────────────────────
+  document.getElementById('mailtester-send-btn').addEventListener('click', async () => {
+    const addr   = document.getElementById('mailtester-address').value.trim();
+    const btn    = document.getElementById('mailtester-send-btn');
+    const status = document.getElementById('mailtester-status');
+
+    if (!addr || !addr.includes('@')) { Toast.warning('Paste a valid mail-tester.com address first'); return; }
+
+    btn.disabled = true; btn.textContent = 'Sending…';
+    status.style.display = 'none';
+
+    try {
+      const res = await API.email.deliverabilityTest({ mailtesterAddress: addr });
+      const testName = res.mailtesterName || addr.split('@')[0];
+      const resultsUrl = `https://www.mail-tester.com/${testName}`;
+
+      status.style.display = 'block';
+      status.innerHTML = `
+        <div style="padding:12px 14px;background:#f0fdf4;border:1px solid #86efac;border-radius:8px;color:#15803d;font-weight:600;margin-bottom:8px">
+          ✅ Test email sent to mail-tester.com
+        </div>
+        <p style="font-size:0.8rem;color:#475569;margin:0 0 10px">Wait 30–60 seconds for their servers to process it, then click below to see your full report — SpamAssassin score, blacklists, SPF/DKIM/DMARC, HTML ratio, and more.</p>
+        <a href="${resultsUrl}" target="_blank"
+           style="display:inline-flex;align-items:center;gap:8px;background:#1a3e72;color:#fff;padding:9px 18px;border-radius:7px;font-size:0.85rem;font-weight:600;text-decoration:none">
+          View Full Report on Mail-Tester →
+        </a>`;
+    } catch (err) {
+      Toast.error('Send failed: ' + err.message);
+    } finally {
+      btn.disabled = false; btn.textContent = 'Send to Mail-Tester';
+    }
   });
 
   document.getElementById('profile-form').addEventListener('submit', async e => {
@@ -1214,6 +1358,9 @@ async function loadSettingsPage() {
     document.getElementById('style-notes').value = style.notes || '';
     document.getElementById('style-use').value = (style.use || []).join(', ');
     document.getElementById('style-avoid').value = (style.avoid || []).join(', ');
+
+    // Secondary test inbox
+    document.getElementById('secondary-test-email').value = style.secondaryTestEmail || '';
 
     // Signature fields
     const sig = style.signature || {};

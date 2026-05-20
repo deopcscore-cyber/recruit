@@ -244,17 +244,74 @@
         </div>
 
         <div class="settings-card">
-          <div class="settings-card-header"><h3>Email Deliverability Check</h3></div>
-          <div class="settings-card-body">
-            <p style="font-size:0.875rem;color:#475569;margin:0 0 14px;line-height:1.6">
-              Sends a realistic outreach-style test email to your own Gmail address, then checks whether it landed in your <strong>Inbox</strong> or <strong>Spam</strong> folder. Run this before starting a campaign.
-            </p>
-            <button class="btn btn-primary btn-sm" id="deliverability-run-btn">Run Deliverability Test</button>
+          <div class="settings-card-header"><h3>Email Deliverability Dashboard</h3></div>
+          <div class="settings-card-body" style="display:flex;flex-direction:column;gap:22px">
 
-            <div id="deliverability-result" style="display:none;margin-top:16px">
-              <div id="deliverability-status" style="display:flex;align-items:center;gap:12px;padding:14px 16px;border-radius:10px;font-size:0.9rem;font-weight:500"></div>
-              <div id="deliverability-tips" style="margin-top:12px;font-size:0.82rem;color:#475569;line-height:1.7"></div>
+            <!-- ① Content Score -->
+            <div>
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+                <div>
+                  <span style="font-size:0.8rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#64748b">① Content Score</span>
+                  <p style="margin:2px 0 0;font-size:0.8rem;color:#94a3b8">Instant scan — no email sent. Paste any subject + body to check for spam triggers.</p>
+                </div>
+                <button class="btn btn-secondary btn-sm" id="content-score-btn" style="white-space:nowrap;flex-shrink:0">Analyze</button>
+              </div>
+              <div style="display:flex;gap:8px;flex-direction:column">
+                <input type="text" id="cs-subject" placeholder="Subject line" style="font-size:0.85rem" />
+                <textarea id="cs-body" style="min-height:90px;font-size:0.85rem;resize:vertical" placeholder="Paste email body here (or leave blank to analyze the standard outreach template)"></textarea>
+              </div>
+              <div id="cs-result" style="display:none;margin-top:12px"></div>
             </div>
+
+            <hr style="border:none;border-top:1px solid var(--border);margin:0">
+
+            <!-- ② Inbox / Spam Test -->
+            <div>
+              <span style="font-size:0.8rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#64748b">② Inbox / Spam Test</span>
+              <p style="margin:2px 0 10px;font-size:0.8rem;color:#94a3b8">Sends a real email and checks where Gmail delivers it. Cross-provider check requires a secondary inbox you own (Outlook, Yahoo, etc.).</p>
+
+              <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap">
+                <input type="email" id="secondary-test-email" placeholder="Secondary inbox e.g. you@outlook.com (optional)"
+                       style="flex:1;min-width:200px;font-size:0.85rem" />
+                <button class="btn btn-secondary btn-xs" id="save-secondary-btn" style="white-space:nowrap">Save</button>
+              </div>
+              <label style="display:flex;align-items:center;gap:8px;font-size:0.82rem;color:#475569;margin-bottom:12px;cursor:pointer">
+                <input type="checkbox" id="include-secondary-cb" style="width:14px;height:14px" />
+                Include secondary inbox in test send
+              </label>
+
+              <button class="btn btn-primary btn-sm" id="deliverability-run-btn">Send Test Emails</button>
+
+              <div id="deliverability-result" style="display:none;margin-top:14px">
+                <div id="deliverability-status" style="display:flex;align-items:center;gap:12px;padding:14px 16px;border-radius:10px;font-size:0.875rem;font-weight:500"></div>
+                <div id="deliverability-secondary-note" style="display:none;margin-top:8px;padding:10px 14px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;font-size:0.82rem;color:#475569;line-height:1.6"></div>
+                <div id="deliverability-tips" style="margin-top:10px;font-size:0.82rem;color:#475569;line-height:1.7"></div>
+              </div>
+            </div>
+
+            <hr style="border:none;border-top:1px solid var(--border);margin:0">
+
+            <!-- ③ Mail-Tester -->
+            <div>
+              <span style="font-size:0.8rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#64748b">③ Mail-Tester <span style="font-weight:400;text-transform:none;letter-spacing:0;font-size:0.75rem;color:#94a3b8">— most comprehensive (free)</span></span>
+              <p style="margin:2px 0 10px;font-size:0.8rem;color:#94a3b8">Tests SPF/DKIM/DMARC, 50+ blacklists, SpamAssassin score, HTML/text ratio, and more.</p>
+
+              <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:12px 14px;font-size:0.82rem;color:#475569;line-height:1.9;margin-bottom:10px">
+                <strong style="color:#1e293b">Step 1:</strong> Go to
+                <a href="https://www.mail-tester.com" target="_blank" style="color:#1a3e72;font-weight:600">mail-tester.com</a>
+                → copy the unique test address shown on that page<br>
+                <strong style="color:#1e293b">Step 2:</strong> Paste it below and click <em>Send to Mail-Tester</em><br>
+                <strong style="color:#1e293b">Step 3:</strong> Wait ~30 seconds, then click <em>View Full Report</em>
+              </div>
+
+              <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+                <input type="email" id="mailtester-address" placeholder="test-abc123@srv1.mail-tester.com"
+                       style="flex:1;min-width:220px;font-size:0.85rem" />
+                <button class="btn btn-secondary btn-sm" id="mailtester-send-btn" style="white-space:nowrap">Send to Mail-Tester</button>
+              </div>
+              <div id="mailtester-status" style="display:none;margin-top:10px;font-size:0.82rem"></div>
+            </div>
+
           </div>
         </div>
 

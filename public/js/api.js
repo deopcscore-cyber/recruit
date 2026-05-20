@@ -58,7 +58,7 @@ const API = {
     fetch() { return API.post('/api/email/fetch'); },
     test() { return API.post('/api/email/test'); },
     checkPriorContact(emails) { return API.post('/api/email/check-prior-contact', { emails }); },
-    deliverabilityTest() { return API.post('/api/email/deliverability-test'); },
+    deliverabilityTest(opts) { return API.post('/api/email/deliverability-test', opts || {}); },
     deliverabilityResult(threadId) { return API.get(`/api/email/deliverability-result/${threadId}`); }
   },
 

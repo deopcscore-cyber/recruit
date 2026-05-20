@@ -305,9 +305,11 @@ router.post('/fetch', requireAuth, async (req, res) => {
   }
 });
 
-// POST /api/email/deliverability-test — send a realistic test email to self, return threadId for polling
+// POST /api/email/deliverability-test — send realistic test email to self + optional secondary/mail-tester
 router.post('/deliverability-test', requireAuth, async (req, res) => {
   try {
+    const { includeSecondary, mailtesterAddress } = req.body || {};
+
     const user = await storage.getUserById(req.session.userId);
     if (!user) return res.status(404).json({ error: 'User not found' });
     if (!user.gmail || !user.gmail.connected || !user.gmail.address) {
@@ -316,9 +318,10 @@ router.post('/deliverability-test', requireAuth, async (req, res) => {
 
     const recruiterName  = user.name  || 'Recruiter';
     const recruiterTitle = (user.title || 'Senior Talent Acquisition Coordinator').trim();
-    const toAddress      = user.gmail.address;
+    const ts = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const testSubject = `Deliverability Check — ${ts}`;
 
-    // Realistic outreach-style body so spam filters see representative content
+    // Realistic outreach-style body — spam filters evaluate representative content
     const testBody = `Dear Test Recipient,
 
 Your career in senior living leadership reflects something most professionals in this field never develop — a genuine combination of operational depth, strategic perspective, and direct care experience built across multiple environments over time.
@@ -330,13 +333,48 @@ We're looking for senior living professionals who understand what it takes to le
 ${recruiterName}
 ${recruiterTitle} at Welltower™ Inc.`;
 
-    const ts = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    // 1. Always send to own Gmail (for inbox/spam label check via API)
     const { gmailThreadId, gmailMessageId } = await gmailService.sendEmail(
       req.session.userId,
-      { to: toAddress, subject: `Deliverability Check — ${ts}`, body: testBody }
+      { to: user.gmail.address, subject: testSubject, body: testBody }
     );
 
-    return res.json({ threadId: gmailThreadId, messageId: gmailMessageId, sentAt: new Date().toISOString() });
+    const sends = [{ to: user.gmail.address, label: 'Gmail (self)' }];
+
+    // 2. Secondary inbox (Outlook / Yahoo / etc.) — manual check by user
+    if (includeSecondary && user.secondaryTestEmail) {
+      try {
+        await gmailService.sendEmail(req.session.userId, {
+          to: user.secondaryTestEmail, subject: testSubject, body: testBody
+        });
+        sends.push({ to: user.secondaryTestEmail, label: 'Secondary inbox' });
+      } catch (e) {
+        console.error('Secondary send failed:', e.message);
+      }
+    }
+
+    // 3. Mail-Tester address (comprehensive score — user checks results on site)
+    let mailtesterName = null;
+    if (mailtesterAddress && mailtesterAddress.includes('@')) {
+      try {
+        await gmailService.sendEmail(req.session.userId, {
+          to: mailtesterAddress.trim(), subject: testSubject, body: testBody
+        });
+        // Extract test name (e.g. "test-abc123" from "test-abc123@srv1.mail-tester.com")
+        mailtesterName = mailtesterAddress.trim().split('@')[0];
+        sends.push({ to: mailtesterAddress, label: 'Mail-Tester' });
+      } catch (e) {
+        console.error('Mail-Tester send failed:', e.message);
+      }
+    }
+
+    return res.json({
+      threadId: gmailThreadId,
+      messageId: gmailMessageId,
+      sentAt: new Date().toISOString(),
+      sends,
+      mailtesterName
+    });
   } catch (err) {
     console.error('Deliverability test error:', err);
     return res.status(500).json({ error: 'Failed to send test: ' + err.message });
