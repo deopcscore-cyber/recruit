@@ -57,7 +57,9 @@ const API = {
     send(data) { return API.post('/api/email/send', data); },
     fetch() { return API.post('/api/email/fetch'); },
     test() { return API.post('/api/email/test'); },
-    checkPriorContact(emails) { return API.post('/api/email/check-prior-contact', { emails }); }
+    checkPriorContact(emails) { return API.post('/api/email/check-prior-contact', { emails }); },
+    deliverabilityTest() { return API.post('/api/email/deliverability-test'); },
+    deliverabilityResult(threadId) { return API.get(`/api/email/deliverability-result/${threadId}`); }
   },
 
   // AI

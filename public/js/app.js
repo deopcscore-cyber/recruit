@@ -989,6 +989,84 @@ function initSettingsPage() {
     finally { btn.disabled = false; btn.textContent = 'Send Test Email'; }
   });
 
+  // ── Deliverability Test ────────────────────────────────────────────────────
+  document.getElementById('deliverability-run-btn').addEventListener('click', async () => {
+    const btn       = document.getElementById('deliverability-run-btn');
+    const resultBox = document.getElementById('deliverability-result');
+    const statusEl  = document.getElementById('deliverability-status');
+    const tipsEl    = document.getElementById('deliverability-tips');
+
+    btn.disabled = true;
+    btn.textContent = 'Sending test email…';
+    resultBox.style.display = 'none';
+
+    let threadId;
+    try {
+      const res = await API.email.deliverabilityTest();
+      threadId = res.threadId;
+    } catch (err) {
+      btn.disabled = false; btn.textContent = 'Run Deliverability Test';
+      Toast.error('Could not send test: ' + err.message);
+      return;
+    }
+
+    // Poll for result — Gmail needs a few seconds to deliver to self
+    btn.textContent = 'Checking where it landed…';
+    resultBox.style.display = 'block';
+    statusEl.style.cssText = 'display:flex;align-items:center;gap:12px;padding:14px 16px;border-radius:10px;background:#f0f9ff;border:1px solid #bae6fd;color:#0369a1;font-size:0.9rem;font-weight:500';
+    statusEl.innerHTML = '<span style="font-size:1.4rem">🔍</span> Waiting for Gmail to deliver the test message…';
+    tipsEl.innerHTML = '';
+
+    let attempts = 0;
+    const maxAttempts = 12; // 12 × 5s = 60 seconds max
+    const poll = setInterval(async () => {
+      attempts++;
+      try {
+        const r = await API.email.deliverabilityResult(threadId);
+
+        if (r.result === 'pending' && attempts < maxAttempts) return; // keep polling
+
+        clearInterval(poll);
+        btn.disabled = false; btn.textContent = 'Run Deliverability Test';
+
+        if (r.result === 'inbox') {
+          statusEl.style.cssText = 'display:flex;align-items:center;gap:12px;padding:14px 16px;border-radius:10px;background:#f0fdf4;border:1px solid #86efac;color:#15803d;font-size:0.9rem;font-weight:600';
+          statusEl.innerHTML = '<span style="font-size:1.6rem">✅</span> <div><div>Landed in Inbox</div><div style="font-weight:400;font-size:0.8rem;margin-top:2px">Your emails are delivering correctly to the main inbox.</div></div>';
+          tipsEl.innerHTML = `<strong>Keep it up:</strong> Continue using plain text + HTML emails, a real sender name, and personalised content. Avoid sending too many at once — use the 3–8 min delay spacing.`;
+
+        } else if (r.result === 'tabs') {
+          statusEl.style.cssText = 'display:flex;align-items:center;gap:12px;padding:14px 16px;border-radius:10px;background:#fffbeb;border:1px solid #fcd34d;color:#92400e;font-size:0.9rem;font-weight:600';
+          statusEl.innerHTML = '<span style="font-size:1.6rem">📂</span> <div><div>Landed in Promotions / Updates tab</div><div style="font-weight:400;font-size:0.8rem;margin-top:2px">Not spam, but not the main inbox either.</div></div>';
+          tipsEl.innerHTML = `<strong>Tips to land in the main inbox:</strong><br>
+• Avoid links in outreach emails if possible<br>
+• Keep the email personal and conversational — avoid marketing-style language<br>
+• Ask recipients to reply or move your email to Primary<br>
+• Reduce the number of images and formatted HTML sections`;
+
+        } else if (r.result === 'spam') {
+          statusEl.style.cssText = 'display:flex;align-items:center;gap:12px;padding:14px 16px;border-radius:10px;background:#fef2f2;border:1px solid #fca5a5;color:#b91c1c;font-size:0.9rem;font-weight:600';
+          statusEl.innerHTML = '<span style="font-size:1.6rem">🚨</span> <div><div>Landed in Spam</div><div style="font-weight:400;font-size:0.8rem;margin-top:2px">Your emails are being filtered before recipients see them.</div></div>';
+          tipsEl.innerHTML = `<strong>Action needed — common causes:</strong><br>
+• <strong>Sending volume too high</strong> — use the 3–8 min delay between sends<br>
+• <strong>Gmail account reputation</strong> — if this is a new Gmail, warm it up with normal personal emails first<br>
+• <strong>SPF/DKIM not set up</strong> — only affects custom domains (not @gmail.com)<br>
+• <strong>Spam trigger words</strong> in the email body or subject<br>
+• <strong>No prior relationship</strong> — cold outreach at scale triggers spam filters<br><br>
+<strong>Immediate fixes:</strong> Reduce batch size, increase delay spacing, use a warmed-up Gmail account.`;
+
+        } else {
+          statusEl.style.cssText = 'display:flex;align-items:center;gap:12px;padding:14px 16px;border-radius:10px;background:#f8fafc;border:1px solid #e2e8f0;color:#64748b;font-size:0.9rem;font-weight:500';
+          statusEl.innerHTML = `<span style="font-size:1.6rem">⏳</span> <div><div>Result unclear${attempts >= maxAttempts ? ' — timed out' : ''}</div><div style="font-weight:400;font-size:0.8rem;margin-top:2px">Gmail may still be processing. Try again in a minute.</div></div>`;
+        }
+      } catch {
+        if (attempts >= maxAttempts) {
+          clearInterval(poll);
+          btn.disabled = false; btn.textContent = 'Run Deliverability Test';
+        }
+      }
+    }, 5000);
+  });
+
   document.getElementById('profile-form').addEventListener('submit', async e => {
     e.preventDefault();
     const btn = e.target.querySelector('[type=submit]');

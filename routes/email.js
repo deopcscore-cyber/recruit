@@ -305,6 +305,83 @@ router.post('/fetch', requireAuth, async (req, res) => {
   }
 });
 
+// POST /api/email/deliverability-test — send a realistic test email to self, return threadId for polling
+router.post('/deliverability-test', requireAuth, async (req, res) => {
+  try {
+    const user = await storage.getUserById(req.session.userId);
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    if (!user.gmail || !user.gmail.connected || !user.gmail.address) {
+      return res.status(400).json({ error: 'Gmail not connected' });
+    }
+
+    const recruiterName  = user.name  || 'Recruiter';
+    const recruiterTitle = (user.title || 'Senior Talent Acquisition Coordinator').trim();
+    const toAddress      = user.gmail.address;
+
+    // Realistic outreach-style body so spam filters see representative content
+    const testBody = `Dear Test Recipient,
+
+Your career in senior living leadership reflects something most professionals in this field never develop — a genuine combination of operational depth, strategic perspective, and direct care experience built across multiple environments over time.
+
+I'm reaching out on behalf of Welltower Inc. (NYSE: WELL) — a company that operates at a truly unique intersection: healthcare and real estate. We own and manage a global portfolio of senior housing communities, post-acute care facilities, and outpatient medical properties, and the work we do shapes how millions of people experience care and community as they age.
+
+We're looking for senior living professionals who understand what it takes to lead a care environment — not just support one from the outside — and who bring the hands-on operational knowledge that comes from having led one. There is one part of what we are building right now that I kept out of this email on purpose — the kind of detail that is easier to show than describe, and that I think lands differently once you see the full picture. If any part of this caught your attention, reply here and I will send it over. No calls to schedule, no commitments — just a reply.
+
+${recruiterName}
+${recruiterTitle} at Welltower™ Inc.`;
+
+    const ts = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const { gmailThreadId, gmailMessageId } = await gmailService.sendEmail(
+      req.session.userId,
+      { to: toAddress, subject: `Deliverability Check — ${ts}`, body: testBody }
+    );
+
+    return res.json({ threadId: gmailThreadId, messageId: gmailMessageId, sentAt: new Date().toISOString() });
+  } catch (err) {
+    console.error('Deliverability test error:', err);
+    return res.status(500).json({ error: 'Failed to send test: ' + err.message });
+  }
+});
+
+// GET /api/email/deliverability-result/:threadId — poll for inbox/spam result
+router.get('/deliverability-result/:threadId', requireAuth, async (req, res) => {
+  try {
+    const user = await storage.getUserById(req.session.userId);
+    if (!user?.gmail?.connected) return res.status(400).json({ error: 'Gmail not connected' });
+
+    const auth  = await gmailService.getAuthedClient(user);
+    const gmail = google.gmail({ version: 'v1', auth });
+
+    const thread = await gmail.users.threads.get({
+      userId: 'me',
+      id: req.params.threadId,
+      format: 'metadata',
+      metadataHeaders: ['Subject']
+    });
+
+    const messages = thread.data.messages || [];
+
+    // The received copy has INBOX or SPAM; the sent copy only has SENT
+    let result = 'pending';
+    const allLabels = [];
+    for (const msg of messages) {
+      const labels = msg.labelIds || [];
+      allLabels.push(...labels);
+      if (labels.includes('INBOX'))        { result = 'inbox'; break; }
+      if (labels.includes('SPAM'))         { result = 'spam';  break; }
+      if (labels.includes('CATEGORY_PROMOTIONS') || labels.includes('CATEGORY_UPDATES')) {
+        result = 'tabs'; // landed in Gmail Promotions/Updates tab — not main inbox
+        break;
+      }
+    }
+
+    return res.json({ result, labels: [...new Set(allLabels)] });
+  } catch (err) {
+    console.error('Deliverability result error:', err);
+    return res.status(500).json({ result: 'unknown', error: err.message });
+  }
+});
+
 // POST /api/email/test — send test email to self
 router.post('/test', requireAuth, async (req, res) => {
   try {
