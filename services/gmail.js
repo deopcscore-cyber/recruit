@@ -450,85 +450,52 @@ function buildSignatureHtml(user) {
 
   // ── Circular photo ────────────────────────────────────────────────────────
   const photoCell = photo
-    ? `<td width="80" style="padding:0 18px 0 0;vertical-align:top">
+    ? `<td width="88" style="padding:0 16px 0 0;vertical-align:top">
          <img src="${photo}" width="72" height="72" alt="${name}"
-              style="display:block;border-radius:50%;width:72px;height:72px;object-fit:cover;
-                     border:3px solid #1a3e72;box-shadow:0 2px 10px rgba(26,62,114,.18)" />
+              style="display:block;border-radius:50%;width:72px;height:72px;object-fit:cover;border:3px solid #1a3e72" />
        </td>`
     : '';
 
-  // ── Contact links line ────────────────────────────────────────────────────
+  // ── Contact info line ─────────────────────────────────────────────────────
   const contactParts = [];
-  if (website)  contactParts.push(`<a href="${website}" target="_blank" style="color:#1a3e72;text-decoration:none;font-family:Arial,sans-serif;font-size:12px">&#127758;&nbsp;${website.replace(/^https?:\/\//, '')}</a>`);
-  if (location) contactParts.push(`<span style="color:#64748b;font-family:Arial,sans-serif;font-size:12px">&#128205;&nbsp;${location}</span>`);
+  if (location) contactParts.push(`<span style="color:#64748b;font-family:Arial,sans-serif;font-size:12px">${location}</span>`);
+  if (website)  contactParts.push(`<a href="${website}" target="_blank" style="color:#1a3e72;text-decoration:none;font-family:Arial,sans-serif;font-size:12px">${website.replace(/^https?:\/\//, '')}</a>`);
   const contactLine = contactParts.length
-    ? `<p style="margin:5px 0 0;line-height:1.6">${contactParts.join('&nbsp;&nbsp;|&nbsp;&nbsp;')}</p>`
+    ? `<p style="margin:5px 0 0;font-family:Arial,sans-serif;font-size:12px;line-height:1.5;color:#64748b">${contactParts.join('&nbsp;&nbsp;·&nbsp;&nbsp;')}</p>`
     : '';
 
-  // ── Social icon badges (rounded squares) ─────────────────────────────────
-  const iconBadge = (href, bg, letter, title_) => href
-    ? `<a href="${href}" target="_blank" title="${title_}"
-          style="display:inline-block;background:${bg};color:#fff;width:28px;height:28px;line-height:28px;
-                 text-align:center;border-radius:6px;font-family:Arial,sans-serif;font-size:13px;
-                 font-weight:800;text-decoration:none;margin-right:6px">${letter}</a>`
-    : '';
-
-  const socialIcons = (linkedin || facebook || twitter)
-    ? `<td style="vertical-align:middle;padding-left:12px">
-         ${iconBadge(linkedin, '#0077B5', 'in', 'LinkedIn')}
-         ${iconBadge(facebook, '#1877F2', 'f',  'Facebook')}
-         ${iconBadge(twitter,  '#111111', '&#120143;', 'X / Twitter')}
-       </td>`
-    : '';
-
-  // ── Visit Website CTA ─────────────────────────────────────────────────────
-  const ctaBtn = website
-    ? `<td style="vertical-align:middle;padding-left:10px">
-         <a href="${website}" target="_blank"
-            style="display:inline-block;background:#1a3e72;color:#fff;font-family:Arial,sans-serif;
-                   font-size:11px;font-weight:700;letter-spacing:.4px;text-transform:uppercase;
-                   padding:7px 15px;border-radius:5px;text-decoration:none;white-space:nowrap">
-           Visit Website &#8594;
-         </a>
-       </td>`
-    : '';
-
-  const actionsRow = (linkedin || facebook || twitter || website)
-    ? `<tr><td colspan="2" style="padding-top:12px">
-         <table border="0" cellpadding="0" cellspacing="0"><tr>
-           ${socialIcons}
-           ${ctaBtn}
-         </tr></table>
+  // ── Social links (text-style, not badge buttons) ──────────────────────────
+  const socialLinks = [];
+  if (linkedin) socialLinks.push(`<a href="${linkedin}" target="_blank" style="color:#1a3e72;text-decoration:none;font-family:Arial,sans-serif;font-size:12px;font-weight:600">LinkedIn</a>`);
+  if (facebook) socialLinks.push(`<a href="${facebook}" target="_blank" style="color:#1a3e72;text-decoration:none;font-family:Arial,sans-serif;font-size:12px;font-weight:600">Facebook</a>`);
+  if (twitter)  socialLinks.push(`<a href="${twitter}"  target="_blank" style="color:#1a3e72;text-decoration:none;font-family:Arial,sans-serif;font-size:12px;font-weight:600">X / Twitter</a>`);
+  const socialRow = socialLinks.length
+    ? `<tr><td colspan="2" style="padding-top:10px">
+         <p style="margin:0;font-family:Arial,sans-serif;font-size:12px;color:#64748b">${socialLinks.join('&nbsp;&nbsp;·&nbsp;&nbsp;')}</p>
        </td></tr>`
     : '';
 
   // ── Disclaimer ────────────────────────────────────────────────────────────
   const disclaimerBlock = disclaimer
-    ? `<tr><td colspan="2">
-         <div style="margin-top:14px;padding-top:10px;border-top:1px solid #e8edf4">
-           <p style="margin:0;font-size:9.5px;color:#94a3b8;line-height:1.55;font-family:Arial,sans-serif">${disclaimer}</p>
-         </div>
+    ? `<tr><td colspan="2" style="padding-top:12px;border-top:1px solid #e2e8f0">
+         <p style="margin:0;font-size:10px;color:#94a3b8;line-height:1.5;font-family:Arial,sans-serif">${disclaimer}</p>
        </td></tr>`
     : '';
 
   return `
-<div style="margin-top:30px;max-width:580px">
-  <!--  gradient accent bar  -->
-  <div style="height:3px;background:linear-gradient(90deg,#1a3e72 0%,#3b6dc7 60%,rgba(59,109,199,0) 100%);margin-bottom:20px;border-radius:2px"></div>
-
-  <p style="margin:0 0 18px;font-size:16px;font-family:Georgia,'Times New Roman',serif;color:#2d2d2d;font-style:italic;font-weight:400">Sincerely,</p>
-
+<div style="margin-top:28px;padding-top:20px;border-top:2px solid #1a3e72;max-width:560px">
+  <p style="margin:0 0 16px;font-size:15px;font-family:Georgia,'Times New Roman',serif;color:#374151;font-style:italic">Sincerely,</p>
   <table border="0" cellpadding="0" cellspacing="0" style="border-collapse:collapse">
     <tr>
       ${photoCell}
       <td style="vertical-align:top;border-left:3px solid #1a3e72;padding-left:14px">
-        <p style="margin:0;font-size:16px;font-weight:700;color:#0f172a;font-family:Arial,sans-serif;letter-spacing:-.2px;line-height:1.3">${name}</p>
+        <p style="margin:0;font-size:15px;font-weight:700;color:#0f172a;font-family:Arial,sans-serif;line-height:1.3">${name}</p>
         <p style="margin:3px 0 0;font-size:12px;color:#475569;font-family:Arial,sans-serif;line-height:1.4">${title}</p>
-        <p style="margin:3px 0 0;font-size:12px;font-weight:600;color:#1a3e72;font-family:Arial,sans-serif;line-height:1.4">${company}&nbsp;&nbsp;<span style="color:#94a3b8;font-weight:400">|</span>&nbsp;&nbsp;<span style="color:#64748b;font-weight:500">${ticker}</span></p>
+        <p style="margin:3px 0 0;font-size:12px;font-weight:600;color:#1a3e72;font-family:Arial,sans-serif;line-height:1.4">${company}&nbsp;&nbsp;<span style="color:#94a3b8;font-weight:400">|</span>&nbsp;&nbsp;<span style="color:#64748b;font-weight:400">${ticker}</span></p>
         ${contactLine}
       </td>
     </tr>
-    ${actionsRow}
+    ${socialRow}
     ${disclaimerBlock}
   </table>
 </div>`;
