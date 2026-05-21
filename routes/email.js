@@ -192,17 +192,27 @@ router.post('/fetch', requireAuth, async (req, res) => {
 
     const candidates = await storage.getUserCandidates(req.session.userId);
     const candidateEmails = candidates.map(c => c.email).filter(Boolean);
+    // threadId -> candidateId map so gmail service can match by thread directly
+    const candidateThreadIds = {};
+    for (const c of candidates) {
+      if (c.gmailThreadId) candidateThreadIds[c.gmailThreadId] = c.id;
+    }
     const emailSvc = getEmailService(user);
-    const replies = await emailSvc.fetchUnreadReplies(req.session.userId, candidateEmails);
+    const replies = await emailSvc.fetchUnreadReplies(req.session.userId, candidateEmails, candidateThreadIds);
     const updatedCandidates = [];
 
     for (const reply of replies) {
-      // Extract email address from "From" header
-      const fromEmail = extractEmail(reply.from);
-      if (!fromEmail) continue;
-
-      // Find matching candidate by email
-      const candidate = candidates.find(c => c.email && c.email.toLowerCase() === fromEmail.toLowerCase());
+      // Match candidate: prefer direct thread ID match, fall back to email address
+      let candidate = null;
+      if (reply.matchedCandidateId) {
+        candidate = candidates.find(c => c.id === reply.matchedCandidateId);
+      }
+      if (!candidate) {
+        const fromEmail = extractEmail(reply.from);
+        if (fromEmail) {
+          candidate = candidates.find(c => c.email && c.email.toLowerCase() === fromEmail.toLowerCase());
+        }
+      }
       if (!candidate) continue;
 
       // Avoid adding duplicate messages — match on message ID or SMTP ID

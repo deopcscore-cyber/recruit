@@ -287,86 +287,100 @@ async function sendEmail(userId, { to, subject, body, threadId, inReplyTo, refer
   };
 }
 
-async function fetchUnreadReplies(userId, candidateEmails = []) {
+// candidateThreadIds: map of gmailThreadId -> candidateId
+async function fetchUnreadReplies(userId, candidateEmails = [], candidateThreadIds = {}) {
   const user = await storage.getUserById(userId);
   if (!user) throw new Error('User not found');
 
   const auth = await getAuthedClient(user);
   const gmail = google.gmail({ version: 'v1', auth });
 
-  // Build a targeted query — search specifically FROM candidate addresses.
-  // This avoids fetching hundreds of unrelated inbox emails and never matching.
-  // Batch into groups of 20 to keep the query under Gmail's length limit.
-  let messageIds = new Set();
+  const threadIds = Object.keys(candidateThreadIds);
+  const messageMap = new Map(); // gmailMessageId -> { msg data, matchedCandidateId }
 
+  // ── Primary: fetch every known candidate thread and look for new messages ──
+  for (const threadId of threadIds) {
+    try {
+      const threadRes = await gmail.users.threads.get({
+        userId: 'me',
+        id: threadId,
+        format: 'full'
+      });
+      const threadMsgs = (threadRes.data.messages || []);
+      for (const msgData of threadMsgs) {
+        const labelIds = msgData.labelIds || [];
+        // Skip messages we sent (SENT label) — only want inbound replies
+        if (labelIds.includes('SENT')) continue;
+        if (!messageMap.has(msgData.id)) {
+          messageMap.set(msgData.id, { msgData, matchedCandidateId: candidateThreadIds[threadId] });
+        }
+      }
+    } catch (e) {
+      console.error('Thread fetch error:', e.message);
+    }
+  }
+
+  // ── Fallback: also search by candidate email addresses for replies
+  //    sent from a different address than stored (the common edge case) ────────
   if (candidateEmails.length > 0) {
     const BATCH = 20;
     for (let i = 0; i < candidateEmails.length; i += BATCH) {
       const batch = candidateEmails.slice(i, i + BATCH);
-      const q = `(${batch.map(e => `from:${e}`).join(' OR ')}) newer_than:60d`;
+      const q = `(${batch.map(e => `from:${e}`).join(' OR ')}) newer_than:60d -from:me`;
       try {
         const res = await gmail.users.messages.list({ userId: 'me', q, maxResults: 50 });
-        for (const m of res.data.messages || []) messageIds.add(m.id);
-      } catch (e) {
-        console.error('Gmail batch query error:', e.message);
-      }
+        for (const m of res.data.messages || []) {
+          if (!messageMap.has(m.id)) messageMap.set(m.id, { msgId: m.id, matchedCandidateId: null });
+        }
+      } catch (e) { /* skip */ }
     }
-  } else {
-    // Fallback: no candidate list provided — fetch recent unread
-    const res = await gmail.users.messages.list({
-      userId: 'me', q: 'is:unread -from:me newer_than:30d', maxResults: 50
-    });
-    for (const m of res.data.messages || []) messageIds.add(m.id);
   }
 
-  const messages = [...messageIds].map(id => ({ id }));
   const results = [];
 
-  for (const msg of messages) {
+  for (const [, entry] of messageMap) {
     try {
-      const msgResponse = await gmail.users.messages.get({
-        userId: 'me',
-        id: msg.id,
-        format: 'full'
-      });
+      let msgData = entry.msgData;
 
-      const msgData = msgResponse.data;
+      // If we only have the ID (from email search fallback), fetch full message
+      if (!msgData && entry.msgId) {
+        const r = await gmail.users.messages.get({ userId: 'me', id: entry.msgId, format: 'full' });
+        msgData = r.data;
+      }
+      if (!msgData) continue;
+
       const headers = msgData.payload.headers || [];
-
       const getHeader = (name) => {
         const h = headers.find(h => h.name.toLowerCase() === name.toLowerCase());
         return h ? h.value : '';
       };
 
-      const from = getHeader('From');
-      const subject = getHeader('Subject');
-      const dateStr = getHeader('Date');
+      const from      = getHeader('From');
+      const subject   = getHeader('Subject');
+      const dateStr   = getHeader('Date');
       const messageId = getHeader('Message-ID');
-
-      const body = parseEmailBody(msgData.payload);
-
-      // Detect resume attachments (PDF / Word / RTF)
-      const resumeAttachment = await extractResumeAttachment(gmail, msg.id, msgData.payload);
+      const body      = parseEmailBody(msgData.payload);
+      const resumeAttachment = await extractResumeAttachment(gmail, msgData.id, msgData.payload);
 
       results.push({
         from,
         subject,
         body,
-        gmailMessageId: msgData.id,
-        gmailThreadId: msgData.threadId,
-        timestamp: dateStr ? new Date(dateStr).toISOString() : new Date().toISOString(),
-        messageId: messageId ? messageId.replace(/[<>]/g, '') : '',
-        resumeAttachment   // { filename, mimeType, buffer } or null
+        gmailMessageId:      msgData.id,
+        gmailThreadId:       msgData.threadId,
+        matchedCandidateId:  entry.matchedCandidateId, // direct thread match — skip email lookup
+        timestamp:    dateStr ? new Date(dateStr).toISOString() : new Date().toISOString(),
+        messageId:    messageId ? messageId.replace(/[<>]/g, '') : '',
+        resumeAttachment
       });
 
       // Mark as read
       await gmail.users.messages.modify({
-        userId: 'me',
-        id: msg.id,
+        userId: 'me', id: msgData.id,
         requestBody: { removeLabelIds: ['UNREAD'] }
-      });
+      }).catch(() => {});
     } catch (err) {
-      console.error(`Error fetching message ${msg.id}:`, err.message);
+      console.error(`Error fetching message:`, err.message);
     }
   }
 
