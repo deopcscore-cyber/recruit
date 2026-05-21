@@ -15,12 +15,21 @@ const {
   buildRawEmailParts  // we'll export this lightweight helper from gmail.js
 } = require('./gmail');
 
-// ── SMTP transporter ──────────────────────────────────────────────────────────
+// ── SMTP config — port 587 + STARTTLS (works on Railway/cloud hosts)
+//    Zoho also supports 465/SSL but many cloud providers block that port ────────
+const SMTP_CONFIG = {
+  host: 'smtp.zoho.com',
+  port: 587,
+  secure: false,              // STARTTLS on 587
+  requireTLS: true,
+  connectionTimeout: 15000,   // 15 s — fail fast instead of hanging
+  greetingTimeout:  10000,
+  socketTimeout:    20000
+};
+
 function makeTransport(zoho) {
   return nodemailer.createTransport({
-    host: 'smtp.zoho.com',
-    port: 465,
-    secure: true,           // SSL
+    ...SMTP_CONFIG,
     auth: { user: zoho.address, pass: zoho.appPassword },
     pool: false
   });
@@ -29,13 +38,14 @@ function makeTransport(zoho) {
 // ── Test credentials ──────────────────────────────────────────────────────────
 async function testConnection(address, appPassword) {
   const transport = nodemailer.createTransport({
-    host: 'smtp.zoho.com',
-    port: 465,
-    secure: true,
+    ...SMTP_CONFIG,
     auth: { user: address, pass: appPassword }
   });
-  await transport.verify();
-  transport.close();
+  try {
+    await transport.verify();
+  } finally {
+    transport.close();
+  }
 }
 
 // ── Send email ────────────────────────────────────────────────────────────────
