@@ -296,8 +296,8 @@ async function fetchUnreadReplies(userId) {
 
   const listResponse = await gmail.users.messages.list({
     userId: 'me',
-    q: 'is:unread -from:me newer_than:30d',  // catches inbox + spam, excludes own sent
-    maxResults: 50
+    q: '-from:me newer_than:14d',  // no unread filter — user may have read on phone/browser
+    maxResults: 100
   });
 
   const messages = listResponse.data.messages || [];
