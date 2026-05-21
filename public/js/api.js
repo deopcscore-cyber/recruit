@@ -91,6 +91,9 @@ const API = {
     update(data) { return API.put('/api/settings', data); },
     gmailStatus() { return API.get('/api/settings/gmail-status'); },
     disconnectGmail() { return API.delete('/api/settings/gmail'); },
-    addColleague(data) { return API.post('/api/settings/colleague', data); }
+    addColleague(data) { return API.post('/api/settings/colleague', data); },
+    connectZoho(data) { return API.post('/api/settings/zoho', data); },
+    disconnectZoho() { return API.delete('/api/settings/zoho'); },
+    zohoStatus() { return API.get('/api/settings/zoho-status'); }
   }
 };

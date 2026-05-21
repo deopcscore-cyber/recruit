@@ -520,11 +520,36 @@ function buildSignaturePlainText(user) {
   return '\n' + lines.join('\n');
 }
 
+// ── Shared helper: build plain + HTML content (used by Zoho service too) ──────
+function buildRawEmailParts({ body, signatureHtml = '', signaturePlain = '', trackingId, baseUrl }) {
+  const plainText = stripToPlainText(body) + (signaturePlain || '');
+
+  const pixel = trackingId
+    ? `<img src="${baseUrl}/track/${trackingId}" width="1" height="1" style="display:none" />`
+    : '';
+
+  let htmlBody;
+  if (body.includes('<p') || body.includes('<h') || body.includes('<div')) {
+    htmlBody = body;
+  } else if (hasMarkdown(body)) {
+    const converted = markdownToHtml(body);
+    htmlBody = `<div style="max-width:640px;margin:0 auto;font-family:Arial,Helvetica,sans-serif;font-size:15px;color:#2d2d2d;padding:24px 16px">${converted}</div>`;
+  } else {
+    htmlBody = `<div style="font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:1.6;color:#2d2d2d">${body.replace(/\n/g, '<br>')}</div>`;
+  }
+
+  const fullHtml = `<html><body>${htmlBody}${signatureHtml}${pixel}</body></html>`;
+  return { plainText, htmlBody: fullHtml };
+}
+
 module.exports = {
   getAuthUrl,
   exchangeCode,
   getAuthedClient,
   sendEmail,
   fetchUnreadReplies,
-  parseEmailBody
+  parseEmailBody,
+  buildRawEmailParts,
+  buildSignatureHtml,
+  buildSignaturePlainText
 };

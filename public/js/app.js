@@ -1017,6 +1017,42 @@ function initSettingsPage() {
     finally { btn.disabled = false; btn.textContent = 'Send Test Email'; }
   });
 
+  // ── Zoho Mail ────────────────────────────────────────────────────────────────
+  document.getElementById('connect-zoho-btn').addEventListener('click', async () => {
+    const btn = document.getElementById('connect-zoho-btn');
+    const address  = document.getElementById('zoho-email').value.trim();
+    const password = document.getElementById('zoho-password').value.trim();
+    if (!address || !password) { Toast.error('Enter your Zoho email and app password'); return; }
+    btn.disabled = true; btn.textContent = 'Connecting…';
+    try {
+      await API.settings.connectZoho({ address, appPassword: password });
+      Toast.success('Zoho Mail connected');
+      document.getElementById('zoho-password').value = '';
+      updateZohoStatus();
+    } catch (err) { Toast.error(err.message); }
+    finally { btn.disabled = false; btn.textContent = 'Connect Zoho'; }
+  });
+
+  document.getElementById('disconnect-zoho-btn').addEventListener('click', async () => {
+    const ok = await showConfirm('Disconnect Zoho Mail?', 'Disconnect Zoho');
+    if (!ok) return;
+    try {
+      await API.settings.disconnectZoho();
+      Toast.success('Zoho Mail disconnected');
+      updateZohoStatus();
+    } catch (err) { Toast.error(err.message); }
+  });
+
+  document.getElementById('test-zoho-btn').addEventListener('click', async () => {
+    const btn = document.getElementById('test-zoho-btn');
+    btn.disabled = true; btn.textContent = 'Sending…';
+    try {
+      await API.email.test();
+      Toast.success('Test email sent to your Zoho inbox');
+    } catch (err) { Toast.error(err.message); }
+    finally { btn.disabled = false; btn.textContent = 'Send Test Email'; }
+  });
+
   // ════════════════════════════════════════════════════════════════════════════
   // DELIVERABILITY DASHBOARD
   // ════════════════════════════════════════════════════════════════════════════
@@ -1402,6 +1438,7 @@ async function loadSettingsPage() {
     document.getElementById('sig-disclaimer').value      = sig.disclaimer || '';
 
     await updateGmailStatus();
+    await updateZohoStatus();
   } catch (err) {
     Toast.error('Failed to load settings');
   }
@@ -1427,6 +1464,28 @@ async function updateGmailStatus() {
       connectBtn.classList.remove('hidden');
       disconnectBtn.classList.add('hidden');
       testBtn.classList.add('hidden');
+    }
+  } catch { /* ignore */ }
+}
+
+async function updateZohoStatus() {
+  try {
+    const status = await API.settings.zohoStatus();
+    const dot  = document.getElementById('zoho-status-dot');
+    const text = document.getElementById('zoho-status-text');
+    const form = document.getElementById('zoho-connect-form');
+    const acts = document.getElementById('zoho-connected-actions');
+
+    if (status.connected) {
+      dot.style.background  = '#22c55e';
+      text.textContent = `Connected as ${status.address}`;
+      form.style.display = 'none';
+      acts.style.display = 'flex';
+    } else {
+      dot.style.background  = 'var(--text-faint)';
+      text.textContent = 'Not connected';
+      form.style.display = 'block';
+      acts.style.display = 'none';
     }
   } catch { /* ignore */ }
 }

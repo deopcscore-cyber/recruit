@@ -5,6 +5,16 @@ const fs = require('fs');
 const { v4: uuidv4 } = require('uuid');
 const { google } = require('googleapis');
 const gmailService = require('../services/gmail');
+const zohoService  = require('../services/zoho');
+
+// Pick the right email service based on which account is connected
+function getEmailService(user) {
+  if (user.zoho && user.zoho.connected) return zohoService;
+  return gmailService;
+}
+function isEmailConnected(user) {
+  return (user.gmail && user.gmail.connected) || (user.zoho && user.zoho.connected);
+}
 const storage = require('../services/storage');
 const requireAuth = require('../middleware/auth');
 const { DATA_DIR } = require('../config');
@@ -69,8 +79,8 @@ router.post('/send', requireAuth, async (req, res) => {
 
     const user = await storage.getUserById(req.session.userId);
     if (!user) return res.status(404).json({ error: 'User not found' });
-    if (!user.gmail || !user.gmail.connected) {
-      return res.status(400).json({ error: 'Gmail not connected' });
+    if (!isEmailConnected(user)) {
+      return res.status(400).json({ error: 'No email account connected. Connect Gmail or Zoho Mail in Settings.' });
     }
 
     // Fresh tracking pixel for every outbound email — resets the opened badge
@@ -114,7 +124,8 @@ router.post('/send', requireAuth, async (req, res) => {
       }
     }
 
-    const { gmailMessageId, gmailThreadId, smtpMessageId } = await gmailService.sendEmail(req.session.userId, sendParams);
+    const emailSvc = getEmailService(user);
+    const { gmailMessageId, gmailThreadId, smtpMessageId } = await emailSvc.sendEmail(req.session.userId, sendParams);
 
     // Add to thread
     const message = {
@@ -175,11 +186,12 @@ router.post('/fetch', requireAuth, async (req, res) => {
   try {
     const user = await storage.getUserById(req.session.userId);
     if (!user) return res.status(404).json({ error: 'User not found' });
-    if (!user.gmail || !user.gmail.connected) {
-      return res.status(400).json({ error: 'Gmail not connected' });
+    if (!isEmailConnected(user)) {
+      return res.status(400).json({ error: 'No email account connected' });
     }
 
-    const replies = await gmailService.fetchUnreadReplies(req.session.userId);
+    const emailSvc = getEmailService(user);
+    const replies = await emailSvc.fetchUnreadReplies(req.session.userId);
     const candidates = await storage.getUserCandidates(req.session.userId);
     const updatedCandidates = [];
 
@@ -312,16 +324,19 @@ router.post('/deliverability-test', requireAuth, async (req, res) => {
 
     const user = await storage.getUserById(req.session.userId);
     if (!user) return res.status(404).json({ error: 'User not found' });
-    if (!user.gmail || !user.gmail.connected || !user.gmail.address) {
-      return res.status(400).json({ error: 'Gmail not connected' });
+    if (!isEmailConnected(user)) {
+      return res.status(400).json({ error: 'No email account connected' });
     }
+
+    const emailSvc   = getEmailService(user);
+    const selfAddr   = (user.zoho && user.zoho.connected) ? user.zoho.address : user.gmail.address;
+    const selfLabel  = (user.zoho && user.zoho.connected) ? 'Zoho (self)' : 'Gmail (self)';
 
     const recruiterName  = user.name  || 'Recruiter';
     const recruiterTitle = (user.title || 'Senior Talent Acquisition Coordinator').trim();
     const ts = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     const testSubject = `Deliverability Check — ${ts}`;
 
-    // Realistic outreach-style body — spam filters evaluate representative content
     const testBody = `Dear Test Recipient,
 
 Your career in senior living leadership reflects something most professionals in this field never develop — a genuine combination of operational depth, strategic perspective, and direct care experience built across multiple environments over time.
@@ -333,18 +348,18 @@ We're looking for senior living professionals who understand what it takes to le
 ${recruiterName}
 ${recruiterTitle} at Welltower™ Inc.`;
 
-    // 1. Always send to own Gmail (for inbox/spam label check via API)
-    const { gmailThreadId, gmailMessageId } = await gmailService.sendEmail(
+    // 1. Always send to own account (for inbox/spam check)
+    const { gmailThreadId, gmailMessageId } = await emailSvc.sendEmail(
       req.session.userId,
-      { to: user.gmail.address, subject: testSubject, body: testBody }
+      { to: selfAddr, subject: testSubject, body: testBody }
     );
 
-    const sends = [{ to: user.gmail.address, label: 'Gmail (self)' }];
+    const sends = [{ to: selfAddr, label: selfLabel }];
 
-    // 2. Secondary inbox (Outlook / Yahoo / etc.) — manual check by user
+    // 2. Secondary inbox (cross-provider check)
     if (includeSecondary && user.secondaryTestEmail) {
       try {
-        await gmailService.sendEmail(req.session.userId, {
+        await emailSvc.sendEmail(req.session.userId, {
           to: user.secondaryTestEmail, subject: testSubject, body: testBody
         });
         sends.push({ to: user.secondaryTestEmail, label: 'Secondary inbox' });
@@ -353,14 +368,13 @@ ${recruiterTitle} at Welltower™ Inc.`;
       }
     }
 
-    // 3. Mail-Tester address (comprehensive score — user checks results on site)
+    // 3. Mail-Tester
     let mailtesterName = null;
     if (mailtesterAddress && mailtesterAddress.includes('@')) {
       try {
-        await gmailService.sendEmail(req.session.userId, {
+        await emailSvc.sendEmail(req.session.userId, {
           to: mailtesterAddress.trim(), subject: testSubject, body: testBody
         });
-        // Extract test name (e.g. "test-abc123" from "test-abc123@srv1.mail-tester.com")
         mailtesterName = mailtesterAddress.trim().split('@')[0];
         sends.push({ to: mailtesterAddress, label: 'Mail-Tester' });
       } catch (e) {
@@ -425,24 +439,28 @@ router.post('/test', requireAuth, async (req, res) => {
   try {
     const user = await storage.getUserById(req.session.userId);
     if (!user) return res.status(404).json({ error: 'User not found' });
-    if (!user.gmail || !user.gmail.connected || !user.gmail.address) {
-      return res.status(400).json({ error: 'Gmail not connected' });
+    if (!isEmailConnected(user)) {
+      return res.status(400).json({ error: 'No email account connected' });
     }
 
-    const { gmailMessageId, gmailThreadId } = await gmailService.sendEmail(req.session.userId, {
-      to: user.gmail.address,
+    const emailSvc = getEmailService(user);
+    const selfAddr = (user.zoho && user.zoho.connected) ? user.zoho.address : user.gmail.address;
+    const provider = (user.zoho && user.zoho.connected) ? 'Zoho Mail' : 'Gmail';
+
+    await emailSvc.sendEmail(req.session.userId, {
+      to: selfAddr,
       subject: 'Welltower Recruiter — Connection Test',
-      body: `<p>Hello ${user.name},</p><p>Your Gmail connection is working correctly. You can now send emails through the Welltower Recruiter platform.</p><p>— Welltower Recruiter</p>`
+      body: `<p>Hello ${user.name},</p><p>Your ${provider} connection is working correctly. You can now send emails through the Welltower Recruiter platform.</p><p>— Welltower Recruiter</p>`
     });
 
-    return res.json({ success: true, gmailMessageId, gmailThreadId });
+    return res.json({ success: true });
   } catch (err) {
     console.error('Test email error:', err);
     return res.status(500).json({ error: 'Test email failed: ' + err.message });
   }
 });
 
-// POST /api/email/check-prior-contact — scan Gmail sent folder for prior sends to given addresses
+// POST /api/email/check-prior-contact — scan sent folder for prior sends to given addresses
 router.post('/check-prior-contact', requireAuth, async (req, res) => {
   try {
     const { emails } = req.body;
@@ -451,15 +469,28 @@ router.post('/check-prior-contact', requireAuth, async (req, res) => {
     }
 
     const user = await storage.getUserById(req.session.userId);
-    if (!user || !user.gmail || !user.gmail.connected) {
-      return res.json({ contacted: [] });
-    }
+    if (!user) return res.json({ contacted: [] });
 
-    const auth   = await gmailService.getAuthedClient(user);
-    const gmail  = google.gmail({ version: 'v1', auth });
     const contacted = new Set();
 
-    // Batch query: 15 addresses per query to stay within Gmail query limits
+    // ── Zoho path ────────────────────────────────────────────────────────────
+    if (user.zoho && user.zoho.connected) {
+      try {
+        const allSent = await zohoService.getSentAddresses(req.session.userId);
+        const emailSet = new Set(emails.map(e => e.toLowerCase().trim()));
+        allSent.forEach(addr => { if (emailSet.has(addr)) contacted.add(addr); });
+      } catch (e) {
+        console.error('Zoho prior contact check error:', e.message);
+      }
+      return res.json({ contacted: [...contacted] });
+    }
+
+    // ── Gmail path ───────────────────────────────────────────────────────────
+    if (!user.gmail || !user.gmail.connected) return res.json({ contacted: [] });
+
+    const auth  = await gmailService.getAuthedClient(user);
+    const gmail = google.gmail({ version: 'v1', auth });
+
     const BATCH = 15;
     for (let i = 0; i < emails.length; i += BATCH) {
       const batch = emails.slice(i, i + BATCH).map(e => e.toLowerCase().trim()).filter(Boolean);
@@ -467,39 +498,29 @@ router.post('/check-prior-contact', requireAuth, async (req, res) => {
 
       const query = `in:sent (${batch.map(e => `to:${e}`).join(' OR ')})`;
       try {
-        const listRes = await gmail.users.messages.list({
-          userId: 'me',
-          q: query,
-          maxResults: 20
-        });
-
+        const listRes = await gmail.users.messages.list({ userId: 'me', q: query, maxResults: 20 });
         const messages = listRes.data.messages || [];
         if (messages.length === 0) continue;
 
-        // Fetch To header for each matched message to identify which address was hit
         for (const msg of messages.slice(0, 8)) {
           try {
             const msgRes = await gmail.users.messages.get({
-              userId: 'me',
-              id: msg.id,
-              format: 'metadata',
-              metadataHeaders: ['To']
+              userId: 'me', id: msg.id, format: 'metadata', metadataHeaders: ['To']
             });
-            const toHeader = (msgRes.data.payload?.headers || [])
-              .find(h => h.name.toLowerCase() === 'to');
+            const toHeader = (msgRes.data.payload?.headers || []).find(h => h.name.toLowerCase() === 'to');
             if (toHeader) {
               const found = toHeader.value.match(/[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/g) || [];
               found.forEach(e => contacted.add(e.toLowerCase()));
             }
-          } catch { /* skip individual message errors */ }
+          } catch { /* skip */ }
         }
-      } catch { /* skip batch errors */ }
+      } catch { /* skip */ }
     }
 
     return res.json({ contacted: [...contacted] });
   } catch (err) {
     console.error('check-prior-contact error:', err);
-    return res.json({ contacted: [] }); // non-fatal — don't block the modal
+    return res.json({ contacted: [] });
   }
 });
 

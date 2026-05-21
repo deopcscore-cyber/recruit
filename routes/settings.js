@@ -4,6 +4,7 @@ const bcrypt = require('bcrypt');
 const { v4: uuidv4 } = require('uuid');
 const storage = require('../services/storage');
 const requireAuth = require('../middleware/auth');
+const zohoService = require('../services/zoho');
 
 // All routes require auth
 router.use(requireAuth);
@@ -154,6 +155,57 @@ router.delete('/gmail', async (req, res) => {
   } catch (err) {
     console.error('Disconnect Gmail error:', err);
     return res.status(500).json({ error: 'Failed to disconnect Gmail' });
+  }
+});
+
+// ── Zoho Mail ─────────────────────────────────────────────────────────────────
+
+// GET /api/settings/zoho-status
+router.get('/zoho-status', async (req, res) => {
+  try {
+    const user = await storage.getUserById(req.session.userId);
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    const zoho = user.zoho || { connected: false, address: '' };
+    return res.json({ connected: !!zoho.connected, address: zoho.address || '' });
+  } catch (err) {
+    return res.status(500).json({ error: 'Failed to get Zoho status' });
+  }
+});
+
+// POST /api/settings/zoho — connect with SMTP credentials
+router.post('/zoho', async (req, res) => {
+  try {
+    const { address, appPassword } = req.body;
+    if (!address || !appPassword) {
+      return res.status(400).json({ error: 'Email address and app password are required' });
+    }
+
+    // Verify credentials before saving
+    await zohoService.testConnection(address.trim(), appPassword.trim());
+
+    const user = await storage.getUserById(req.session.userId);
+    if (!user) return res.status(404).json({ error: 'User not found' });
+
+    user.zoho = { connected: true, address: address.trim().toLowerCase(), appPassword: appPassword.trim() };
+    await storage.saveUser(user);
+
+    return res.json({ success: true, address: user.zoho.address });
+  } catch (err) {
+    console.error('Zoho connect error:', err);
+    return res.status(400).json({ error: 'Could not connect — check your email address and app password. ' + err.message });
+  }
+});
+
+// DELETE /api/settings/zoho — disconnect
+router.delete('/zoho', async (req, res) => {
+  try {
+    const user = await storage.getUserById(req.session.userId);
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    user.zoho = { connected: false, address: '', appPassword: '' };
+    await storage.saveUser(user);
+    return res.json({ success: true });
+  } catch (err) {
+    return res.status(500).json({ error: 'Failed to disconnect Zoho' });
   }
 });
 

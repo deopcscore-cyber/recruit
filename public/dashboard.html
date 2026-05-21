@@ -177,21 +177,52 @@
               </div>
             </div>
 
-            <!-- Gmail -->
+            <!-- Email Integration -->
             <div class="settings-card">
-              <div class="settings-card-header"><h3>Gmail Integration</h3></div>
-              <div class="settings-card-body">
-                <div id="gmail-status-indicator" class="gmail-status disconnected" style="margin-bottom:16px">
-                  <span class="status-dot"></span> Not connected
+              <div class="settings-card-header"><h3>Email Integration</h3></div>
+              <div class="settings-card-body" style="display:flex;flex-direction:column;gap:18px">
+
+                <!-- Gmail -->
+                <div>
+                  <div style="font-size:0.78rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text-mid);margin-bottom:10px">Gmail</div>
+                  <div id="gmail-status-indicator" class="gmail-status disconnected" style="margin-bottom:10px">
+                    <span class="status-dot"></span> Not connected
+                  </div>
+                  <div style="display:flex;gap:8px;flex-wrap:wrap">
+                    <button class="btn btn-primary btn-sm" id="connect-gmail-btn">Connect Gmail</button>
+                    <button class="btn btn-secondary btn-sm hidden" id="disconnect-gmail-btn">Disconnect</button>
+                    <button class="btn btn-secondary btn-sm hidden" id="test-email-btn">Send Test Email</button>
+                  </div>
+                  <p style="font-size:0.78rem;color:var(--text-muted);margin:8px 0 0;line-height:1.5">OAuth2 — no password stored.</p>
                 </div>
-                <div style="display:flex;gap:8px;flex-wrap:wrap">
-                  <button class="btn btn-primary btn-sm" id="connect-gmail-btn">Connect Gmail</button>
-                  <button class="btn btn-secondary btn-sm hidden" id="disconnect-gmail-btn">Disconnect</button>
-                  <button class="btn btn-secondary btn-sm hidden" id="test-email-btn">Send Test Email</button>
+
+                <hr style="border:none;border-top:1px solid var(--border);margin:0">
+
+                <!-- Zoho Mail -->
+                <div>
+                  <div style="font-size:0.78rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text-mid);margin-bottom:10px">Zoho Mail</div>
+                  <div id="zoho-status-indicator" style="display:flex;align-items:center;gap:6px;font-size:0.82rem;margin-bottom:10px">
+                    <span id="zoho-status-dot" style="width:8px;height:8px;border-radius:50%;background:var(--text-faint);display:inline-block"></span>
+                    <span id="zoho-status-text">Not connected</span>
+                  </div>
+                  <div id="zoho-connect-form">
+                    <div class="form-group" style="margin-bottom:8px">
+                      <label>Zoho Email Address</label>
+                      <input type="email" id="zoho-email" placeholder="you@zoho.com" />
+                    </div>
+                    <div class="form-group" style="margin-bottom:10px">
+                      <label>App Password <span class="text-muted text-xs">— <a href="https://accounts.zoho.com/home#security/app-specific-password" target="_blank" style="color:var(--blue)">generate one here</a></span></label>
+                      <input type="password" id="zoho-password" placeholder="16-character app password" />
+                    </div>
+                    <button class="btn btn-primary btn-sm" id="connect-zoho-btn">Connect Zoho</button>
+                  </div>
+                  <div id="zoho-connected-actions" style="display:none;gap:8px;flex-wrap:wrap">
+                    <button class="btn btn-secondary btn-sm" id="disconnect-zoho-btn">Disconnect</button>
+                    <button class="btn btn-secondary btn-sm" id="test-zoho-btn">Send Test Email</button>
+                  </div>
+                  <p style="font-size:0.78rem;color:var(--text-muted);margin:8px 0 0;line-height:1.5">Uses SMTP + IMAP with an app-specific password.</p>
                 </div>
-                <p style="font-size:0.8rem;color:var(--text-muted);margin:12px 0 0;line-height:1.6">
-                  Connect your Gmail via OAuth2 to send and receive emails directly from this platform.
-                </p>
+
               </div>
             </div>
 

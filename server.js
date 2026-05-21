@@ -93,8 +93,9 @@ const emailRoutes = require('./routes/email');
 app.get('/auth/gmail/callback', emailRoutes.gmailCallback);
 
 // ─── SPA catch-all ───────────────────────────────────────────────────────────
-app.get('/dashboard', (req, res) => res.sendFile(path.join(__dirname, 'public', 'dashboard.html')));
-app.get('/',          (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
+const NO_CACHE = { 'Cache-Control': 'no-cache, no-store, must-revalidate', Pragma: 'no-cache', Expires: '0' };
+app.get('/dashboard', (req, res) => { res.set(NO_CACHE); res.sendFile(path.join(__dirname, 'public', 'dashboard.html')); });
+app.get('/',          (req, res) => { res.set(NO_CACHE); res.sendFile(path.join(__dirname, 'public', 'index.html')); });
 
 // ─── Health check (Railway uses this) ────────────────────────────────────────
 app.get('/health', (req, res) => {
