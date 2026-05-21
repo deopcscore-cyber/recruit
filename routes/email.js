@@ -310,7 +310,9 @@ router.post('/fetch', requireAuth, async (req, res) => {
     return res.json({
       fetched: replies.length,
       matched: updatedCandidates.length,
-      candidates: updatedCandidates
+      candidates: updatedCandidates,
+      // debug info — shows raw fetched emails so we can diagnose matching failures
+      debug: replies.map(r => ({ from: r.from, subject: r.subject, ts: r.timestamp }))
     });
   } catch (err) {
     console.error('Fetch email error:', err);

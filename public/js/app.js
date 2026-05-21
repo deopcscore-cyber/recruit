@@ -353,8 +353,16 @@ async function handleFetchEmails() {
     if (result.matched > 0) {
       Toast.success(`${result.matched} new repl${result.matched === 1 ? 'y' : 'ies'} received`);
       await loadCandidates();
+    } else if (result.fetched > 0) {
+      // Emails were fetched from Gmail but none matched a candidate —
+      // log what was found so we can diagnose the mismatch
+      console.warn('[Fetch] Fetched', result.fetched, 'emails but 0 matched candidates.');
+      if (result.debug && result.debug.length) {
+        console.table(result.debug.map(d => ({ from: d.from, subject: d.subject })));
+      }
+      Toast.show(`Checked ${result.fetched} email${result.fetched === 1 ? '' : 's'} — no candidate match found. Check console for details.`);
     } else {
-      Toast.show('No new replies found');
+      Toast.show('No new emails found in the last 14 days');
     }
   } catch (err) {
     Toast.error('Failed to fetch emails: ' + err.message);
