@@ -190,9 +190,10 @@ router.post('/fetch', requireAuth, async (req, res) => {
       return res.status(400).json({ error: 'No email account connected' });
     }
 
-    const emailSvc = getEmailService(user);
-    const replies = await emailSvc.fetchUnreadReplies(req.session.userId);
     const candidates = await storage.getUserCandidates(req.session.userId);
+    const candidateEmails = candidates.map(c => c.email).filter(Boolean);
+    const emailSvc = getEmailService(user);
+    const replies = await emailSvc.fetchUnreadReplies(req.session.userId, candidateEmails);
     const updatedCandidates = [];
 
     for (const reply of replies) {

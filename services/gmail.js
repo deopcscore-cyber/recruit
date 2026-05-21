@@ -287,20 +287,39 @@ async function sendEmail(userId, { to, subject, body, threadId, inReplyTo, refer
   };
 }
 
-async function fetchUnreadReplies(userId) {
+async function fetchUnreadReplies(userId, candidateEmails = []) {
   const user = await storage.getUserById(userId);
   if (!user) throw new Error('User not found');
 
   const auth = await getAuthedClient(user);
   const gmail = google.gmail({ version: 'v1', auth });
 
-  const listResponse = await gmail.users.messages.list({
-    userId: 'me',
-    q: '-from:me newer_than:14d',  // no unread filter — user may have read on phone/browser
-    maxResults: 100
-  });
+  // Build a targeted query — search specifically FROM candidate addresses.
+  // This avoids fetching hundreds of unrelated inbox emails and never matching.
+  // Batch into groups of 20 to keep the query under Gmail's length limit.
+  let messageIds = new Set();
 
-  const messages = listResponse.data.messages || [];
+  if (candidateEmails.length > 0) {
+    const BATCH = 20;
+    for (let i = 0; i < candidateEmails.length; i += BATCH) {
+      const batch = candidateEmails.slice(i, i + BATCH);
+      const q = `(${batch.map(e => `from:${e}`).join(' OR ')}) newer_than:60d`;
+      try {
+        const res = await gmail.users.messages.list({ userId: 'me', q, maxResults: 50 });
+        for (const m of res.data.messages || []) messageIds.add(m.id);
+      } catch (e) {
+        console.error('Gmail batch query error:', e.message);
+      }
+    }
+  } else {
+    // Fallback: no candidate list provided — fetch recent unread
+    const res = await gmail.users.messages.list({
+      userId: 'me', q: 'is:unread -from:me newer_than:30d', maxResults: 50
+    });
+    for (const m of res.data.messages || []) messageIds.add(m.id);
+  }
+
+  const messages = [...messageIds].map(id => ({ id }));
   const results = [];
 
   for (const msg of messages) {
