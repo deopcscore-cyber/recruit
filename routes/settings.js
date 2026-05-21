@@ -195,6 +195,20 @@ router.post('/zoho', async (req, res) => {
   }
 });
 
+// GET /api/settings/zoho-diagnose — test SMTP and return exact error
+router.get('/zoho-diagnose', async (req, res) => {
+  try {
+    const user = await storage.getUserById(req.session.userId);
+    if (!user || !user.zoho || !user.zoho.connected) {
+      return res.json({ ok: false, error: 'Zoho not connected' });
+    }
+    await zohoService.testConnection(user.zoho.address, user.zoho.appPassword);
+    return res.json({ ok: true, message: 'SMTP connection successful' });
+  } catch (err) {
+    return res.json({ ok: false, error: err.message, code: err.code, responseCode: err.responseCode });
+  }
+});
+
 // DELETE /api/settings/zoho — disconnect
 router.delete('/zoho', async (req, res) => {
   try {

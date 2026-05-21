@@ -1045,8 +1045,14 @@ function initSettingsPage() {
 
   document.getElementById('test-zoho-btn').addEventListener('click', async () => {
     const btn = document.getElementById('test-zoho-btn');
-    btn.disabled = true; btn.textContent = 'Sending…';
+    btn.disabled = true; btn.textContent = 'Testing…';
     try {
+      // First diagnose the SMTP connection so we get a clear error if it fails
+      const diag = await API.settings.zohoDiagnose();
+      if (!diag.ok) {
+        Toast.error('Zoho SMTP error: ' + diag.error + (diag.code ? ` [${diag.code}]` : ''));
+        return;
+      }
       await API.email.test();
       Toast.success('Test email sent to your Zoho inbox');
     } catch (err) { Toast.error(err.message); }

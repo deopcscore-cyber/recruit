@@ -94,6 +94,7 @@ const API = {
     addColleague(data) { return API.post('/api/settings/colleague', data); },
     connectZoho(data) { return API.post('/api/settings/zoho', data); },
     disconnectZoho() { return API.delete('/api/settings/zoho'); },
-    zohoStatus() { return API.get('/api/settings/zoho-status'); }
+    zohoStatus() { return API.get('/api/settings/zoho-status'); },
+    zohoDiagnose() { return API.get('/api/settings/zoho-diagnose'); }
   }
 };
