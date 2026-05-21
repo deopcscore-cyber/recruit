@@ -1174,6 +1174,7 @@ function renderThreadTab(body) {
             <button class="btn btn-ghost btn-sm" id="th-gen-reply">✦ Draft Reply</button>
             <button class="btn btn-ghost btn-sm" id="th-gen-outreach">✦ Outreach</button>
             <button class="btn btn-ghost btn-sm" id="th-gen-jd">✦ Role JD</button>
+            <button class="btn btn-ghost btn-sm" id="th-set-followup" title="Set follow-up reminder">⏰ Follow Up</button>
           </div>
         </div>
         <div class="form-group" style="margin-bottom:8px">
@@ -1221,6 +1222,50 @@ function renderThreadTab(body) {
   body.querySelector('#th-gen-reply').addEventListener('click', () => aiGenerate('reply'));
   body.querySelector('#th-gen-outreach').addEventListener('click', () => aiGenerate('outreach'));
   body.querySelector('#th-gen-jd').addEventListener('click', () => aiGenerate('jd'));
+
+  // Follow Up — inline date picker injected below the button
+  body.querySelector('#th-set-followup').addEventListener('click', function() {
+    const existing = body.querySelector('#th-followup-picker');
+    if (existing) { existing.remove(); return; }
+
+    const today = new Date();
+    const defaultDate = new Date(today);
+    defaultDate.setDate(today.getDate() + 3);
+    const iso = defaultDate.toISOString().slice(0, 10);
+
+    const picker = document.createElement('div');
+    picker.id = 'th-followup-picker';
+    picker.style.cssText = 'display:flex;align-items:center;gap:8px;padding:10px 16px;background:var(--surface2);border-top:1px solid var(--border);flex-wrap:wrap';
+    picker.innerHTML = `
+      <label style="font-size:0.8rem;color:var(--text-mid);white-space:nowrap">Remind me on:</label>
+      <input type="date" id="th-followup-date" value="${iso}" style="font-size:0.82rem;padding:4px 8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text)" />
+      <button class="btn btn-primary btn-xs" id="th-followup-save">Set Reminder</button>
+      <button class="btn btn-secondary btn-xs" id="th-followup-clear">Clear</button>
+    `;
+    // Insert after compose-header
+    const header = body.querySelector('.compose-header');
+    header.insertAdjacentElement('afterend', picker);
+
+    picker.querySelector('#th-followup-save').addEventListener('click', async () => {
+      const dateVal = picker.querySelector('#th-followup-date').value;
+      if (!dateVal) return;
+      try {
+        await API.candidates.update(c.id, { followUpDate: new Date(dateVal).toISOString() });
+        c.followUpDate = new Date(dateVal).toISOString();
+        Toast.success('Follow-up reminder set for ' + new Date(dateVal).toLocaleDateString());
+        picker.remove();
+      } catch (err) { Toast.error(err.message); }
+    });
+
+    picker.querySelector('#th-followup-clear').addEventListener('click', async () => {
+      try {
+        await API.candidates.update(c.id, { followUpDate: null });
+        c.followUpDate = null;
+        Toast.show('Follow-up reminder cleared');
+        picker.remove();
+      } catch (err) { Toast.error(err.message); }
+    });
+  });
 
   // Send
   body.querySelector('#th-send').addEventListener('click', async () => {

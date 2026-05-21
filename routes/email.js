@@ -204,9 +204,10 @@ router.post('/fetch', requireAuth, async (req, res) => {
       const candidate = candidates.find(c => c.email && c.email.toLowerCase() === fromEmail.toLowerCase());
       if (!candidate) continue;
 
-      // Avoid adding duplicate messages
-      const alreadyExists = (candidate.thread || []).some(
-        t => t.gmailMessageId === reply.gmailMessageId
+      // Avoid adding duplicate messages — match on message ID or SMTP ID
+      const alreadyExists = (candidate.thread || []).some(t =>
+        (reply.gmailMessageId && t.gmailMessageId === reply.gmailMessageId) ||
+        (reply.messageId && t.smtpMessageId && t.smtpMessageId === reply.messageId)
       );
       if (alreadyExists) continue;
 
