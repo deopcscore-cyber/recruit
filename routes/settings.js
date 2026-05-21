@@ -180,19 +180,18 @@ router.post('/zoho', async (req, res) => {
       return res.status(400).json({ error: 'Email address and app password are required' });
     }
 
-    // Verify credentials before saving
-    await zohoService.testConnection(address.trim(), appPassword.trim());
-
     const user = await storage.getUserById(req.session.userId);
     if (!user) return res.status(404).json({ error: 'User not found' });
 
+    // Save credentials immediately — no live SMTP test here.
+    // Use "Send Test Email" to confirm delivery works.
     user.zoho = { connected: true, address: address.trim().toLowerCase(), appPassword: appPassword.trim() };
     await storage.saveUser(user);
 
     return res.json({ success: true, address: user.zoho.address });
   } catch (err) {
     console.error('Zoho connect error:', err);
-    return res.status(400).json({ error: 'Could not connect — check your email address and app password. ' + err.message });
+    return res.status(500).json({ error: 'Failed to save Zoho settings: ' + err.message });
   }
 });
 

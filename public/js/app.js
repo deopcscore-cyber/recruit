@@ -1023,10 +1023,10 @@ function initSettingsPage() {
     const address  = document.getElementById('zoho-email').value.trim();
     const password = document.getElementById('zoho-password').value.trim();
     if (!address || !password) { Toast.error('Enter your Zoho email and app password'); return; }
-    btn.disabled = true; btn.textContent = 'Connecting…';
+    btn.disabled = true; btn.textContent = 'Saving…';
     try {
       await API.settings.connectZoho({ address, appPassword: password });
-      Toast.success('Zoho Mail connected');
+      Toast.success('Zoho Mail saved — click Send Test Email to confirm it works');
       document.getElementById('zoho-password').value = '';
       updateZohoStatus();
     } catch (err) { Toast.error(err.message); }
