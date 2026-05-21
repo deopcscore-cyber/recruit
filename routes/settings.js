@@ -158,7 +158,7 @@ router.delete('/gmail', async (req, res) => {
   }
 });
 
-// ── Zoho Mail ─────────────────────────────────────────────────────────────────
+// ── Zoho Mail (OAuth2) ────────────────────────────────────────────────────────
 
 // GET /api/settings/zoho-status
 router.get('/zoho-status', async (req, res) => {
@@ -172,40 +172,13 @@ router.get('/zoho-status', async (req, res) => {
   }
 });
 
-// POST /api/settings/zoho — connect with SMTP credentials
-router.post('/zoho', async (req, res) => {
+// GET /api/settings/zoho-connect — start OAuth2 flow
+router.get('/zoho-connect', async (req, res) => {
   try {
-    const { address, appPassword } = req.body;
-    if (!address || !appPassword) {
-      return res.status(400).json({ error: 'Email address and app password are required' });
-    }
-
-    const user = await storage.getUserById(req.session.userId);
-    if (!user) return res.status(404).json({ error: 'User not found' });
-
-    // Save credentials immediately — no live SMTP test here.
-    // Use "Send Test Email" to confirm delivery works.
-    user.zoho = { connected: true, address: address.trim().toLowerCase(), appPassword: appPassword.trim() };
-    await storage.saveUser(user);
-
-    return res.json({ success: true, address: user.zoho.address });
+    const url = zohoService.getAuthUrl(req.session.userId);
+    return res.json({ url });
   } catch (err) {
-    console.error('Zoho connect error:', err);
-    return res.status(500).json({ error: 'Failed to save Zoho settings: ' + err.message });
-  }
-});
-
-// GET /api/settings/zoho-diagnose — test SMTP and return exact error
-router.get('/zoho-diagnose', async (req, res) => {
-  try {
-    const user = await storage.getUserById(req.session.userId);
-    if (!user || !user.zoho || !user.zoho.connected) {
-      return res.json({ ok: false, error: 'Zoho not connected' });
-    }
-    await zohoService.testConnection(user.zoho.address, user.zoho.appPassword);
-    return res.json({ ok: true, message: 'SMTP connection successful' });
-  } catch (err) {
-    return res.json({ ok: false, error: err.message, code: err.code, responseCode: err.responseCode });
+    return res.status(500).json({ error: err.message });
   }
 });
 
@@ -214,7 +187,7 @@ router.delete('/zoho', async (req, res) => {
   try {
     const user = await storage.getUserById(req.session.userId);
     if (!user) return res.status(404).json({ error: 'User not found' });
-    user.zoho = { connected: false, address: '', appPassword: '' };
+    user.zoho = { connected: false, address: '', accessToken: '', refreshToken: '' };
     await storage.saveUser(user);
     return res.json({ success: true });
   } catch (err) {

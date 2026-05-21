@@ -205,22 +205,14 @@
                     <span id="zoho-status-dot" style="width:8px;height:8px;border-radius:50%;background:var(--text-faint);display:inline-block"></span>
                     <span id="zoho-status-text">Not connected</span>
                   </div>
-                  <div id="zoho-connect-form">
-                    <div class="form-group" style="margin-bottom:8px">
-                      <label>Zoho Email Address</label>
-                      <input type="email" id="zoho-email" placeholder="you@zoho.com" />
-                    </div>
-                    <div class="form-group" style="margin-bottom:10px">
-                      <label>App Password <span class="text-muted text-xs">— <a href="https://accounts.zoho.com/home#security/app-specific-password" target="_blank" style="color:var(--blue)">generate one here</a></span></label>
-                      <input type="password" id="zoho-password" placeholder="16-character app password" />
-                    </div>
+                  <div id="zoho-connect-form" style="display:flex;gap:8px;flex-wrap:wrap">
                     <button class="btn btn-primary btn-sm" id="connect-zoho-btn">Connect Zoho</button>
                   </div>
                   <div id="zoho-connected-actions" style="display:none;gap:8px;flex-wrap:wrap">
                     <button class="btn btn-secondary btn-sm" id="disconnect-zoho-btn">Disconnect</button>
                     <button class="btn btn-secondary btn-sm" id="test-zoho-btn">Send Test Email</button>
                   </div>
-                  <p style="font-size:0.78rem;color:var(--text-muted);margin:8px 0 0;line-height:1.5">Uses SMTP + IMAP with an app-specific password.</p>
+                  <p style="font-size:0.78rem;color:var(--text-muted);margin:8px 0 0;line-height:1.5">OAuth2 — authorise via Zoho, no password stored.</p>
                 </div>
 
               </div>

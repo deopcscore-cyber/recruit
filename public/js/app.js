@@ -29,6 +29,13 @@ document.addEventListener('DOMContentLoaded', async () => {
   } else if (params.get('gmail') === 'error') {
     Toast.error('Gmail connection failed: ' + (params.get('reason') || 'Unknown error'));
     window.history.replaceState({}, '', '/dashboard');
+  } else if (params.get('zoho') === 'connected') {
+    Toast.success('Zoho Mail connected successfully!');
+    window.history.replaceState({}, '', '/dashboard');
+    currentUser = await API.auth.me();
+  } else if (params.get('zoho') === 'error') {
+    Toast.error('Zoho connection failed: ' + (params.get('reason') || 'Unknown error'));
+    window.history.replaceState({}, '', '/dashboard');
   }
 
   document.getElementById('sidebar-user-name').textContent = currentUser.name;
@@ -1020,17 +1027,14 @@ function initSettingsPage() {
   // ── Zoho Mail ────────────────────────────────────────────────────────────────
   document.getElementById('connect-zoho-btn').addEventListener('click', async () => {
     const btn = document.getElementById('connect-zoho-btn');
-    const address  = document.getElementById('zoho-email').value.trim();
-    const password = document.getElementById('zoho-password').value.trim();
-    if (!address || !password) { Toast.error('Enter your Zoho email and app password'); return; }
-    btn.disabled = true; btn.textContent = 'Saving…';
+    btn.disabled = true; btn.textContent = 'Redirecting…';
     try {
-      await API.settings.connectZoho({ address, appPassword: password });
-      Toast.success('Zoho Mail saved — click Send Test Email to confirm it works');
-      document.getElementById('zoho-password').value = '';
-      updateZohoStatus();
-    } catch (err) { Toast.error(err.message); }
-    finally { btn.disabled = false; btn.textContent = 'Connect Zoho'; }
+      const { url } = await API.settings.getZohoConnectUrl();
+      window.location.href = url;
+    } catch (err) {
+      Toast.error(err.message);
+      btn.disabled = false; btn.textContent = 'Connect Zoho';
+    }
   });
 
   document.getElementById('disconnect-zoho-btn').addEventListener('click', async () => {
@@ -1045,14 +1049,8 @@ function initSettingsPage() {
 
   document.getElementById('test-zoho-btn').addEventListener('click', async () => {
     const btn = document.getElementById('test-zoho-btn');
-    btn.disabled = true; btn.textContent = 'Testing…';
+    btn.disabled = true; btn.textContent = 'Sending…';
     try {
-      // First diagnose the SMTP connection so we get a clear error if it fails
-      const diag = await API.settings.zohoDiagnose();
-      if (!diag.ok) {
-        Toast.error('Zoho SMTP error: ' + diag.error + (diag.code ? ` [${diag.code}]` : ''));
-        return;
-      }
       await API.email.test();
       Toast.success('Test email sent to your Zoho inbox');
     } catch (err) { Toast.error(err.message); }

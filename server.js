@@ -88,9 +88,25 @@ app.get('/track/:trackingId', async (req, res) => {
   res.send(BLANK_GIF);
 });
 
-// ─── Gmail OAuth callback (root-level, not under /api/email) ─────────────────
+// ─── Gmail OAuth callback ─────────────────────────────────────────────────────
 const emailRoutes = require('./routes/email');
 app.get('/auth/gmail/callback', emailRoutes.gmailCallback);
+
+// ─── Zoho OAuth callback ──────────────────────────────────────────────────────
+const zohoService = require('./services/zoho');
+app.get('/auth/zoho/callback', async (req, res) => {
+  const { code, state, error } = req.query;
+  if (error || !code) return res.redirect('/dashboard?zoho=error&reason=' + encodeURIComponent(error || 'no_code'));
+  const userId = state || (req.session && req.session.userId);
+  if (!userId) return res.redirect('/dashboard?zoho=error&reason=no_user');
+  try {
+    await zohoService.exchangeCode(userId, code);
+    return res.redirect('/dashboard?zoho=connected');
+  } catch (err) {
+    console.error('Zoho callback error:', err);
+    return res.redirect('/dashboard?zoho=error&reason=' + encodeURIComponent(err.message));
+  }
+});
 
 // ─── SPA catch-all ───────────────────────────────────────────────────────────
 const NO_CACHE = { 'Cache-Control': 'no-cache, no-store, must-revalidate', Pragma: 'no-cache', Expires: '0' };

@@ -1,226 +1,223 @@
 /* ============================================================
-   Welltower Recruiter — Zoho Mail Service (SMTP + IMAP)
+   Welltower Recruiter — Zoho Mail Service (OAuth2 REST API)
+   SMTP is blocked on Railway — Zoho's HTTPS API is used instead.
    ============================================================ */
 
-const nodemailer  = require('nodemailer');
-const { ImapFlow } = require('imapflow');
+const axios   = require('axios');
 const { v4: uuidv4 } = require('uuid');
 const storage = require('./storage');
+const { BASE_URL, ZOHO_CLIENT_ID, ZOHO_CLIENT_SECRET } = require('../config');
+const { buildRawEmailParts, buildSignatureHtml, buildSignaturePlainText } = require('./gmail');
 
-// Re-use the shared signature + email body builders from gmail.js
-// (they are provider-agnostic, just build HTML/plain content)
-const {
-  buildSignatureHtml,
-  buildSignaturePlainText,
-  buildRawEmailParts  // we'll export this lightweight helper from gmail.js
-} = require('./gmail');
+const TOKEN_URL = 'https://accounts.zoho.com/oauth/v2/token';
+const API_BASE  = 'https://mail.zoho.com/api';
 
-// ── SMTP config — port 587 + STARTTLS (works on Railway/cloud hosts)
-//    Zoho also supports 465/SSL but many cloud providers block that port ────────
-const SMTP_CONFIG = {
-  host: 'smtp.zoho.com',
-  port: 587,
-  secure: false,              // STARTTLS on 587
-  requireTLS: true,
-  connectionTimeout: 15000,   // 15 s — fail fast instead of hanging
-  greetingTimeout:  10000,
-  socketTimeout:    20000
-};
-
-function makeTransport(zoho) {
-  return nodemailer.createTransport({
-    ...SMTP_CONFIG,
-    auth: { user: zoho.address, pass: zoho.appPassword },
-    pool: false
+// ── OAuth2 helpers ────────────────────────────────────────────────────────────
+function getAuthUrl(userId) {
+  if (!ZOHO_CLIENT_ID) throw new Error('ZOHO_CLIENT_ID not configured');
+  const params = new URLSearchParams({
+    scope:         'ZohoMail.messages.CREATE,ZohoMail.accounts.READ,ZohoMail.messages.READ,ZohoMail.messages.UPDATE,ZohoMail.folders.READ',
+    client_id:     ZOHO_CLIENT_ID,
+    response_type: 'code',
+    access_type:   'offline',
+    redirect_uri:  `${BASE_URL}/auth/zoho/callback`,
+    state:         userId
   });
+  return `https://accounts.zoho.com/oauth/v2/auth?${params}`;
 }
 
-// ── Test credentials ──────────────────────────────────────────────────────────
-async function testConnection(address, appPassword) {
-  const transport = nodemailer.createTransport({
-    ...SMTP_CONFIG,
-    auth: { user: address, pass: appPassword }
+async function exchangeCode(userId, code) {
+  const params = new URLSearchParams({
+    grant_type:    'authorization_code',
+    client_id:     ZOHO_CLIENT_ID,
+    client_secret: ZOHO_CLIENT_SECRET,
+    redirect_uri:  `${BASE_URL}/auth/zoho/callback`,
+    code
   });
-  try {
-    await transport.verify();
-  } finally {
-    transport.close();
-  }
+  const { data } = await axios.post(TOKEN_URL, params.toString(), {
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+  });
+  if (!data.access_token) throw new Error('No access token returned from Zoho');
+
+  const user = await storage.getUserById(userId);
+  if (!user) throw new Error('User not found');
+
+  // Fetch the account ID and address
+  const { accountId, address } = await fetchAccountInfo(data.access_token);
+
+  user.zoho = {
+    connected:    true,
+    address:      address.toLowerCase(),
+    accountId,
+    accessToken:  data.access_token,
+    refreshToken: data.refresh_token,
+    expiresAt:    Date.now() + (data.expires_in || 3600) * 1000
+  };
+  await storage.saveUser(user);
+  return user.zoho;
 }
 
-// ── Send email ────────────────────────────────────────────────────────────────
+async function refreshTokens(user) {
+  const zoho = user.zoho;
+  const params = new URLSearchParams({
+    grant_type:    'refresh_token',
+    client_id:     ZOHO_CLIENT_ID,
+    client_secret: ZOHO_CLIENT_SECRET,
+    refresh_token: zoho.refreshToken
+  });
+  const { data } = await axios.post(TOKEN_URL, params.toString(), {
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+  });
+  if (!data.access_token) throw new Error('Zoho token refresh failed');
+  user.zoho.accessToken = data.access_token;
+  user.zoho.expiresAt   = Date.now() + (data.expires_in || 3600) * 1000;
+  await storage.saveUser(user);
+  return user.zoho.accessToken;
+}
+
+async function getAccessToken(user) {
+  if (!user.zoho || !user.zoho.connected) throw new Error('Zoho not connected');
+  if (Date.now() < (user.zoho.expiresAt || 0) - 60000) return user.zoho.accessToken;
+  return refreshTokens(user);
+}
+
+async function fetchAccountInfo(accessToken) {
+  const { data } = await axios.get(`${API_BASE}/accounts`, {
+    headers: { Authorization: `Zoho-oauthtoken ${accessToken}` }
+  });
+  const acct = data.data && data.data[0];
+  if (!acct) throw new Error('No Zoho account found');
+  return { accountId: acct.accountId, address: acct.emailAddress };
+}
+
+// ── Send email via Zoho REST API ──────────────────────────────────────────────
 async function sendEmail(userId, { to, subject, body, inReplyTo, references, trackingId }) {
   const user = await storage.getUserById(userId);
   if (!user) throw new Error('User not found');
-  if (!user.zoho || !user.zoho.connected) throw new Error('Zoho Mail not connected');
 
-  const signatureHtml  = buildSignatureHtml(user);
-  const signaturePlain = buildSignaturePlainText(user);
-  const { plainText, htmlBody } = buildRawEmailParts({ body, signatureHtml, signaturePlain, trackingId, baseUrl: require('../config').BASE_URL });
+  const token = await getAccessToken(user);
+  const { accountId, address } = user.zoho;
 
-  const fromEmail = user.zoho.address;
-  const fromName  = user.name || '';
-  const from      = fromName ? `"${fromName}" <${fromEmail}>` : fromEmail;
+  const sigHtml  = buildSignatureHtml(user);
+  const sigPlain = buildSignaturePlainText(user);
+  const { htmlBody } = buildRawEmailParts({ body, signatureHtml: sigHtml, signaturePlain: sigPlain, trackingId, baseUrl: BASE_URL });
 
-  // Use a deterministic Message-ID we control so we can return it immediately
-  const msgId = `<${uuidv4()}@recruit.welltower>`;
+  const fromName = user.name || '';
+  const fromAddr = fromName ? `${fromName} <${address}>` : address;
 
-  const mailOpts = {
-    from,
-    to,
+  const payload = {
+    fromAddress: fromAddr,
+    toAddress:   to,
     subject,
-    messageId: msgId,
-    text: plainText,
-    html: htmlBody,
-    headers: {}
+    content:     htmlBody,
+    mailFormat:  'html'
   };
+  if (inReplyTo) payload.inReplyTo = inReplyTo;
 
-  if (inReplyTo)  mailOpts.inReplyTo  = inReplyTo;
-  if (references) mailOpts.references = references;
+  const { data } = await axios.post(
+    `${API_BASE}/accounts/${accountId}/messages`,
+    payload,
+    { headers: { Authorization: `Zoho-oauthtoken ${token}`, 'Content-Type': 'application/json' } }
+  );
 
-  const transport = makeTransport(user.zoho);
-  await transport.sendMail(mailOpts);
-  transport.close();
-
-  return {
-    gmailMessageId: null,
-    gmailThreadId:  null,
-    smtpMessageId:  msgId.replace(/^<|>$/g, '')
-  };
+  const msgId = (data.data && data.data.messageId) || uuidv4();
+  return { gmailMessageId: null, gmailThreadId: null, smtpMessageId: String(msgId) };
 }
 
-// ── Fetch unread replies via IMAP ─────────────────────────────────────────────
+// ── Fetch unread replies via Zoho REST API ────────────────────────────────────
 async function fetchUnreadReplies(userId) {
   const user = await storage.getUserById(userId);
   if (!user) throw new Error('User not found');
-  if (!user.zoho || !user.zoho.connected) throw new Error('Zoho Mail not connected');
 
-  const client = new ImapFlow({
-    host:   'imap.zoho.com',
-    port:   993,
-    secure: true,
-    auth: { user: user.zoho.address, pass: user.zoho.appPassword },
-    logger: false
+  const token = await getAccessToken(user);
+  const { accountId, address } = user.zoho;
+
+  // Fetch INBOX folder ID
+  const foldersRes = await axios.get(`${API_BASE}/accounts/${accountId}/folders`, {
+    headers: { Authorization: `Zoho-oauthtoken ${token}` }
+  });
+  const inbox = (foldersRes.data.data || []).find(f =>
+    f.folderName.toLowerCase() === 'inbox' || f.folderType === 'inbox'
+  );
+  if (!inbox) return [];
+
+  // Get unread messages
+  const msgsRes = await axios.get(`${API_BASE}/accounts/${accountId}/folders/${inbox.folderId}/messages/view`, {
+    params: { status: 'unread', limit: 50 },
+    headers: { Authorization: `Zoho-oauthtoken ${token}` }
   });
 
-  await client.connect();
-  const results = [];
+  const messages = msgsRes.data.data || [];
+  const results  = [];
 
-  try {
-    const lock = await client.getMailboxLock('INBOX');
+  for (const msg of messages) {
     try {
-      // Search for unseen messages from the last 30 days
-      const since = new Date();
-      since.setDate(since.getDate() - 30);
+      // Skip messages we sent
+      const fromEmail = (msg.fromAddress || '').toLowerCase();
+      if (fromEmail === address.toLowerCase()) continue;
 
-      const msgs = await client.search({ seen: false, since });
-      if (!msgs || msgs.length === 0) return results;
+      // Fetch full message content
+      const fullRes = await axios.get(
+        `${API_BASE}/accounts/${accountId}/folders/${inbox.folderId}/messages/${msg.messageId}`,
+        { headers: { Authorization: `Zoho-oauthtoken ${token}` } }
+      );
+      const full = fullRes.data.data || {};
 
-      for await (const msg of client.fetch(msgs.slice(0, 50), {
-        envelope: true,
-        source: true,
-        flags: true
-      })) {
-        try {
-          const { simpleParser } = require('mailparser');
-          const parsed = await simpleParser(msg.source);
+      results.push({
+        from:           msg.fromAddress || '',
+        subject:        msg.subject     || '',
+        body:           full.content    || msg.summary || '',
+        gmailMessageId: String(msg.messageId),
+        gmailThreadId:  null,
+        timestamp:      msg.receivedTime ? new Date(Number(msg.receivedTime)).toISOString() : new Date().toISOString(),
+        messageId:      String(msg.messageId),
+        resumeAttachment: null
+      });
 
-          const fromAddr = parsed.from && parsed.from.value && parsed.from.value[0]
-            ? parsed.from.value[0].address : '';
-          const fromName = parsed.from && parsed.from.value && parsed.from.value[0]
-            ? parsed.from.value[0].name : '';
-
-          // Skip our own sent messages
-          if (fromAddr.toLowerCase() === user.zoho.address.toLowerCase()) continue;
-
-          results.push({
-            from:           fromName ? `"${fromName}" <${fromAddr}>` : fromAddr,
-            subject:        parsed.subject || '',
-            body:           parsed.text   || parsed.html || '',
-            gmailMessageId: `zoho-${msg.uid}`,
-            gmailThreadId:  null,
-            timestamp:      parsed.date ? parsed.date.toISOString() : new Date().toISOString(),
-            messageId:      (parsed.messageId || '').replace(/[<>]/g, ''),
-            resumeAttachment: extractResumeAttachment(parsed)
-          });
-
-          // Mark as read
-          await client.messageFlagsAdd({ uid: msg.uid }, ['\\Seen']);
-        } catch (e) {
-          console.error('IMAP parse error:', e.message);
-        }
-      }
-    } finally {
-      lock.release();
+      // Mark as read
+      await axios.put(
+        `${API_BASE}/accounts/${accountId}/updatemessage`,
+        { mode: 'markAsRead', messageId: [String(msg.messageId)] },
+        { headers: { Authorization: `Zoho-oauthtoken ${token}`, 'Content-Type': 'application/json' } }
+      ).catch(() => {});
+    } catch (e) {
+      console.error('Zoho fetch message error:', e.message);
     }
-  } finally {
-    await client.logout();
   }
 
   return results;
 }
 
-// ── Extract resume attachment from parsed email ───────────────────────────────
-function extractResumeAttachment(parsed) {
-  if (!parsed.attachments || !parsed.attachments.length) return null;
-  const resumeTypes = ['application/pdf', 'application/msword',
-    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-    'application/rtf', 'text/rtf'];
-  const att = parsed.attachments.find(a =>
-    resumeTypes.includes(a.contentType) ||
-    /\.(pdf|doc|docx|rtf)$/i.test(a.filename || '')
-  );
-  if (!att) return null;
-  return { filename: att.filename || 'resume', mimeType: att.contentType, buffer: att.content };
-}
-
-// ── Scan Zoho Sent folder for prior contact (duplicate check) ─────────────────
+// ── Sent address scan for duplicate check ────────────────────────────────────
 async function getSentAddresses(userId) {
   const user = await storage.getUserById(userId);
   if (!user || !user.zoho || !user.zoho.connected) return [];
 
-  const client = new ImapFlow({
-    host:   'imap.zoho.com',
-    port:   993,
-    secure: true,
-    auth: { user: user.zoho.address, pass: user.zoho.appPassword },
-    logger: false
-  });
-
-  await client.connect();
-  const addresses = new Set();
-
   try {
-    // Zoho Sent folder — try common names
-    let sentFolder = null;
-    const list = await client.list();
-    for (const box of list) {
-      const name = (box.name || '').toLowerCase();
-      if (name === 'sent' || name === 'sent items' || name === 'sent messages') {
-        sentFolder = box.path; break;
-      }
-      if (box.specialUse === '\\Sent') { sentFolder = box.path; break; }
+    const token = await getAccessToken(user);
+    const { accountId } = user.zoho;
+
+    const foldersRes = await axios.get(`${API_BASE}/accounts/${accountId}/folders`, {
+      headers: { Authorization: `Zoho-oauthtoken ${token}` }
+    });
+    const sent = (foldersRes.data.data || []).find(f =>
+      f.folderName.toLowerCase() === 'sent' || f.folderType === 'sent'
+    );
+    if (!sent) return [];
+
+    const msgsRes = await axios.get(`${API_BASE}/accounts/${accountId}/folders/${sent.folderId}/messages/view`, {
+      params: { limit: 200 },
+      headers: { Authorization: `Zoho-oauthtoken ${token}` }
+    });
+
+    const addresses = new Set();
+    for (const msg of msgsRes.data.data || []) {
+      const to = msg.toAddress || '';
+      const found = to.match(/[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/g) || [];
+      found.forEach(e => addresses.add(e.toLowerCase()));
     }
-    if (!sentFolder) return [];
-
-    const lock = await client.getMailboxLock(sentFolder);
-    try {
-      const since = new Date();
-      since.setFullYear(since.getFullYear() - 2);
-      const msgs = await client.search({ since });
-
-      for await (const msg of client.fetch(msgs.slice(0, 500), { envelope: true })) {
-        const to = msg.envelope && msg.envelope.to ? msg.envelope.to : [];
-        to.forEach(t => { if (t.address) addresses.add(t.address.toLowerCase()); });
-      }
-    } finally {
-      lock.release();
-    }
-  } finally {
-    await client.logout();
-  }
-
-  return [...addresses];
+    return [...addresses];
+  } catch { return []; }
 }
 
-module.exports = { testConnection, sendEmail, fetchUnreadReplies, getSentAddresses };
+module.exports = { getAuthUrl, exchangeCode, sendEmail, fetchUnreadReplies, getSentAddresses };

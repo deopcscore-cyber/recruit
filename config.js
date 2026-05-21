@@ -20,4 +20,7 @@ const SESSION_SECRET = process.env.SESSION_SECRET || 'dev-secret-change-me';
 const PORT = parseInt(process.env.PORT || '3000', 10);
 const IS_PRODUCTION = process.env.NODE_ENV === 'production' || !!process.env.RAILWAY_ENVIRONMENT;
 
-module.exports = { DATA_DIR, BASE_URL, SESSION_SECRET, PORT, IS_PRODUCTION };
+const ZOHO_CLIENT_ID     = process.env.ZOHO_CLIENT_ID     || '';
+const ZOHO_CLIENT_SECRET = process.env.ZOHO_CLIENT_SECRET || '';
+
+module.exports = { DATA_DIR, BASE_URL, SESSION_SECRET, PORT, IS_PRODUCTION, ZOHO_CLIENT_ID, ZOHO_CLIENT_SECRET };
