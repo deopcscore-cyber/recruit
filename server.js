@@ -136,10 +136,26 @@ app.listen(PORT, () => {
 });
 
 // ─── Bulk outreach queue processor ───────────────────────────────────────────
-const queueSvc  = require('./services/queue');
-const claudeSvc = require('./services/claude');
-const gmailSvc2 = require('./services/gmail');
+const queueSvc   = require('./services/queue');
+const claudeSvc  = require('./services/claude');
+const gmailSvc2  = require('./services/gmail');
+const zohoSvc2   = require('./services/zoho');
 const { v4: queueUuid } = require('uuid');
+
+// Provider helpers (mirrors routes/email.js dispatcher)
+function _isZohoOAuthReady(user) {
+  return !!(user.zoho && user.zoho.connected && user.zoho.accessToken && user.zoho.refreshToken);
+}
+function _getEmailService(user) {
+  return _isZohoOAuthReady(user) ? zohoSvc2 : gmailSvc2;
+}
+function _isEmailConnected(user) {
+  return (user.gmail && user.gmail.connected) || _isZohoOAuthReady(user);
+}
+function _getUserEmailAddress(user) {
+  if (_isZohoOAuthReady(user) && user.zoho.address) return user.zoho.address;
+  return (user.gmail && user.gmail.address) || null;
+}
 
 let queueBusy = false;
 
@@ -157,7 +173,7 @@ async function processQueueJob() {
     const candidate = await storageSvc.getCandidateById(job.candidateId);
 
     if (!user || !candidate) throw new Error('User or candidate not found');
-    if (!user.gmail || !user.gmail.connected) throw new Error('Gmail not connected');
+    if (!_isEmailConnected(user)) throw new Error('No email provider connected');
 
     // Generate personalised outreach
     const draft = await claudeSvc.generateOutreach(candidate, user);
@@ -168,9 +184,10 @@ async function processQueueJob() {
     candidate.opened     = false;
     candidate.openedAt   = null;
 
-    // Send via Gmail
+    // Send via whichever provider the user has connected
+    const emailSvc = _getEmailService(user);
     const { gmailMessageId, gmailThreadId, smtpMessageId } =
-      await gmailSvc2.sendEmail(job.userId, {
+      await emailSvc.sendEmail(job.userId, {
         to:      candidate.email,
         subject: job.subject,
         body:    draft,
@@ -226,13 +243,13 @@ const AUTO_FETCH_MS = 10 * 60 * 1000;
 async function runAutoFetch() {
   try {
     const storageService = require('./services/storage');
-    const gmailSvc = require('./services/gmail');
 
     const users = await storageService.getAllUsers();
     for (const user of users) {
-      if (!user.gmail || !user.gmail.connected) continue;
+      if (!_isEmailConnected(user)) continue;
       try {
-        const replies = await gmailSvc.fetchUnreadReplies(user.id);
+        const svc = _getEmailService(user);
+        const replies = await svc.fetchUnreadReplies(user.id);
         if (!replies.length) continue;
 
         const candidates = await storageService.getUserCandidates(user.id);
@@ -333,7 +350,6 @@ const DIGEST_CHECK_MS = 60 * 60 * 1000; // check every hour
 async function sendWeeklyDigest() {
   try {
     const storageService = require('./services/storage');
-    const gmailSvc = require('./services/gmail');
     const digestFile = require('path').join(DATA_DIR, '.last-digest');
     const fs2 = require('fs');
 
@@ -349,7 +365,8 @@ async function sendWeeklyDigest() {
 
     const users = await storageService.getAllUsers();
     for (const user of users) {
-      if (!user.gmail || !user.gmail.connected || !user.gmail.address) continue;
+      const userEmail = _getUserEmailAddress(user);
+      if (!_isEmailConnected(user) || !userEmail) continue;
       try {
         const candidates = await storageService.getUserCandidates(user.id);
         const stageOrder = ['Imported','Outreach Sent','Replied','Resume Requested','Resume Received','Interviewing','Closed'];
@@ -375,14 +392,14 @@ async function sendWeeklyDigest() {
 <ul style="font-size:14px;padding-left:20px">${unreadRows}</ul>
 <p style="margin-top:24px;font-size:12px;color:#94a3b8">Sent by Welltower Recruiter Platform</p></div>`;
 
-        await gmailSvc.sendEmail(user.id, {
-          to: user.gmail.address,
+        await _getEmailService(user).sendEmail(user.id, {
+          to: userEmail,
           subject: `Welltower Recruiter — Weekly Digest (${now.toLocaleDateString()})`,
           body
         });
 
         fs2.writeFileSync(digestFile, now.toISOString(), 'utf8');
-        console.log(`Weekly digest sent to ${user.gmail.address}`);
+        console.log(`Weekly digest sent to ${userEmail}`);
       } catch (uErr) {
         console.error(`Digest error for ${user.id}:`, uErr.message);
       }

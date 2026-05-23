@@ -7,13 +7,16 @@ const { google } = require('googleapis');
 const gmailService = require('../services/gmail');
 const zohoService  = require('../services/zoho');
 
-// Pick the right email service based on which account is connected
+// Zoho is only usable if it has valid OAuth2 tokens (not old SMTP credentials)
+function isZohoOAuthReady(user) {
+  return !!(user.zoho && user.zoho.connected && user.zoho.accessToken && user.zoho.refreshToken);
+}
 function getEmailService(user) {
-  if (user.zoho && user.zoho.connected) return zohoService;
+  if (isZohoOAuthReady(user)) return zohoService;
   return gmailService;
 }
 function isEmailConnected(user) {
-  return (user.gmail && user.gmail.connected) || (user.zoho && user.zoho.connected);
+  return (user.gmail && user.gmail.connected) || isZohoOAuthReady(user);
 }
 const storage = require('../services/storage');
 const requireAuth = require('../middleware/auth');
@@ -343,8 +346,8 @@ router.post('/deliverability-test', requireAuth, async (req, res) => {
     }
 
     const emailSvc   = getEmailService(user);
-    const selfAddr   = (user.zoho && user.zoho.connected) ? user.zoho.address : user.gmail.address;
-    const selfLabel  = (user.zoho && user.zoho.connected) ? 'Zoho (self)' : 'Gmail (self)';
+    const selfAddr   = (isZohoOAuthReady(user)) ? user.zoho.address : user.gmail.address;
+    const selfLabel  = (isZohoOAuthReady(user)) ? 'Zoho (self)' : 'Gmail (self)';
 
     const recruiterName  = user.name  || 'Recruiter';
     const recruiterTitle = (user.title || 'Senior Talent Acquisition Coordinator').trim();
@@ -458,8 +461,8 @@ router.post('/test', requireAuth, async (req, res) => {
     }
 
     const emailSvc = getEmailService(user);
-    const selfAddr = (user.zoho && user.zoho.connected) ? user.zoho.address : user.gmail.address;
-    const provider = (user.zoho && user.zoho.connected) ? 'Zoho Mail' : 'Gmail';
+    const selfAddr = (isZohoOAuthReady(user)) ? user.zoho.address : user.gmail.address;
+    const provider = (isZohoOAuthReady(user)) ? 'Zoho Mail' : 'Gmail';
 
     await emailSvc.sendEmail(req.session.userId, {
       to: selfAddr,
@@ -488,7 +491,7 @@ router.post('/check-prior-contact', requireAuth, async (req, res) => {
     const contacted = new Set();
 
     // ── Zoho path ────────────────────────────────────────────────────────────
-    if (user.zoho && user.zoho.connected) {
+    if (isZohoOAuthReady(user)) {
       try {
         const allSent = await zohoService.getSentAddresses(req.session.userId);
         const emailSet = new Set(emails.map(e => e.toLowerCase().trim()));

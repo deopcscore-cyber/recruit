@@ -244,8 +244,11 @@ async function sendEmail(userId, { to, subject, body, threadId, inReplyTo, refer
 
   // Build "Display Name <email>" — this is what recipients see as the sender name
   const fromEmail = user.gmail.address || '';
-  const fromName  = user.name || '';
-  const from = fromName ? `"${fromName}" <${fromEmail}>` : fromEmail;
+  // Use profile name; fall back to capitalised local-part of email (e.g. "rachel.autwell" → "Rachel Autwell")
+  const fromName = (user.name || '').trim() || fromEmail.split('@')[0]
+    .replace(/[._-]+/g, ' ')
+    .replace(/\b\w/g, c => c.toUpperCase());
+  const from = `"${fromName}" <${fromEmail}>`;
 
   // Signature is passed separately so buildRawEmail can detect the body format correctly
   const signatureHtml  = buildSignatureHtml(user);
