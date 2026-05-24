@@ -35,7 +35,7 @@ router.put('/', async (req, res) => {
     const user = await storage.getUserById(req.session.userId);
     if (!user) return res.status(404).json({ error: 'User not found' });
 
-    const { tone, notes, use, avoid, name, title, companyName, companyPitch, signature, secondaryTestEmail } = req.body;
+    const { tone, notes, use, avoid, name, title, companyName, companyPitch, hunterApiKey, signature, secondaryTestEmail } = req.body;
 
     user.style = user.style || {};
     if (tone !== undefined) user.style.tone = tone;
@@ -46,8 +46,9 @@ router.put('/', async (req, res) => {
     // Profile fields
     if (name && name.trim()) user.name = name.trim();
     if (title !== undefined) user.title = title.trim();
-    if (companyName !== undefined) user.companyName = companyName.trim();
+    if (companyName  !== undefined) user.companyName  = companyName.trim();
     if (companyPitch !== undefined) user.companyPitch = companyPitch.trim();
+    if (hunterApiKey !== undefined) user.hunterApiKey = hunterApiKey.trim();
 
     // Secondary test email
     if (secondaryTestEmail !== undefined) user.secondaryTestEmail = secondaryTestEmail.trim();
@@ -64,8 +65,9 @@ router.put('/', async (req, res) => {
       ...user.style,
       name: user.name || '',
       title: user.title || '',
-      companyName: user.companyName || '',
+      companyName:  user.companyName  || '',
       companyPitch: user.companyPitch || '',
+      hunterApiKey: user.hunterApiKey ? '••••••••' : '', // mask key in response
       signature: user.signature || {},
       secondaryTestEmail: user.secondaryTestEmail || ''
     });

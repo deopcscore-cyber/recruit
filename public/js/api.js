@@ -97,5 +97,25 @@ const API = {
     getZohoConnectUrl() { return API.get('/api/settings/zoho-connect'); },
     disconnectZoho() { return API.delete('/api/settings/zoho'); },
     zohoStatus() { return API.get('/api/settings/zoho-status'); }
+  },
+
+  // Email Templates
+  templates: {
+    list()           { return API.get('/api/templates'); },
+    create(data)     { return API.post('/api/templates', data); },
+    update(id, data) { return API.put(`/api/templates/${id}`, data); },
+    delete(id)       { return API.delete(`/api/templates/${id}`); }
+  },
+
+  // LinkedIn Import
+  linkedin: {
+    import(data) { return API.post('/api/linkedin/import', data); }
+  },
+
+  // Push Notifications
+  push: {
+    getVapidKey()          { return API.get('/api/push/vapid-key'); },
+    subscribe(subscription){ return API.post('/api/push/subscribe', { subscription }); },
+    unsubscribe()          { return API.delete('/api/push/subscribe'); }
   }
 };

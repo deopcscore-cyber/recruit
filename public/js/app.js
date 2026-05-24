@@ -66,8 +66,10 @@ document.addEventListener('DOMContentLoaded', async () => {
   document.querySelectorAll('.nav-item').forEach(item => {
     item.addEventListener('click', () => {
       navigateTo(item.dataset.page);
-      if (item.dataset.page === 'analytics') loadAnalyticsPage();
-      if (item.dataset.page === 'followups') loadFollowUpPage();
+      if (item.dataset.page === 'analytics')  loadAnalyticsPage();
+      if (item.dataset.page === 'followups')  loadFollowUpPage();
+      if (item.dataset.page === 'hotleads')   loadHotLeadsPage();
+      if (item.dataset.page === 'templates')  loadTemplatesPage();
     });
   });
 
@@ -129,6 +131,12 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Settings page
   initSettingsPage();
 
+  // Templates page
+  wireTemplateEditor();
+
+  // LinkedIn import modal
+  wireLinkedInImport();
+
   // Keyboard shortcuts
   document.addEventListener('keydown', e => {
     const active = document.activeElement;
@@ -154,6 +162,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Load candidates
   await loadCandidates();
   navigateTo('candidates');
+
+  // Register for push notifications (asks permission, no-op if not supported or denied)
+  registerPushNotifications();
 
   // Auto-refresh every 2 minutes — detect new opens and show toast
   setInterval(async () => {
@@ -187,6 +198,8 @@ function navigateTo(page) {
   document.querySelectorAll('.page').forEach(p => p.classList.toggle('active', p.id === `page-${page}`));
   if (page === 'settings')  loadSettingsPage();
   if (page === 'followups') loadFollowUpPage();
+  if (page === 'hotleads')  loadHotLeadsPage();
+  if (page === 'templates') loadTemplatesPage();
 }
 
 // ---- View switching ----
@@ -204,12 +217,17 @@ async function loadCandidates() {
   try {
     allCandidates = await API.candidates.list();
     renderCandidates();
+    renderTagFilterBar();
     updateUnreadBadge();
     updateFollowUpBadge();
+    updateHotLeadsBadge();
   } catch (err) {
     Toast.error('Failed to load candidates: ' + err.message);
   }
 }
+
+// Currently active tag filter (null = all)
+let currentTagFilter = null;
 
 function getFilteredCandidates() {
   let filtered = [...allCandidates];
@@ -235,7 +253,30 @@ function getFilteredCandidates() {
       (c.company || '').toLowerCase().includes(q)
     );
   }
+  if (currentTagFilter) {
+    filtered = filtered.filter(c => (c.tags || []).includes(currentTagFilter));
+  }
   return filtered;
+}
+
+function renderTagFilterBar() {
+  const bar = document.getElementById('tag-filter-bar');
+  if (!bar) return;
+  // Collect all unique tags across all candidates
+  const allTags = [...new Set(allCandidates.flatMap(c => c.tags || []))].sort();
+  if (allTags.length === 0) { bar.innerHTML = ''; return; }
+  bar.innerHTML = `
+    <span style="font-size:0.75rem;color:var(--text-muted);white-space:nowrap">Tags:</span>
+    <button class="tag-filter-chip${!currentTagFilter ? ' active' : ''}" data-tag="">All</button>
+    ${allTags.map(t => `<button class="tag-filter-chip${currentTagFilter === t ? ' active' : ''}" data-tag="${escapeHtml(t)}">${escapeHtml(t)}</button>`).join('')}
+  `;
+  bar.querySelectorAll('.tag-filter-chip').forEach(chip => {
+    chip.addEventListener('click', () => {
+      currentTagFilter = chip.dataset.tag || null;
+      renderTagFilterBar();
+      renderCandidates();
+    });
+  });
 }
 
 function renderCandidates() {
@@ -278,6 +319,109 @@ function updateFollowUpBadge() {
     badge.classList.toggle('hidden', count === 0);
     badge.style.background = count > 0 ? '#f97316' : '';
   }
+}
+
+function updateHotLeadsBadge() {
+  const count = allCandidates.filter(c =>
+    c.opened && !(c.thread || []).some(m => m.direction === 'inbound')
+  ).length;
+  const badge = document.getElementById('hotleads-badge');
+  if (badge) {
+    badge.textContent = count;
+    badge.classList.toggle('hidden', count === 0);
+    badge.style.background = count > 0 ? '#ef4444' : '';
+  }
+}
+
+// ---- Hot Leads Page ----
+function loadHotLeadsPage() {
+  const el = document.getElementById('hotleads-content');
+  if (!el) return;
+
+  const hotLeads = allCandidates
+    .filter(c => c.opened && !(c.thread || []).some(m => m.direction === 'inbound'))
+    .sort((a, b) => new Date(a.openedAt || 0) - new Date(b.openedAt || 0)); // oldest open first = most urgent
+
+  const subtitle = document.getElementById('hotleads-subtitle');
+  if (subtitle) subtitle.textContent = `${hotLeads.length} candidate${hotLeads.length !== 1 ? 's' : ''} opened — no reply yet`;
+
+  if (hotLeads.length === 0) {
+    el.innerHTML = `<div style="text-align:center;padding:60px 20px">
+      <div style="font-size:2.5rem;margin-bottom:12px">⚡</div>
+      <h3 style="color:var(--text);margin-bottom:8px">No hot leads right now</h3>
+      <p style="color:var(--text-muted);font-size:0.9rem">When a candidate opens your email but hasn't replied yet, they'll appear here.</p>
+    </div>`;
+    return;
+  }
+
+  el.innerHTML = `
+    <div style="margin-bottom:16px;padding:12px 16px;background:#fef3c7;border:1px solid #fcd34d;border-radius:8px;font-size:0.85rem;color:#92400e">
+      🔥 These candidates opened your email but haven't replied yet. Strike while it's hot — send a follow-up now.
+    </div>
+    <div style="display:flex;flex-direction:column;gap:10px">
+      ${hotLeads.map(c => {
+        const daysSince = c.openedAt ? Math.floor((Date.now() - new Date(c.openedAt)) / 86400000) : null;
+        const urgency = daysSince === null ? 'neutral' : daysSince <= 1 ? 'hot' : daysSince <= 3 ? 'warm' : 'cold';
+        const urgencyColor = urgency === 'hot' ? '#ef4444' : urgency === 'warm' ? '#f97316' : '#94a3b8';
+        const urgencyLabel = urgency === 'hot' ? '🔴 Today' : urgency === 'warm' ? '🟠 ' + daysSince + 'd ago' : '⚪ ' + daysSince + 'd ago';
+        const lastSent = (c.thread || []).filter(m => m.direction === 'outbound').pop();
+        return `
+          <div style="display:flex;align-items:center;gap:14px;padding:14px 16px;background:var(--bg-card);border:1px solid var(--border);border-radius:10px;border-left:4px solid ${urgencyColor}">
+            <div style="flex:1;min-width:0">
+              <div style="font-weight:600;color:var(--text);font-size:0.95rem">${escapeHtml(c.name || 'Unknown')}</div>
+              <div style="font-size:0.8rem;color:var(--text-muted);margin-top:2px">${escapeHtml(c.title || '')}${c.company ? ' · ' + escapeHtml(c.company) : ''}</div>
+              ${lastSent ? `<div style="font-size:0.78rem;color:var(--text-faint);margin-top:4px">Last sent: ${formatRelativeHL(lastSent.timestamp)}</div>` : ''}
+            </div>
+            <div style="text-align:right;flex-shrink:0">
+              <div style="font-size:0.82rem;font-weight:600;color:${urgencyColor};margin-bottom:6px">${urgencyLabel}</div>
+              <button class="btn btn-primary btn-sm hl-followup-btn" data-id="${c.id}" style="white-space:nowrap">Send Follow-Up</button>
+            </div>
+          </div>`;
+      }).join('')}
+    </div>
+  `;
+
+  // Wire follow-up buttons
+  el.querySelectorAll('.hl-followup-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const candidate = allCandidates.find(c => c.id === btn.dataset.id);
+      if (!candidate) return;
+      btn.disabled = true; btn.textContent = 'Generating…';
+      try {
+        const { body } = await API.ai.followup(candidate.id);
+        // Open candidate modal on thread tab with pre-filled follow-up
+        openCandidateModal(candidate, currentUser,
+          updated => { Object.assign(candidate, updated); loadHotLeadsPage(); },
+          () => {}
+        );
+        setTimeout(() => switchModalTab('thread'), 100);
+        Toast.show('Follow-up draft generated — review in the Thread tab');
+      } catch (err) {
+        Toast.error('Failed to generate follow-up: ' + err.message);
+        btn.disabled = false; btn.textContent = 'Send Follow-Up';
+      }
+    });
+  });
+
+  // Refresh button
+  const refreshBtn = document.getElementById('hotleads-refresh-btn');
+  if (refreshBtn) {
+    const fresh = refreshBtn.cloneNode(true);
+    refreshBtn.parentNode.replaceChild(fresh, refreshBtn);
+    fresh.addEventListener('click', async () => {
+      allCandidates = await API.candidates.list();
+      loadHotLeadsPage();
+    });
+  }
+}
+
+function formatRelativeHL(iso) {
+  if (!iso) return '';
+  const d = new Date(iso), now = new Date();
+  const days = Math.floor((now - d) / 86400000);
+  if (days === 0) return 'Today';
+  if (days === 1) return 'Yesterday';
+  return `${days} days ago`;
 }
 
 // ---- Candidate selection ----
@@ -572,10 +716,57 @@ function openBulkOutreachModal() {
   document.getElementById('bulk-outreach-start-btn').textContent = 'Queue Emails';
   window._bulkDelays = null;
   buildSchedulePreview();
+
+  // Wire time-window checkbox
+  const windowCb = document.getElementById('bulk-use-window');
+  const windowInputs = document.getElementById('bulk-window-inputs');
+  if (windowCb && windowInputs) {
+    // Reset state
+    windowCb.checked = false;
+    windowInputs.style.opacity = '0.4';
+    windowInputs.style.pointerEvents = 'none';
+    // Clone to remove any old listeners
+    const freshCb = windowCb.cloneNode(true);
+    windowCb.parentNode.replaceChild(freshCb, windowCb);
+    freshCb.addEventListener('change', () => {
+      windowInputs.style.opacity = freshCb.checked ? '1' : '0.4';
+      windowInputs.style.pointerEvents = freshCb.checked ? 'auto' : 'none';
+      window._bulkDelays = null;
+      buildSchedulePreview();
+    });
+    // Re-build preview when start/end times change
+    windowInputs.querySelectorAll('input[type=time]').forEach(inp => {
+      const fresh = inp.cloneNode(true);
+      inp.parentNode.replaceChild(fresh, inp);
+      fresh.addEventListener('change', () => { window._bulkDelays = null; buildSchedulePreview(); });
+    });
+  }
+
   new Modal('bulk-outreach-modal').open();
 
   // If there's already an active server queue, show its status
   refreshQueueStatus();
+}
+
+// Returns the next send time after `afterMs` that falls inside [startH:startM – endH:endM] on weekdays
+function nextWindowSlot(afterMs, startH, startM, endH, endM, weekdaysOnly) {
+  const candidate = new Date(afterMs);
+  // Advance up to 14 days trying to find a valid slot
+  for (let d = 0; d < 14; d++) {
+    const dow = candidate.getDay();
+    if (!weekdaysOnly || (dow >= 1 && dow <= 5)) {
+      const slotStart = new Date(candidate);
+      slotStart.setHours(startH, startM, 0, 0);
+      const slotEnd = new Date(candidate);
+      slotEnd.setHours(endH, endM, 0, 0);
+      if (candidate >= slotStart && candidate < slotEnd) return candidate.getTime(); // already inside window
+      if (candidate < slotStart) { return slotStart.getTime(); } // push to window start today
+    }
+    // Move to tomorrow's window start
+    candidate.setDate(candidate.getDate() + 1);
+    candidate.setHours(startH, startM, 0, 0);
+  }
+  return afterMs; // fallback — return unchanged
 }
 
 function buildSchedulePreview() {
@@ -591,46 +782,73 @@ function buildSchedulePreview() {
     window._bulkDelays = checked.map((_, i) => i === 0 ? 0 : randDelayMs());
   }
 
-  const now = new Date();
-  let cum = 0;
+  // Time-window settings
+  const useWindow   = document.getElementById('bulk-use-window')?.checked;
+  const weekdaysOnly = useWindow; // weekdays-only implied when window is on
+  const startVal = document.getElementById('bulk-window-start')?.value || '09:00';
+  const endVal   = document.getElementById('bulk-window-end')?.value   || '11:00';
+  const [sH, sM] = startVal.split(':').map(Number);
+  const [eH, eM] = endVal.split(':').map(Number);
+
+  const baseMs = Date.now();
+  let cumMs = 0;
+  const scheduledTimes = checked.map((cb, i) => {
+    cumMs += window._bulkDelays[i];
+    let t = baseMs + cumMs;
+    if (useWindow) t = nextWindowSlot(t, sH, sM, eH, eM, weekdaysOnly);
+    return t;
+  });
+
   listEl.innerHTML = checked.map((cb, i) => {
-    cum += window._bulkDelays[i];
-    const t = new Date(now.getTime() + cum).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const t = new Date(scheduledTimes[i]).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const dateStr = (() => {
+      const d = new Date(scheduledTimes[i]);
+      const today = new Date();
+      if (d.toDateString() === today.toDateString()) return '';
+      return ' ' + d.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' });
+    })();
     const gap = i === 0 ? '<span style="color:#10b981;font-weight:600">Now</span>' : `<span style="color:#94a3b8">+${fmtMins(window._bulkDelays[i])}</span>`;
     return `<div style="display:flex;align-items:center;gap:10px;padding:3px 0">
-      <span style="min-width:72px;color:#475569;font-size:0.82rem">${t}</span>
+      <span style="min-width:100px;color:#475569;font-size:0.82rem">${t}${dateStr}</span>
       <span style="min-width:56px;font-size:0.78rem">${gap}</span>
       <span style="font-weight:500">${escapeHtml(cb.dataset.name)}</span>
     </div>`;
   }).join('');
 
-  const totalMins = Math.round(cum / 60000);
-  totalEl.textContent = `${checked.length} email${checked.length !== 1 ? 's' : ''} over ~${totalMins} min — runs on the server, safe to close this window`;
+  const spanMs = scheduledTimes[scheduledTimes.length - 1] - baseMs;
+  const spanMins = Math.round(spanMs / 60000);
+  const spanDesc = spanMins < 60 ? `~${spanMins} min` : `~${Math.round(spanMins / 60)} hr`;
+  totalEl.textContent = `${checked.length} email${checked.length !== 1 ? 's' : ''} spread over ${spanDesc} — runs on the server, safe to close this window`;
   preview.style.display = 'block';
+  // Store computed schedule times for use in handleBulkOutreach
+  window._scheduledTimes = scheduledTimes;
 }
 
 async function handleBulkOutreach() {
   const checked = [...document.querySelectorAll('.bulk-cb:checked')];
   if (checked.length === 0) { Toast.warning('Select at least one candidate'); return; }
 
-  const delays     = window._bulkDelays || checked.map((_, i) => i === 0 ? 0 : randDelayMs());
   const subjectTpl = document.getElementById('bulk-subject').value.trim();
   const startBtn   = document.getElementById('bulk-outreach-start-btn');
   const progressEl = document.getElementById('bulk-progress');
 
-  // Build job list with absolute scheduled times
-  const now  = Date.now();
-  let cumMs  = 0;
+  // Use pre-computed schedule times (respects time windows) or fall back to live calc
+  const delays = window._bulkDelays || checked.map((_, i) => i === 0 ? 0 : randDelayMs());
+  let scheduledTimes = window._scheduledTimes;
+  if (!scheduledTimes || scheduledTimes.length !== checked.length) {
+    const now = Date.now();
+    let cum = 0;
+    scheduledTimes = delays.map(d => { cum += d; return now + cum; });
+  }
+
   const jobs = checked.map((cb, i) => {
-    cumMs += delays[i];
-    const candidate = allCandidates.find(c => c.id === cb.dataset.id);
     const firstName = (cb.dataset.name || '').split(' ')[0];
     const subject   = subjectTpl || `Something Worth a Few Minutes of Your Time, ${firstName}`;
     return {
       candidateId:   cb.dataset.id,
       candidateName: cb.dataset.name,
       subject,
-      scheduledAt:   new Date(now + cumMs).toISOString()
+      scheduledAt:   new Date(scheduledTimes[i]).toISOString()
     };
   });
 
@@ -1313,11 +1531,13 @@ function initSettingsPage() {
     const btn = e.target.querySelector('[type=submit]');
     btn.disabled = true; btn.textContent = 'Saving…';
     try {
+      const hunterField = document.getElementById('profile-hunter-key');
       const data = {
         name: document.getElementById('profile-name').value.trim(),
         title: document.getElementById('profile-title').value.trim(),
         companyName: document.getElementById('profile-company-name').value.trim(),
-        companyPitch: document.getElementById('profile-company-pitch').value.trim()
+        companyPitch: document.getElementById('profile-company-pitch').value.trim(),
+        ...(hunterField && hunterField.value.trim() !== '••••••••' ? { hunterApiKey: hunterField.value.trim() } : {})
       };
       await API.settings.update(data);
       if (currentUser) {
@@ -1454,6 +1674,265 @@ function initSettingsPage() {
   });
 }
 
+// ================================================================
+// TEMPLATES PAGE
+// ================================================================
+
+let _templates = [];
+
+async function loadTemplatesPage() {
+  const el = document.getElementById('templates-content');
+  if (!el) return;
+  el.innerHTML = `<div style="text-align:center;color:var(--text-muted);padding:40px">Loading…</div>`;
+  try {
+    _templates = await API.templates.list();
+    renderTemplatesPage();
+  } catch (err) {
+    el.innerHTML = `<div style="color:#ef4444;padding:20px">Failed to load templates: ${err.message}</div>`;
+  }
+}
+
+function renderTemplatesPage() {
+  const el = document.getElementById('templates-content');
+  if (!el) return;
+
+  if (_templates.length === 0) {
+    el.innerHTML = `<div style="text-align:center;padding:60px 20px">
+      <div style="font-size:2.5rem;margin-bottom:12px">📝</div>
+      <h3 style="color:var(--text);margin-bottom:8px">No templates yet</h3>
+      <p style="color:var(--text-muted);font-size:0.9rem">Create reusable email templates with placeholders like {{firstName}}, {{company}}.</p>
+      <button class="btn btn-primary btn-sm" style="margin-top:16px" onclick="openTemplateEditor()">+ Create First Template</button>
+    </div>`;
+    return;
+  }
+
+  el.innerHTML = `
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:14px">
+      ${_templates.map(t => `
+        <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:10px;padding:16px;display:flex;flex-direction:column;gap:10px">
+          <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px">
+            <div>
+              <div style="font-weight:600;color:var(--text);font-size:0.95rem">${escapeHtml(t.name)}</div>
+              ${t.subject ? `<div style="font-size:0.8rem;color:var(--text-muted);margin-top:2px">Subject: ${escapeHtml(t.subject)}</div>` : ''}
+            </div>
+            <div style="display:flex;gap:6px;flex-shrink:0">
+              <button class="btn btn-ghost btn-sm tpl-edit-btn" data-id="${t.id}">Edit</button>
+              <button class="btn btn-ghost btn-sm tpl-delete-btn" data-id="${t.id}" style="color:#ef4444">Delete</button>
+            </div>
+          </div>
+          <div style="font-size:0.82rem;color:var(--text-muted);line-height:1.5;max-height:72px;overflow:hidden;white-space:pre-wrap">${escapeHtml((t.body || '').substring(0, 150))}${t.body && t.body.length > 150 ? '…' : ''}</div>
+          <button class="btn btn-secondary btn-sm tpl-use-btn" data-id="${t.id}">Use in Compose →</button>
+        </div>
+      `).join('')}
+    </div>
+  `;
+
+  el.querySelectorAll('.tpl-edit-btn').forEach(btn => {
+    btn.addEventListener('click', () => openTemplateEditor(_templates.find(t => t.id === btn.dataset.id)));
+  });
+  el.querySelectorAll('.tpl-delete-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      if (!await showConfirm('Delete this template?', 'Delete')) return;
+      try {
+        await API.templates.delete(btn.dataset.id);
+        _templates = _templates.filter(t => t.id !== btn.dataset.id);
+        renderTemplatesPage();
+        Toast.success('Template deleted');
+      } catch (err) { Toast.error(err.message); }
+    });
+  });
+  el.querySelectorAll('.tpl-use-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      // Navigate to candidates page so user can pick a candidate
+      navigateTo('candidates');
+      Toast.show('Open a candidate → Thread tab → use the template dropdown to apply');
+    });
+  });
+}
+
+function openTemplateEditor(template = null) {
+  document.getElementById('template-editor-id').value    = template ? template.id : '';
+  document.getElementById('template-editor-title').textContent = template ? 'Edit Template' : 'New Template';
+  document.getElementById('template-name').value    = template ? template.name    : '';
+  document.getElementById('template-subject').value = template ? template.subject : '';
+  document.getElementById('template-body').value    = template ? template.body    : '';
+  new Modal('template-editor-modal').open();
+}
+
+function wireTemplateEditor() {
+  document.getElementById('new-template-btn')?.addEventListener('click', () => openTemplateEditor());
+  document.getElementById('template-editor-cancel')?.addEventListener('click', () => new Modal('template-editor-modal').close());
+  document.getElementById('template-editor-modal').querySelector('.modal-close')?.addEventListener('click', () => new Modal('template-editor-modal').close());
+
+  document.getElementById('template-editor-save')?.addEventListener('click', async () => {
+    const id      = document.getElementById('template-editor-id').value;
+    const name    = document.getElementById('template-name').value.trim();
+    const subject = document.getElementById('template-subject').value.trim();
+    const body    = document.getElementById('template-body').value.trim();
+    if (!name)  { Toast.warning('Template name is required'); return; }
+    if (!body)  { Toast.warning('Template body is required'); return; }
+    const btn = document.getElementById('template-editor-save');
+    btn.disabled = true; btn.textContent = 'Saving…';
+    try {
+      if (id) {
+        const updated = await API.templates.update(id, { name, subject, body });
+        const idx = _templates.findIndex(t => t.id === id);
+        if (idx >= 0) _templates[idx] = updated;
+      } else {
+        const created = await API.templates.create({ name, subject, body });
+        _templates.push(created);
+      }
+      new Modal('template-editor-modal').close();
+      renderTemplatesPage();
+      Toast.success('Template saved');
+    } catch (err) { Toast.error(err.message); }
+    finally { btn.disabled = false; btn.textContent = 'Save Template'; }
+  });
+}
+
+// ================================================================
+// LINKEDIN IMPORT
+// ================================================================
+
+let _liParsed = null;
+
+function wireLinkedInImport() {
+  const btn = document.getElementById('linkedin-import-btn');
+  if (!btn) return;
+  btn.addEventListener('click', () => {
+    _liParsed = null;
+    document.getElementById('li-url').value = '';
+    document.getElementById('li-rawtext').value = '';
+    document.getElementById('li-step-url').style.display = 'block';
+    document.getElementById('li-step-paste').style.display = 'none';
+    document.getElementById('li-preview').style.display = 'none';
+    document.getElementById('li-import-btn').style.display = 'inline-flex';
+    document.getElementById('li-confirm-btn').style.display = 'none';
+    document.getElementById('li-paste-btn').style.display = 'none';
+    document.getElementById('li-status').textContent = '';
+    new Modal('linkedin-import-modal').open();
+  });
+
+  document.getElementById('li-cancel-btn')?.addEventListener('click', () => new Modal('linkedin-import-modal').close());
+  document.getElementById('linkedin-import-modal').querySelector('.modal-close')?.addEventListener('click', () => new Modal('linkedin-import-modal').close());
+
+  document.getElementById('li-paste-btn')?.addEventListener('click', () => {
+    document.getElementById('li-step-paste').style.display = 'block';
+    document.getElementById('li-paste-btn').style.display = 'none';
+    document.getElementById('li-import-btn').textContent = 'Parse Profile';
+  });
+
+  document.getElementById('li-import-btn')?.addEventListener('click', async () => {
+    const url     = document.getElementById('li-url').value.trim();
+    const rawText = document.getElementById('li-rawtext').value.trim();
+    if (!url && !rawText) { Toast.warning('Enter a LinkedIn URL or paste profile text'); return; }
+    const btn = document.getElementById('li-import-btn');
+    const statusEl = document.getElementById('li-status');
+    btn.disabled = true; btn.textContent = 'Importing…'; statusEl.textContent = '';
+    try {
+      const result = await API.linkedin.import({ url, rawText: rawText || undefined });
+      _liParsed = result;
+      showLinkedInPreview(result);
+    } catch (err) {
+      if (err.message && err.message.includes('paste it')) {
+        // LinkedIn blocked — show paste step
+        document.getElementById('li-step-paste').style.display = 'block';
+        document.getElementById('li-paste-btn').style.display = 'none';
+        btn.textContent = 'Parse Profile';
+        statusEl.textContent = 'LinkedIn blocked auto-import. Paste the profile text above.';
+        statusEl.style.color = '#d97706';
+      } else {
+        Toast.error('Import failed: ' + err.message);
+        btn.textContent = 'Import Profile';
+      }
+    }
+    btn.disabled = false;
+  });
+
+  document.getElementById('li-confirm-btn')?.addEventListener('click', async () => {
+    if (!_liParsed) return;
+    try {
+      const candidate = await API.candidates.create({
+        name:       _liParsed.name || '',
+        email:      _liParsed.email || '',
+        title:      _liParsed.title || '',
+        company:    _liParsed.company || '',
+        linkedin:   _liParsed.linkedin || '',
+        summary:    _liParsed.summary || '',
+        background: _liParsed.summary || ''
+      });
+      // Merge career history via update
+      if (_liParsed.career && _liParsed.career.length > 0) {
+        await API.candidates.update(candidate.id, { career: _liParsed.career, education: _liParsed.education || [] });
+      }
+      allCandidates.push({ ...candidate, career: _liParsed.career || [], education: _liParsed.education || [] });
+      renderCandidates();
+      renderTagFilterBar();
+      new Modal('linkedin-import-modal').close();
+      Toast.success(`${_liParsed.name || 'Candidate'} imported successfully!`);
+    } catch (err) { Toast.error('Failed to add candidate: ' + err.message); }
+  });
+}
+
+function showLinkedInPreview(p) {
+  const preview = document.getElementById('li-preview');
+  const content = document.getElementById('li-preview-content');
+  preview.style.display = 'block';
+  content.innerHTML = `
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:0.85rem">
+      <div><span style="color:var(--text-muted)">Name:</span> <strong>${escapeHtml(p.name || '—')}</strong></div>
+      <div><span style="color:var(--text-muted)">Email:</span> ${p.email ? `<strong style="color:#16a34a">${escapeHtml(p.email)}</strong>` : '<span style="color:#94a3b8">Not found</span>'}</div>
+      <div><span style="color:var(--text-muted)">Title:</span> ${escapeHtml(p.title || '—')}</div>
+      <div><span style="color:var(--text-muted)">Company:</span> ${escapeHtml(p.company || '—')}</div>
+      <div><span style="color:var(--text-muted)">Location:</span> ${escapeHtml(p.location || '—')}</div>
+      <div><span style="color:var(--text-muted)">Positions:</span> ${(p.career || []).length}</div>
+    </div>
+    ${p.summary ? `<div style="margin-top:8px;font-size:0.82rem;color:var(--text-muted);line-height:1.5">${escapeHtml(p.summary.substring(0, 150))}${p.summary.length > 150 ? '…' : ''}</div>` : ''}
+    ${!p.email ? `<div style="margin-top:8px;font-size:0.78rem;color:#d97706">⚠ No email found. Add Hunter.io API key in Settings → Account to auto-find work emails.</div>` : ''}
+  `;
+  document.getElementById('li-import-btn').style.display = 'none';
+  document.getElementById('li-confirm-btn').style.display = 'inline-flex';
+  document.getElementById('li-status').textContent = 'Profile parsed successfully. Review and confirm.';
+  document.getElementById('li-status').style.color = '#16a34a';
+}
+
+// ================================================================
+// PUSH NOTIFICATIONS
+// ================================================================
+
+async function registerPushNotifications() {
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
+  try {
+    const reg = await navigator.serviceWorker.register('/sw.js');
+    const { publicKey } = await API.push.getVapidKey();
+    if (!publicKey) return; // VAPID not configured on server
+
+    const existing = await reg.pushManager.getSubscription();
+    if (existing) return; // Already subscribed
+
+    const permission = await Notification.requestPermission();
+    if (permission !== 'granted') return;
+
+    const sub = await reg.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: urlBase64ToUint8Array(publicKey)
+    });
+    await API.push.subscribe(sub.toJSON());
+    console.log('Push notifications enabled');
+  } catch (err) {
+    console.warn('Push registration failed:', err.message);
+  }
+}
+
+function urlBase64ToUint8Array(base64String) {
+  const padding = '='.repeat((4 - base64String.length % 4) % 4);
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const rawData = window.atob(base64);
+  const outputArray = new Uint8Array(rawData.length);
+  for (let i = 0; i < rawData.length; ++i) outputArray[i] = rawData.charCodeAt(i);
+  return outputArray;
+}
+
 async function loadSettingsPage() {
   try {
     const style = await API.settings.get();
@@ -1461,6 +1940,7 @@ async function loadSettingsPage() {
     document.getElementById('profile-title').value = style.title || (currentUser && currentUser.title) || '';
     if (document.getElementById('profile-company-name'))  document.getElementById('profile-company-name').value  = style.companyName  || '';
     if (document.getElementById('profile-company-pitch')) document.getElementById('profile-company-pitch').value = style.companyPitch || '';
+    if (document.getElementById('profile-hunter-key'))    document.getElementById('profile-hunter-key').value    = style.hunterApiKey || '';
     document.getElementById('style-tone').value = style.tone || 'warm';
     document.getElementById('style-notes').value = style.notes || '';
     document.getElementById('style-use').value = (style.use || []).join(', ');

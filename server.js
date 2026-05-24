@@ -68,9 +68,13 @@ app.use('/api/settings',   require('./routes/settings'));
 app.use('/api/ai',         require('./routes/ai'));
 app.use('/api/analytics',  require('./routes/analytics'));
 app.use('/api/queue',      require('./routes/queue'));
+app.use('/api/push',       require('./routes/push'));
+app.use('/api/templates',  require('./routes/templates'));
+app.use('/api/linkedin',   require('./routes/linkedin'));
 
 // ─── Email open tracking pixel ────────────────────────────────────────────────
 const BLANK_GIF = Buffer.from('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7', 'base64');
+const pushSvc = require('./services/push');
 app.get('/track/:trackingId', async (req, res) => {
   res.set({ 'Content-Type': 'image/gif', 'Cache-Control': 'no-store' });
   try {
@@ -81,6 +85,13 @@ app.get('/track/:trackingId', async (req, res) => {
       candidate.opened = true;
       candidate.openedAt = new Date().toISOString();
       await storage.saveAllCandidates(candidates);
+      // Fire push notification to recruiter
+      pushSvc.sendNotification(candidate.userId, {
+        title: '📬 Email Opened',
+        body: `${candidate.name} just opened your email`,
+        tag: `opened-${candidate.id}`,
+        url: '/dashboard'
+      }).catch(() => {});
     }
   } catch (err) {
     console.error('Tracking error:', err.message);
@@ -325,6 +336,13 @@ async function runAutoFetch() {
           if (!candidate.gmailThreadId && reply.gmailThreadId) candidate.gmailThreadId = reply.gmailThreadId;
 
           await storageService.saveCandidate(candidate);
+          // Push notification for new reply
+          pushSvc.sendNotification(user.id, {
+            title: '💬 New Reply',
+            body: `${candidate.name} replied to your email`,
+            tag: `reply-${candidate.id}`,
+            url: '/dashboard'
+          }).catch(() => {});
           matched++;
         }
 

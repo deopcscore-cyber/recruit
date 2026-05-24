@@ -23,10 +23,19 @@
         <span>Candidates</span>
         <span class="badge hidden" id="unread-badge">0</span>
       </div>
+      <div class="nav-item" data-page="hotleads">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+        <span>Hot Leads</span>
+        <span class="badge hidden" id="hotleads-badge">0</span>
+      </div>
       <div class="nav-item" data-page="followups">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
         <span>Follow-Ups</span>
         <span class="badge hidden" id="followup-badge">0</span>
+      </div>
+      <div class="nav-item" data-page="templates">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+        <span>Templates</span>
       </div>
       <div class="nav-item" data-page="analytics">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
@@ -63,8 +72,9 @@
         </div>
         <div class="topbar-actions">
           <input type="text" class="search-box" id="search-input" placeholder="Search…" />
-          <button class="btn btn-secondary btn-sm" id="fetch-email-btn" title="Fetch unread replies from Gmail">↓ Replies</button>
-          <button class="btn btn-secondary btn-sm" id="bulk-outreach-btn" title="Bulk outreach to selected Imported candidates">⚡ Bulk Outreach</button>
+          <button class="btn btn-secondary btn-sm" id="fetch-email-btn" title="Fetch unread replies">↓ Replies</button>
+          <button class="btn btn-secondary btn-sm" id="bulk-outreach-btn" title="Bulk outreach">⚡ Bulk Outreach</button>
+          <button class="btn btn-secondary btn-sm" id="linkedin-import-btn" title="Import from LinkedIn">in Import</button>
           <button class="btn btn-secondary btn-sm" id="import-btn">Import CSV</button>
           <button class="btn btn-primary btn-sm" id="add-candidate-btn" title="Add candidate (N)">+ Add</button>
         </div>
@@ -85,6 +95,9 @@
           <option>Interviewing</option>
           <option>Closed</option>
         </select>
+
+        <!-- Tag filter chips — populated dynamically -->
+        <div id="tag-filter-bar" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap"></div>
 
         <div class="view-toggle">
           <button id="view-pipeline-btn" class="active">
@@ -179,6 +192,11 @@
                   <div class="form-group">
                     <label>Company Pitch <span class="text-muted text-xs">(AI uses this as your company intro in every email)</span></label>
                     <textarea id="profile-company-pitch" rows="4" placeholder="I'm reaching out on behalf of Acme Corp — we're a leading provider of... [Describe your company in 2-3 sentences. This will appear in AI-generated outreach emails as paragraph 2.]" style="width:100%;resize:vertical"></textarea>
+                  </div>
+                  <div class="form-group">
+                    <label>Hunter.io API Key <span class="text-muted text-xs">(optional — finds email addresses when importing LinkedIn profiles)</span></label>
+                    <input type="password" id="profile-hunter-key" placeholder="Paste key from hunter.io/api-keys" autocomplete="off" />
+                    <p style="font-size:0.75rem;color:var(--text-muted);margin:4px 0 0">Free plan: 25 email lookups/month. <a href="https://hunter.io" target="_blank" style="color:var(--primary)">Get a free key →</a></p>
                   </div>
                   <button type="submit" class="btn btn-primary btn-sm">Save Profile</button>
                 </form>
@@ -442,6 +460,32 @@
       </div>
     </div><!-- /page-followups -->
 
+    <!-- ===== HOT LEADS PAGE ===== -->
+    <div class="page" id="page-hotleads">
+      <div class="topbar">
+        <div class="topbar-title">🔥 Hot Leads <span id="hotleads-subtitle" style="font-size:0.8rem;font-weight:400;color:#94a3b8;margin-left:6px"></span></div>
+        <div class="topbar-actions">
+          <button class="btn btn-secondary btn-sm" id="hotleads-refresh-btn">↻ Refresh</button>
+        </div>
+      </div>
+      <div id="hotleads-content" style="padding:24px 28px;overflow-y:auto;flex:1">
+        <div style="text-align:center;color:var(--text-muted);padding:40px">Loading…</div>
+      </div>
+    </div><!-- /page-hotleads -->
+
+    <!-- ===== TEMPLATES PAGE ===== -->
+    <div class="page" id="page-templates">
+      <div class="topbar">
+        <div class="topbar-title">Email Templates</div>
+        <div class="topbar-actions">
+          <button class="btn btn-primary btn-sm" id="new-template-btn">+ New Template</button>
+        </div>
+      </div>
+      <div id="templates-content" style="padding:24px 28px;overflow-y:auto;flex:1">
+        <div style="text-align:center;color:var(--text-muted);padding:40px">Loading…</div>
+      </div>
+    </div><!-- /page-templates -->
+
   </div><!-- /main-content -->
 </div><!-- /app -->
 
@@ -553,11 +597,102 @@
         <input type="text" id="bulk-subject" placeholder="Personalized per candidate" style="flex:1" />
         <span style="font-size:0.75rem;color:#94a3b8;white-space:nowrap">Leave blank to auto-personalize</span>
       </div>
+      <!-- Time window scheduling -->
+      <div style="margin-top:12px;border-top:1px solid var(--border);padding-top:12px">
+        <div style="font-size:0.78rem;font-weight:600;color:#475569;margin-bottom:8px;text-transform:uppercase;letter-spacing:.05em">Send Window <span style="font-weight:400;text-transform:none;color:var(--text-muted)">(optional — schedule within business hours)</span></div>
+        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+          <label style="display:flex;align-items:center;gap:6px;font-size:0.82rem;cursor:pointer">
+            <input type="checkbox" id="bulk-use-window" />
+            Enable send window
+          </label>
+          <div id="bulk-window-inputs" style="display:flex;align-items:center;gap:8px;opacity:0.4;pointer-events:none">
+            <input type="time" id="bulk-window-start" value="09:00" style="width:100px;font-size:0.82rem;padding:4px 6px" />
+            <span style="font-size:0.8rem;color:var(--text-muted)">to</span>
+            <input type="time" id="bulk-window-end" value="11:00" style="width:100px;font-size:0.82rem;padding:4px 6px" />
+            <label style="display:flex;align-items:center;gap:5px;font-size:0.82rem;cursor:pointer">
+              <input type="checkbox" id="bulk-weekdays-only" checked />
+              Weekdays only
+            </label>
+          </div>
+        </div>
+      </div>
     </div>
     <div class="modal-footer">
       <span id="bulk-progress" style="font-size:0.82rem;color:#64748b;margin-right:auto;flex:1"></span>
       <button class="btn btn-secondary" id="bulk-outreach-cancel-btn">Cancel</button>
       <button class="btn btn-primary" id="bulk-outreach-start-btn">Generate & Queue</button>
+    </div>
+  </div>
+</div>
+
+<!-- ========== LINKEDIN IMPORT MODAL ========== -->
+<div class="modal-overlay" id="linkedin-import-modal">
+  <div class="modal" style="max-width:560px">
+    <div class="modal-header">
+      <h3>Import from LinkedIn</h3>
+      <button class="modal-close">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div id="li-step-url">
+        <div class="form-group">
+          <label>LinkedIn Profile URL</label>
+          <input type="url" id="li-url" placeholder="https://linkedin.com/in/username" style="width:100%" />
+        </div>
+        <p style="font-size:0.8rem;color:var(--text-muted);margin:8px 0 0;line-height:1.5">
+          We'll try to auto-import the profile. If LinkedIn blocks it, you'll be asked to paste the text manually.
+        </p>
+      </div>
+      <div id="li-step-paste" style="display:none">
+        <div style="background:#fffbeb;border:1px solid #fcd34d;border-radius:8px;padding:12px;margin-bottom:12px;font-size:0.82rem;color:#92400e">
+          ⚠️ LinkedIn blocked automatic import. Please paste the profile text below.<br>
+          <strong>How:</strong> Open the LinkedIn profile → Select All (Ctrl+A) → Copy (Ctrl+C) → paste here.
+        </div>
+        <div class="form-group">
+          <label>Paste Profile Text</label>
+          <textarea id="li-rawtext" rows="8" placeholder="Paste the LinkedIn profile page text here…" style="width:100%;resize:vertical"></textarea>
+        </div>
+      </div>
+      <div id="li-preview" style="display:none;margin-top:12px;padding:14px;background:var(--bg-secondary);border-radius:8px;border:1px solid var(--border)">
+        <div style="font-size:0.78rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted);margin-bottom:10px">Parsed Profile — review before importing</div>
+        <div id="li-preview-content"></div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <span id="li-status" style="font-size:0.82rem;color:var(--text-muted);margin-right:auto"></span>
+      <button class="btn btn-secondary" id="li-cancel-btn">Cancel</button>
+      <button class="btn btn-secondary" id="li-paste-btn" style="display:none">Enter Text Manually</button>
+      <button class="btn btn-primary" id="li-import-btn">Import Profile</button>
+      <button class="btn btn-primary" id="li-confirm-btn" style="display:none">Add to Pipeline</button>
+    </div>
+  </div>
+</div>
+
+<!-- ========== TEMPLATE EDITOR MODAL ========== -->
+<div class="modal-overlay" id="template-editor-modal">
+  <div class="modal" style="max-width:600px">
+    <div class="modal-header">
+      <h3 id="template-editor-title">New Template</h3>
+      <button class="modal-close">&times;</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="template-editor-id" />
+      <div class="form-group">
+        <label>Template Name <span style="color:#ef4444">*</span></label>
+        <input type="text" id="template-name" placeholder="e.g. Initial Outreach, Follow-up #1, Resume Request…" />
+      </div>
+      <div class="form-group">
+        <label>Subject Line</label>
+        <input type="text" id="template-subject" placeholder="Something Worth a Few Minutes of Your Time, {{firstName}}" />
+      </div>
+      <div class="form-group">
+        <label>Body</label>
+        <textarea id="template-body" rows="10" style="width:100%;resize:vertical" placeholder="Dear {{firstName}},&#10;&#10;Use {{firstName}}, {{name}}, {{title}}, {{company}} as placeholders."></textarea>
+      </div>
+      <p style="font-size:0.78rem;color:var(--text-muted);margin:6px 0 0">Available placeholders: <code>{{firstName}}</code> <code>{{name}}</code> <code>{{title}}</code> <code>{{company}}</code></p>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" id="template-editor-cancel">Cancel</button>
+      <button class="btn btn-primary" id="template-editor-save">Save Template</button>
     </div>
   </div>
 </div>

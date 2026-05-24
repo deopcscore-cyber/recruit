@@ -23,7 +23,8 @@
     "nodemailer": "^8.0.7",
     "pdf-parse": "^1.1.1",
     "session-file-store": "^1.5.0",
-    "uuid": "^10.0.0"
+    "uuid": "^10.0.0",
+    "web-push": "^3.6.7"
   },
   "devDependencies": {
     "nodemon": "^3.1.4"

@@ -18,8 +18,10 @@ router.post('/outreach', async (req, res) => {
 
     const user = await storage.getUserById(req.session.userId);
     if (!user) return res.status(404).json({ error: 'User not found' });
-    if (!user.gmail || !user.gmail.connected) {
-      return res.status(400).json({ error: 'Gmail not connected. Connect Gmail in Settings first.' });
+    const hasEmail = (user.gmail && user.gmail.connected) ||
+      (user.zoho && user.zoho.connected && user.zoho.accessToken && user.zoho.refreshToken);
+    if (!hasEmail) {
+      return res.status(400).json({ error: 'No email provider connected. Connect Gmail or Zoho Mail in Settings first.' });
     }
 
     // Cancel any existing pending jobs so the user starts fresh
