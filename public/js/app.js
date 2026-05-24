@@ -1246,6 +1246,24 @@ function initSettingsPage() {
 
   tabBtns.forEach(btn => btn.addEventListener('click', () => activateTab(btn.dataset.tab)));
 
+  // ── Enrichment API keys save button ──────────────────────────────────────
+  document.getElementById('enrichment-save-btn')?.addEventListener('click', async () => {
+    const btn = document.getElementById('enrichment-save-btn');
+    btn.disabled = true; btn.textContent = 'Saving…';
+    try {
+      const coVal  = document.getElementById('enrichment-contactout-key')?.value.trim() || '';
+      const apVal  = document.getElementById('enrichment-apollo-key')?.value.trim()     || '';
+      const huVal  = document.getElementById('profile-hunter-key')?.value.trim()        || '';
+      await API.settings.update({
+        ...(coVal ? { contactOutApiKey: coVal } : {}),
+        ...(apVal ? { apolloApiKey:     apVal } : {}),
+        ...(huVal ? { hunterApiKey:     huVal } : {})
+      });
+      Toast.success('API keys saved');
+    } catch (err) { Toast.error(err.message); }
+    finally { btn.disabled = false; btn.textContent = 'Save API Keys'; }
+  });
+
   document.getElementById('connect-gmail-btn').addEventListener('click', async () => {
     try {
       const { url } = await API.email.getConnectUrl();
@@ -1859,9 +1877,10 @@ function wireLinkedInImport() {
       const emailOverride = (document.getElementById('li-email-override')?.value || '').trim();
       const candidate = await API.candidates.create({
         name:       _liParsed.name || '',
-        email:      emailOverride || _liParsed.email || '',
+        email:      emailOverride || _liParsed.personalEmail || _liParsed.email || '',
         title:      _liParsed.title || '',
         company:    _liParsed.company || '',
+        phone:      _liParsed.phone || '',
         linkedin:   _liParsed.linkedin || '',
         summary:    _liParsed.summary || '',
         background: _liParsed.summary || ''
@@ -1883,25 +1902,37 @@ function showLinkedInPreview(p) {
   const preview = document.getElementById('li-preview');
   const content = document.getElementById('li-preview-content');
   preview.style.display = 'block';
+  // Build email/phone found row
+  const emailFoundHtml = (() => {
+    const rows = [];
+    if (p.personalEmail) rows.push(`<div style="display:flex;align-items:center;gap:6px"><span style="font-size:0.7rem;background:#dcfce7;color:#166534;padding:1px 7px;border-radius:999px;font-weight:600">Personal</span><span style="font-weight:600;color:var(--green)">${escapeHtml(p.personalEmail)}</span>${p.emailSource ? `<span style="font-size:0.72rem;color:var(--text-faint)">via ${escapeHtml(p.emailSource)}</span>` : ''}</div>`);
+    if (p.workEmail)     rows.push(`<div style="display:flex;align-items:center;gap:6px"><span style="font-size:0.7rem;background:#fef9c3;color:#854d0e;padding:1px 7px;border-radius:999px;font-weight:600">Work</span><span style="font-weight:500;color:var(--text)">${escapeHtml(p.workEmail)}</span></div>`);
+    if (p.phone)         rows.push(`<div style="display:flex;align-items:center;gap:6px"><span style="font-size:0.7rem;background:#e0e7ff;color:#3730a3;padding:1px 7px;border-radius:999px;font-weight:600">Phone</span><span style="font-weight:500;color:var(--text)">${escapeHtml(p.phone)}</span></div>`);
+    if (rows.length === 0) return `<div style="font-size:0.8rem;color:var(--text-muted)">No email found automatically — enter one below or add ContactOut / Apollo API keys in Settings.</div>`;
+    return `<div style="display:flex;flex-direction:column;gap:5px">${rows.join('')}</div>`;
+  })();
+
   content.innerHTML = `
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px 16px;font-size:0.855rem">
-      <div><span style="color:var(--text-muted)">Name</span><div style="font-weight:600;color:var(--text);margin-top:1px">${escapeHtml(p.name || '—')}</div></div>
-      <div><span style="color:var(--text-muted)">Company</span><div style="font-weight:600;color:var(--text);margin-top:1px">${escapeHtml(p.company || '—')}</div></div>
-      <div><span style="color:var(--text-muted)">Title</span><div style="font-weight:500;color:var(--text);margin-top:1px">${escapeHtml(p.title || '—')}</div></div>
-      <div><span style="color:var(--text-muted)">Location</span><div style="font-weight:500;color:var(--text);margin-top:1px">${escapeHtml(p.location || '—')}</div></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px 16px;font-size:0.855rem;margin-bottom:10px">
+      <div><span style="color:var(--text-muted);font-size:0.75rem">Name</span><div style="font-weight:600;color:var(--text);margin-top:1px">${escapeHtml(p.name || '—')}</div></div>
+      <div><span style="color:var(--text-muted);font-size:0.75rem">Company</span><div style="font-weight:600;color:var(--text);margin-top:1px">${escapeHtml(p.company || '—')}</div></div>
+      <div><span style="color:var(--text-muted);font-size:0.75rem">Title</span><div style="font-weight:500;color:var(--text);margin-top:1px">${escapeHtml(p.title || '—')}</div></div>
+      <div><span style="color:var(--text-muted);font-size:0.75rem">Location</span><div style="font-weight:500;color:var(--text);margin-top:1px">${escapeHtml(p.location || '—')}</div></div>
     </div>
-    ${p.summary ? `<div style="margin-top:10px;font-size:0.81rem;color:var(--text-muted);line-height:1.55">${escapeHtml(p.summary.substring(0, 180))}${p.summary.length > 180 ? '…' : ''}</div>` : ''}
-    ${(p.career||[]).length > 0 ? `<div style="margin-top:6px;font-size:0.77rem;color:var(--text-faint)">${(p.career||[]).length} position${(p.career||[]).length !== 1 ? 's' : ''} found</div>` : ''}
+    <div style="padding:10px 12px;background:var(--surface3);border:1px solid var(--border);border-radius:var(--radius);margin-bottom:4px">${emailFoundHtml}</div>
+    ${p.summary ? `<div style="margin-top:8px;font-size:0.8rem;color:var(--text-muted);line-height:1.5">${escapeHtml(p.summary.substring(0, 160))}${p.summary.length > 160 ? '…' : ''}</div>` : ''}
   `;
-  // Pre-fill the email override field
+
+  // Pre-fill the email override with the best found email
   const emailField = document.getElementById('li-email-override');
-  if (emailField) emailField.value = p.email || '';
+  if (emailField) emailField.value = p.personalEmail || p.email || '';
 
   document.getElementById('li-import-btn').style.display = 'none';
   document.getElementById('li-confirm-btn').style.display = 'inline-flex';
   const statusEl = document.getElementById('li-status');
-  statusEl.textContent = p.email ? '✓ Profile parsed — email found' : '✓ Profile parsed — enter email below if known';
-  statusEl.style.color = p.email ? 'var(--green)' : 'var(--yellow)';
+  const foundCount = [p.personalEmail, p.workEmail, p.phone].filter(Boolean).length;
+  statusEl.textContent = foundCount > 0 ? `✓ Parsed — ${foundCount} contact detail${foundCount !== 1 ? 's' : ''} found` : '✓ Profile parsed';
+  statusEl.style.color = foundCount > 0 ? 'var(--green)' : 'var(--text-muted)';
 }
 
 // ================================================================
@@ -2010,7 +2041,9 @@ async function loadSettingsPage() {
     document.getElementById('profile-title').value = style.title || (currentUser && currentUser.title) || '';
     if (document.getElementById('profile-company-name'))  document.getElementById('profile-company-name').value  = style.companyName  || '';
     if (document.getElementById('profile-company-pitch')) document.getElementById('profile-company-pitch').value = style.companyPitch || '';
-    if (document.getElementById('profile-hunter-key'))    document.getElementById('profile-hunter-key').value    = style.hunterApiKey || '';
+    if (document.getElementById('profile-hunter-key'))       document.getElementById('profile-hunter-key').value       = style.hunterApiKey     === '••••••••' ? '' : (style.hunterApiKey     || '');
+    if (document.getElementById('enrichment-contactout-key')) document.getElementById('enrichment-contactout-key').value = style.contactOutApiKey === '••••••••' ? '' : (style.contactOutApiKey || '');
+    if (document.getElementById('enrichment-apollo-key'))     document.getElementById('enrichment-apollo-key').value     = style.apolloApiKey     === '••••••••' ? '' : (style.apolloApiKey     || '');
     document.getElementById('style-tone').value = style.tone || 'warm';
     document.getElementById('style-notes').value = style.notes || '';
     document.getElementById('style-use').value = (style.use || []).join(', ');

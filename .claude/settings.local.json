@@ -13,7 +13,21 @@
       "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:3000/js/app.js)",
       "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:3000/js/modal.js)",
       "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:3000/js/api.js)",
-      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:3000/css/app.css)"
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:3000/css/app.css)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git push *)",
+      "Bash(git ls-remote *)",
+      "Bash(npm install *)",
+      "Bash(git reset *)",
+      "Bash(npm list *)",
+      "Bash(node --check /Users/marketingdeo/recruit/public/js/app.js)",
+      "Bash(node --check /Users/marketingdeo/recruit/services/push.js)",
+      "Bash(node --check /Users/marketingdeo/recruit/services/linkedin.js)",
+      "Bash(node --check /Users/marketingdeo/recruit/routes/push.js)",
+      "Bash(node --check /Users/marketingdeo/recruit/routes/templates.js)",
+      "Bash(node --check /Users/marketingdeo/recruit/routes/linkedin.js)",
+      "Bash(node --check /Users/marketingdeo/recruit/routes/settings.js)"
     ]
   }
 }

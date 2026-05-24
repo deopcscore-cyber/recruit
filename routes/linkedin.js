@@ -42,6 +42,9 @@ router.post('/bookmarklet', async (req, res) => {
     if (!profile || !profile.name) {
       return res.status(422).json({ error: 'Could not extract a name from the profile text. Try selecting more of the page.' });
     }
+    // Note: bookmarklet has no user session, so no API-key enrichment here.
+    // Enrichment happens when the user clicks "Add to Pipeline" in the dashboard
+    // (the import modal calls /api/linkedin/import with the URL for enrichment).
     const token = crypto.randomBytes(10).toString('hex');
     cleanExpired();
     pendingImports.set(token, { profile: { ...profile, linkedin: url || '' }, expires: Date.now() + 10 * 60 * 1000 });
@@ -92,14 +95,26 @@ router.post('/import', async (req, res) => {
       });
     }
 
-    // 4. Optionally enrich with Hunter.io email finder
-    let email = '';
+    // 4. Enrich with email + phone via configured providers (ContactOut → Apollo → Hunter.io)
     const user = await storage.getUserById(req.session.userId);
-    if (user && user.hunterApiKey && profile.name && profile.company) {
-      email = await linkedinSvc.findEmailViaHunter(profile.name, profile.company, user.hunterApiKey);
-    }
+    const enriched = await linkedinSvc.enrichContact({
+      name:            profile.name,
+      company:         profile.company,
+      linkedinUrl:     url || '',
+      hunterApiKey:    user?.hunterApiKey    || '',
+      contactOutApiKey: user?.contactOutApiKey || '',
+      apolloApiKey:    user?.apolloApiKey    || ''
+    });
 
-    return res.json({ ...profile, email, linkedin: url || '' });
+    return res.json({
+      ...profile,
+      email:         enriched.email,
+      personalEmail: enriched.personalEmail,
+      workEmail:     enriched.workEmail,
+      phone:         enriched.phone,
+      emailSource:   enriched.source,
+      linkedin:      url || ''
+    });
   } catch (err) {
     console.error('LinkedIn import error:', err);
     return res.status(500).json({ error: 'Import failed: ' + err.message });
