@@ -3,6 +3,17 @@ const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 const MODEL = 'claude-sonnet-4-6';
 
+// ─── Company context helper ───────────────────────────────────────────────────
+// Each user sets their own company name & pitch in Settings → Account.
+// These replace every hardcoded "Welltower Inc." reference in the AI prompts,
+// making the platform work for any recruiter at any company.
+function getCompanyContext(user) {
+  const name  = (user.companyName  || '').trim() || 'our company';
+  const pitch = (user.companyPitch || '').trim() ||
+    `I'm reaching out on behalf of ${name} — we're looking for experienced professionals who can make an impact at the leadership level.`;
+  return { name, pitch };
+}
+
 function formatCandidateContext(candidate) {
   const lines = [];
   lines.push(`Name: ${candidate.name || 'Unknown'}`);
@@ -58,10 +69,11 @@ function formatUserStyle(user) {
 async function generateOutreach(candidate, user) {
   const candidateInfo = formatCandidateContext(candidate);
   const styleInfo = formatUserStyle(user);
+  const company = getCompanyContext(user);
 
   const recruiterTitle = (user.title && user.title.trim()) ? user.title.trim() : 'Senior Talent Acquisition Coordinator';
 
-  const prompt = `You are writing a personalized outreach email from a recruiter at Welltower Inc. to an executive candidate. You must follow the exact structure and tone of the example below — this is the gold standard.
+  const prompt = `You are writing a personalized outreach email from a recruiter at ${company.name} to an executive candidate. You must follow the exact structure and tone of the example below — this is the gold standard.
 
 GOLD STANDARD EXAMPLE (study the structure, tone, and flow carefully):
 ---
@@ -69,14 +81,14 @@ Dear Tomeka,
 
 Your career in senior care is built on something most people in this field never have — you actually owned and operated an assisted living community. Running The Wright Manor from 2012 to 2016 means you understand what it takes to deliver care at the community level from the inside, not just from the advisory or referral side. From there you moved into senior placement and elder care advising, then into home care operations leadership at Wright Homecare Solutions, and more recently into member navigation at UnitedHealth Group and project management in home health — building a breadth of perspective across residential care, placement, home care operations, and health plan navigation that very few people in any single corner of the senior living world ever develop. Your CPR and health safety instruction practice, sustained for two decades alongside everything else, reflects someone who takes the care and safety dimensions of this work seriously at every level.
 
-I'm reaching out on behalf of Welltower Inc. (NYSE: WELL) — a company that operates at a truly unique intersection: healthcare and real estate. We own and manage a global portfolio of senior housing communities, post-acute care facilities, and outpatient medical properties, and the work we do shapes how millions of people experience care and community as they age.
+${company.pitch}
 
 We're looking for senior care professionals who understand what it takes to operate a care environment — not just support one from the outside — and who bring the hands-on operational knowledge that comes from having run one. Your background across ownership, placement, home care operations, and health plan navigation gives you a grounded, practical view of the senior care ecosystem that translates well into the environments we manage.
 
 If any of this resonates, feel free to reply here and I'd be happy to share more about what we're working on.
 
 Jill Barror
-Senior Talent Acquisition Coordinator at Welltower™ Inc.
+Senior Talent Acquisition Coordinator at ${company.name}
 ---
 
 RECRUITER STYLE:
@@ -93,10 +105,10 @@ PARAGRAPH 1 — Career arc (the heart of the email):
 - Continue by tracing their career chronologically — name specific companies, roles, and transitions in order, with dates where available. Show you actually read their background in detail.
 - End paragraph 1 with one specific differentiating detail — a certification, sustained practice, or unique dimension of their work that reveals character or depth. Phrase it as a reflection of who they are.
 
-PARAGRAPH 2 — Welltower introduction (use this almost verbatim every time):
-"I'm reaching out on behalf of Welltower Inc. (NYSE: WELL) — a company that operates at a truly unique intersection: healthcare and real estate. We own and manage a global portfolio of senior housing communities, post-acute care facilities, and outpatient medical properties, and the work we do shapes how millions of people experience care and community as they age."
+PARAGRAPH 2 — Company introduction (use the recruiter's company pitch below — adapt slightly for natural flow but keep the core message):
+"${company.pitch}"
 
-PARAGRAPH 3 — Bridge their background to Welltower's need:
+PARAGRAPH 3 — Bridge their background to the company's need:
 - "We're looking for [type of professional that matches their background] who understand what it takes to [do the specific thing they've done] — not just support one from the outside — and who bring the hands-on [operational/strategic/clinical] knowledge that comes from having [done what they've done]."
 - Follow with: "Your background across [their specific domains, named] gives you a [grounded/rare/distinctive] view of [the relevant ecosystem] that translates well into the environments we manage."
 
@@ -109,7 +121,7 @@ Example: "There is one part of what we are building right now that I kept out of
 
 SIGNATURE (after one blank line):
 ${user.name}
-${recruiterTitle} at Welltower™ Inc.
+${recruiterTitle} at ${company.name}
 
 CRITICAL RULES:
 - DO NOT mention any specific job title or role
@@ -134,12 +146,13 @@ Write the outreach email now:`;
 async function generateRoleJD(candidate, user) {
   const candidateInfo = formatCandidateContext(candidate);
   const styleInfo = formatUserStyle(user);
+  const company = getCompanyContext(user);
 
   // Derive a readable location for the JD header
   const candidateLocation = (candidate.location || '').trim();
   const jdLocation = candidateLocation ? candidateLocation : 'Remote / Hybrid';
 
-  const prompt = `You are creating a tailored leadership role description for Welltower Inc. to present to a specific executive candidate.
+  const prompt = `You are creating a tailored leadership role description for ${company.name} to present to a specific executive candidate.
 
 RECRUITER STYLE:
 ${styleInfo}
@@ -150,8 +163,8 @@ ${candidateInfo}
 INSTRUCTIONS:
 Create a detailed, personalized role description that feels written specifically for this person. Use markdown formatting — headers (##), bold (**text**), bullet points (-). Structure it as six sections:
 
-## [Role Title] — craft a specific title based on their background and Welltower's needs
-**Welltower Inc. | ${jdLocation} (Hybrid)**
+## [Role Title] — craft a specific title based on their background and the company's needs
+**${company.name} | ${jdLocation} (Hybrid)**
 
 ---
 
@@ -171,19 +184,19 @@ Create a detailed, personalized role description that feels written specifically
 ---
 
 ## Leadership Profile
-3-4 sentences describing the kind of leader Welltower is looking for, written to match this candidate's demonstrated style.
+3-4 sentences describing the kind of leader ${company.name} is looking for, written to match this candidate's demonstrated style.
 
 ---
 
-## What Welltower Offers
+## What ${company.name} Offers
 
-**Compensation:** Base salary **$400,000 – $500,000** depending on experience, annual performance bonus targeting **30–40% of base**, long-term equity participation through Welltower stock grants (3-year vesting), and a full executive benefits package including healthcare, dental, vision, 401(k) with company match, and executive life insurance.
+**Compensation:** Describe a compelling compensation structure appropriate for an executive-level role — include base salary range, performance bonus, equity/long-term incentives, and full benefits package. Make it feel premium but don't invent specific numbers unless you know them.
 
-**Mission:** 2-3 sentences on Welltower's unique position at the healthcare-real estate intersection.
+**Mission:** 2-3 sentences on ${company.name}'s unique position and why it matters. Draw from: "${company.pitch}"
 
-**Team:** 1-2 sentences on the collaborative, data-driven culture.
+**Team:** 1-2 sentences on the collaborative, high-performance culture.
 
-**Growth:** 1-2 sentences on the clear trajectory toward a Chief Strategy or Chief Healthcare Officer seat.
+**Growth:** 1-2 sentences on the clear trajectory and upward mobility for the right person.
 
 ---
 
@@ -205,13 +218,14 @@ Write the role description now:`;
 async function generateResumeFeedback(candidate, user) {
   const candidateInfo = formatCandidateContext(candidate);
   const styleInfo = formatUserStyle(user);
+  const company = getCompanyContext(user);
   const recruiterTitle = (user.title && user.title.trim()) ? user.title.trim() : 'Senior Talent Acquisition Coordinator';
 
   if (!candidate.resume || !candidate.resume.text) {
     throw new Error('No resume text available for this candidate');
   }
 
-  const prompt = `You are ${user.name}, ${recruiterTitle} at Welltower Inc. A candidate has admitted their resume doesn't fully capture their experience. You need to write a detailed, warm, honest email that: praises what IS genuinely strong, identifies specific gaps, explains why it matters, and recommends they work with a professional resume consultant — then asks if they'd like an introduction.
+  const prompt = `You are ${user.name}, ${recruiterTitle} at ${company.name}. A candidate has admitted their resume doesn't fully capture their experience. You need to write a detailed, warm, honest email that: praises what IS genuinely strong, identifies specific gaps, explains why it matters, and recommends they work with a professional resume consultant — then asks if they'd like an introduction.
 
 GOLD STANDARD EXAMPLE (follow this exact structure and tone):
 ---
@@ -219,7 +233,7 @@ Dear Tomeka,
 
 Thank you again for your interest in this opportunity and for being so transparent about your resume concerns. I actually appreciate that honesty quite a bit, because it confirms something I was already sensing while reviewing your background: the depth of your experience is significantly larger than what is currently being communicated on paper. And to be candid with you, that matters at this level.
 
-What we genuinely like about your background at Welltower is that your experience is not one-dimensional. Very few candidates have operated across ownership, assisted living operations, home care leadership, elder care advising, member navigation, safety instruction, and patient-facing healthcare systems all within the same career journey. The fact that you personally owned and operated Wright Manor immediately gives your profile operational credibility that cannot be manufactured. That alone changes how leadership teams view your perspective.
+What we genuinely like about your background at ${company.name} is that your experience is not one-dimensional. Very few candidates have operated across ownership, assisted living operations, home care leadership, elder care advising, member navigation, safety instruction, and patient-facing healthcare systems all within the same career journey. The fact that you personally owned and operated Wright Manor immediately gives your profile operational credibility that cannot be manufactured. That alone changes how leadership teams view your perspective.
 
 We also like that your experience reflects direct exposure to both the clinical and non-clinical sides of senior care operations. Your work inside UnitedHealth/Optum adds payer-side and care coordination literacy that many senior living operators simply do not have. Combined with your CPR and safety instruction background, it paints the picture of someone who understands care environments from multiple operational angles rather than from a single department lens.
 
@@ -242,7 +256,7 @@ If you are open to it, I would be happy to introduce you to a trusted consultant
 Let me know if you would like me to make that introduction.
 
 ${user.name}
-${recruiterTitle} at Welltower™ Inc.
+${recruiterTitle} at ${company.name}
 ---
 
 CANDIDATE INFORMATION:
@@ -255,7 +269,7 @@ INSTRUCTIONS — follow the gold standard structure exactly:
 1. "Dear [First Name],"
 2. Thank them for transparency — appreciate the honesty, it confirms what you were already sensing
 3. "And to be candid with you, that matters at this level."
-4. Paragraph: What Welltower genuinely LIKES about their background — be specific, name their actual companies/roles, highlight 2-3 genuinely impressive dimensions
+4. Paragraph: What ${company.name} genuinely LIKES about their background — be specific, name their actual companies/roles, highlight 2-3 genuinely impressive dimensions
 5. Paragraph: Another specific strength (clinical + non-clinical, payer-side, unique combination, etc.) — reference their actual background
 6. "That said, after reviewing the resume carefully, I do see several areas..."
 7. Paragraph: The document currently reads as [describe the gap] — be specific, not generic
@@ -301,10 +315,11 @@ Return ONLY the JSON object, no markdown, no extra text.`;
 async function generateVictoryEmail(candidate, user) {
   const candidateInfo = formatCandidateContext(candidate);
   const styleInfo = formatUserStyle(user);
+  const company = getCompanyContext(user);
   const recruiterTitle = (user.title && user.title.trim()) ? user.title.trim() : 'Senior Talent Acquisition Coordinator';
   const firstName = (candidate.name || '').split(' ')[0];
 
-  const prompt = `You are ${user.name}, ${recruiterTitle} at Welltower Inc. The candidate said yes to meeting Victory (the resume consultant). You are now writing the introduction email — addressed to the candidate but CC'ing Victory (victory@tobycareerconsults.com). This email must feel warm, specific, and urgent.
+  const prompt = `You are ${user.name}, ${recruiterTitle} at ${company.name}. The candidate said yes to meeting Victory (the resume consultant). You are now writing the introduction email — addressed to the candidate but CC'ing Victory (victory@tobycareerconsults.com). This email must feel warm, specific, and urgent.
 
 GOLD STANDARD EXAMPLE (follow this exact structure):
 ---
@@ -329,7 +344,7 @@ I do encourage both of you to prioritize this conversation sooner rather than la
 Looking forward to seeing this come together.
 
 ${user.name}
-${recruiterTitle} at Welltower™ Inc.
+${recruiterTitle} at ${company.name}
 ---
 
 CANDIDATE INFORMATION:
@@ -363,6 +378,7 @@ Write the introduction email now:`;
 
 async function generateReply(candidate, user, lastMessage) {
   const candidateInfo = formatCandidateContext(candidate);
+  const company = getCompanyContext(user);
   const recruiterTitle = (user.title && user.title.trim()) ? user.title.trim() : 'Senior Talent Acquisition Coordinator';
 
   const threadContext = (candidate.thread || []).map(msg => ({
@@ -392,7 +408,7 @@ IMPORTANT: Only use this structure if the resume is what they're talking about. 
     nextStep = `NEXT PIPELINE STEP: Keep the conversation warm and moving forward naturally based on context. Address whatever they said, then guide gently toward the logical next step.`;
   }
 
-  const prompt = `You are ${user.name}, ${recruiterTitle} at Welltower Inc., writing a reply to an executive candidate. This is a real, ongoing conversation. Your reply must do TWO things in order:
+  const prompt = `You are ${user.name}, ${recruiterTitle} at ${company.name}, writing a reply to an executive candidate. This is a real, ongoing conversation. Your reply must do TWO things in order:
 
 1. FIRST — Read and respond directly to what the candidate actually said in their last message
 2. THEN — Once their message is addressed, naturally transition to the next pipeline step
@@ -428,10 +444,10 @@ If they said they're not actively looking:
 → "I completely understand, and I genuinely appreciate your honesty. Most of the people I reach out to aren't actively looking — that's actually part of why I'm reaching out to you specifically. I'm not asking you to make any decisions today, just asking you to take a look at what we're working on and see if it's worth a conversation." Then move to next step.
 
 If they asked about the team, culture, or what the role looks like day-to-day:
-→ Speak to Welltower's mission-driven culture, the scale (1,500+ properties, global portfolio), the collaborative and data-driven environment, and the fact that this is a company where operational leaders have genuine influence. Don't overpromise specifics — say "I'd love to walk you through the team structure and what the day-to-day looks like on a call." Then move to next step.
+→ Speak to ${company.name}'s mission-driven culture, the collaborative and data-driven environment, and the fact that this is a company where operational leaders have genuine influence. Draw on this context: "${company.pitch}" Don't overpromise specifics — say "I'd love to walk you through the team structure and what the day-to-day looks like on a call." Then move to next step.
 
 If they raised a concern about location, travel, or relocation:
-→ Acknowledge it directly, note that Welltower has flexible hybrid/remote arrangements and they work with candidates on logistics. "Let's not let location be a blocker before we've even had a chance to talk — these are details we can work through together." Then move to next step.
+→ Acknowledge it directly, note that ${company.name} has flexible hybrid/remote arrangements and works with candidates on logistics. "Let's not let location be a blocker before we've even had a chance to talk — these are details we can work through together." Then move to next step.
 
 If they asked about the hiring timeline or process:
 → "We're in early stages of identifying the right person for this — which is actually a good place to be, because it means there's still time to position your background properly before formal review begins. That's exactly why I want to make sure [next step]."
@@ -452,7 +468,7 @@ CRITICAL RULES:
 - NEVER sound like a script — sound like a real person who read their message carefully
 - Reference their actual background (specific companies, roles, words they used) throughout
 - Keep it focused — don't try to do too much in one email
-- Signature at the end: ${user.name}\n${recruiterTitle} at Welltower™ Inc.
+- Signature at the end: ${user.name}\n${recruiterTitle} at ${company.name}
 - Output ONLY the email body starting with "Dear [First Name]," — no subject line, no extra commentary
 
 Write the reply now:`;
@@ -468,6 +484,7 @@ Write the reply now:`;
 
 async function generateFollowUp(candidate, user) {
   const candidateInfo = formatCandidateContext(candidate);
+  const company = getCompanyContext(user);
   const recruiterTitle = (user.title && user.title.trim()) ? user.title.trim() : 'Senior Talent Acquisition Coordinator';
   const firstName = (candidate.name || '').split(' ')[0];
   const steps = candidate.stepsCompleted || {};
@@ -495,7 +512,7 @@ WHAT TO WRITE (keep it to 3-4 short paragraphs):
 2. Acknowledge they're likely busy. Make it easy to respond — offer to answer questions if they have concerns about their resume before sending it.
 3. Remind them briefly why the resume matters at this stage: early screening, want to position them well.
 4. Soft close: "Whenever you have a moment" — no hard deadline, no pressure.
-Signature: ${user.name}\n${recruiterTitle} at Welltower™ Inc.`;
+Signature: ${user.name}\n${recruiterTitle} at ${company.name}`;
 
   } else if (steps.roleJD && !hasReplied) {
     // JD sent, no response at all
@@ -507,19 +524,19 @@ WHAT TO WRITE (keep it to 3-4 short paragraphs):
 2. Acknowledge it's a lot to read and timing isn't always right. Say something like "I didn't want it to get buried."
 3. Lower the bar: even a quick "not the right fit" helps you — but you're hoping they'll find it worth a conversation. Reference one specific thing from their background that makes them relevant.
 4. Soft CTA: "A quick reply either way tells me where you're at."
-Signature: ${user.name}\n${recruiterTitle} at Welltower™ Inc.`;
+Signature: ${user.name}\n${recruiterTitle} at ${company.name}`;
 
   } else if (steps.outreach && !hasReplied) {
     // Initial outreach, never replied
     scenarioInstructions = `FOLLOW-UP SCENARIO: Initial outreach was sent, no reply yet.
-You sent ${firstName} an outreach email ${daysSinceStr} about Welltower and they haven't responded.
+You sent ${firstName} an outreach email ${daysSinceStr} about ${company.name} and they haven't responded.
 
 WHAT TO WRITE (keep it to 3-4 short paragraphs):
 1. Open with "Dear ${firstName}," — acknowledge that your first message may have gotten buried or the timing wasn't right. Don't open with an apology or "I wanted to follow up."
-2. One sentence re-sparking the curiosity hook — hint there's a specific detail about what Welltower is building that you still haven't shared. Don't repeat the full outreach.
+2. One sentence re-sparking the curiosity hook — hint there's a specific detail about what ${company.name} is building that you still haven't shared. Don't repeat the full outreach.
 3. Lower the bar even further: "Even a one-line reply tells me whether it's worth five minutes of your time."
 4. Warmly close — no pressure, no deadline.
-Signature: ${user.name}\n${recruiterTitle} at Welltower™ Inc.
+Signature: ${user.name}\n${recruiterTitle} at ${company.name}
 
 LAST OUTREACH BODY (for reference — do NOT repeat it, just draw from it):
 ${lastOutBody}`;
@@ -535,13 +552,13 @@ WHAT TO WRITE (keep it to 3 short paragraphs):
 1. Open with "Dear ${firstName}," — a brief, warm check-in that references where the conversation left off. Don't use "touching base" or "circling back."
 2. Keep things alive without pressure — remind them of one specific reason this opportunity is relevant to their background.
 3. Simple CTA: ask if they'd like to continue the conversation.
-Signature: ${user.name}\n${recruiterTitle} at Welltower™ Inc.
+Signature: ${user.name}\n${recruiterTitle} at ${company.name}
 
 LAST MESSAGE FROM CANDIDATE (for reference):
 ${lastMsg}`;
   }
 
-  const prompt = `You are ${user.name}, ${recruiterTitle} at Welltower Inc., writing a follow-up email to an executive candidate. Follow-up emails must be SHORT (under 150 words in the body), warm, human, and specific to this person's background. Never sound like a template. Never use hollow phrases like "I hope this message finds you well" or "just touching base."
+  const prompt = `You are ${user.name}, ${recruiterTitle} at ${company.name}, writing a follow-up email to an executive candidate. Follow-up emails must be SHORT (under 150 words in the body), warm, human, and specific to this person's background. Never sound like a template. Never use hollow phrases like "I hope this message finds you well" or "just touching base."
 
 CANDIDATE INFORMATION:
 ${candidateInfo}
@@ -568,21 +585,24 @@ Write the follow-up email now:`;
 
 async function scoreCandidate(candidate, user) {
   const candidateInfo = formatCandidateContext(candidate);
+  const company = getCompanyContext(user);
 
-  const prompt = `You are a senior healthcare real estate recruiter at Welltower Inc. Score this executive candidate for fit with Welltower's strategic leadership needs.
+  const prompt = `You are a senior recruiter at ${company.name}. Score this executive candidate for fit with the company's strategic leadership needs.
+
+Company context: ${company.pitch}
 
 CANDIDATE:
 ${candidateInfo}
 
-Score them 1-10 on overall executive fit for Welltower (senior housing, healthcare REIT, data/innovation focus) and return ONLY a valid JSON object:
+Score them 1-10 on overall executive fit for ${company.name} and return ONLY a valid JSON object:
 {
   "score": <integer 1-10>,
-  "rationale": "<2-3 specific sentences about this candidate's fit, referencing their actual background>",
+  "rationale": "<2-3 specific sentences about this candidate's fit for ${company.name}, referencing their actual background>",
   "strengths": ["<strength 1>", "<strength 2>", "<strength 3>"],
   "concerns": ["<concern 1>", "<concern 2>"]
 }
 
-Score 8-10: exceptional fit (deep healthcare + strategic + executive). 5-7: solid fit with gaps. 1-4: significant gaps.
+Score 8-10: exceptional fit (deep relevant experience + strategic + executive). 5-7: solid fit with gaps. 1-4: significant gaps.
 Return ONLY the JSON.`;
 
   const response = await client.messages.create({

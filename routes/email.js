@@ -180,6 +180,9 @@ router.post('/send', requireAuth, async (req, res) => {
     return res.json({ success: true, gmailMessageId, gmailThreadId, candidate });
   } catch (err) {
     console.error('Send email error:', err);
+    if (err.message && err.message.startsWith('GMAIL_REAUTH_REQUIRED')) {
+      return res.status(400).json({ error: err.message, reauth: 'gmail' });
+    }
     return res.status(500).json({ error: 'Failed to send email: ' + err.message });
   }
 });
@@ -354,16 +357,20 @@ router.post('/deliverability-test', requireAuth, async (req, res) => {
     const ts = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     const testSubject = `Deliverability Check — ${ts}`;
 
+    const companyName = (user.companyName || '').trim() || 'our company';
+    const companyPitch = (user.companyPitch || '').trim() ||
+      `I'm reaching out on behalf of ${companyName} — we're currently looking for experienced professionals who can make an impact at the leadership level.`;
+
     const testBody = `Dear Test Recipient,
 
-Your career in senior living leadership reflects something most professionals in this field never develop — a genuine combination of operational depth, strategic perspective, and direct care experience built across multiple environments over time.
+Your career reflects something most professionals in this field never develop — a genuine combination of operational depth, strategic perspective, and direct experience built across multiple environments over time.
 
-I'm reaching out on behalf of Welltower Inc. (NYSE: WELL) — a company that operates at a truly unique intersection: healthcare and real estate. We own and manage a global portfolio of senior housing communities, post-acute care facilities, and outpatient medical properties, and the work we do shapes how millions of people experience care and community as they age.
+${companyPitch}
 
-We're looking for senior living professionals who understand what it takes to lead a care environment — not just support one from the outside — and who bring the hands-on operational knowledge that comes from having led one. There is one part of what we are building right now that I kept out of this email on purpose — the kind of detail that is easier to show than describe, and that I think lands differently once you see the full picture. If any part of this caught your attention, reply here and I will send it over. No calls to schedule, no commitments — just a reply.
+We're looking for professionals who understand what it takes to lead at this level — not just support from the outside. There is one part of what we are building right now that I kept out of this email on purpose — the kind of detail that is easier to show than describe. If any part of this caught your attention, reply here and I will send it over. No calls to schedule, no commitments — just a reply.
 
 ${recruiterName}
-${recruiterTitle} at Welltower™ Inc.`;
+${recruiterTitle} at ${companyName}`;
 
     // 1. Always send to own account (for inbox/spam check)
     const { gmailThreadId, gmailMessageId } = await emailSvc.sendEmail(
@@ -466,8 +473,8 @@ router.post('/test', requireAuth, async (req, res) => {
 
     await emailSvc.sendEmail(req.session.userId, {
       to: selfAddr,
-      subject: 'Welltower Recruiter — Connection Test',
-      body: `<p>Hello ${user.name},</p><p>Your ${provider} connection is working correctly. You can now send emails through the Welltower Recruiter platform.</p><p>— Welltower Recruiter</p>`
+      subject: 'Recruit Pro — Connection Test',
+      body: `<p>Hello ${user.name},</p><p>Your ${provider} connection is working correctly. You can now send emails through the Recruit Pro platform.</p><p>— Recruit Pro</p>`
     });
 
     return res.json({ success: true });

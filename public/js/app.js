@@ -7,6 +7,23 @@ let allCandidates = [];
 let currentView = 'pipeline';
 let currentFilter = { stage: '', search: '' };
 
+// Handle token-expired errors — show a reconnect banner and mark Gmail as disconnected locally
+function handleReauthError(err) {
+  if (!err || !err.reauth) return false;
+  if (err.reauth === 'gmail') {
+    // Mark local user state as disconnected so UI reflects it
+    if (currentUser && currentUser.gmail) currentUser.gmail.connected = false;
+    Toast.error('⚠️ Gmail disconnected — token expired. Go to Settings → Email and reconnect Gmail.');
+    // Flash the settings button to draw attention
+    const settingsBtn = document.querySelector('[data-view="settings"]');
+    if (settingsBtn) {
+      settingsBtn.style.outline = '2px solid #ef4444';
+      setTimeout(() => { settingsBtn.style.outline = ''; }, 4000);
+    }
+  }
+  return true;
+}
+
 // ---- Boot ----
 document.addEventListener('DOMContentLoaded', async () => {
   // Dark mode
@@ -365,7 +382,7 @@ async function handleFetchEmails() {
       Toast.show('No new emails found in the last 14 days');
     }
   } catch (err) {
-    Toast.error('Failed to fetch emails: ' + err.message);
+    if (!handleReauthError(err)) Toast.error('Failed to fetch emails: ' + err.message);
   } finally {
     btn.disabled = false; btn.textContent = '↓ Replies';
   }
@@ -899,7 +916,7 @@ async function sendFollowUpEmail(candidateId) {
     allCandidates = await API.candidates.list();
     loadFollowUpPage();
   } catch (err) {
-    Toast.error('Failed to send: ' + err.message);
+    if (!handleReauthError(err)) Toast.error('Failed to send: ' + err.message);
     sendBtn.disabled = false; sendBtn.textContent = 'Send Follow-Up';
   }
 }
@@ -1142,7 +1159,7 @@ function initSettingsPage() {
 
     // Fall back to standard outreach template if fields are empty
     const analyzeSubject = subject || 'Something Worth a Few Minutes of Your Time';
-    const analyzeBody    = body    || `Dear [First Name],\n\nYour career in senior living leadership reflects something most professionals in this field never develop — a genuine combination of operational depth, strategic perspective, and direct care experience built across multiple environments over time.\n\nI'm reaching out on behalf of Welltower Inc. (NYSE: WELL) — a company that operates at a truly unique intersection: healthcare and real estate. We own and manage a global portfolio of senior housing communities, post-acute care facilities, and outpatient medical properties, and the work we do shapes how millions of people experience care and community as they age.\n\nWe're looking for senior living professionals who understand what it takes to lead a care environment — not just support one from the outside. There is one part of what we are building right now that I kept out of this email on purpose — the kind of detail that is easier to show than describe. If any part of this caught your attention, reply here and I will send it over. No calls to schedule, no commitments — just a reply.\n\nJill Barror\nSenior Talent Acquisition Coordinator at Welltower™ Inc.`;
+    const analyzeBody    = body    || `Dear [First Name],\n\nYour career reflects something most professionals in this field never develop — a genuine combination of operational depth, strategic perspective, and direct experience built across multiple environments over time.\n\n[Your company pitch paragraph will appear here — fill in Company Pitch in Settings → Account to customise this.]\n\nWe're looking for professionals who understand what it takes to lead at this level — not just support from the outside. There is one part of what we are building right now that I kept out of this email on purpose — the kind of detail that is easier to show than describe. If any part of this caught your attention, reply here and I will send it over. No calls to schedule, no commitments — just a reply.\n\n[Your Name]\n[Your Title]`;
 
     const { score, issues, positives } = analyzeEmailContent(analyzeSubject, analyzeBody);
 
@@ -1294,7 +1311,9 @@ function initSettingsPage() {
     try {
       const data = {
         name: document.getElementById('profile-name').value.trim(),
-        title: document.getElementById('profile-title').value.trim()
+        title: document.getElementById('profile-title').value.trim(),
+        companyName: document.getElementById('profile-company-name').value.trim(),
+        companyPitch: document.getElementById('profile-company-pitch').value.trim()
       };
       await API.settings.update(data);
       if (currentUser) {
@@ -1430,6 +1449,8 @@ async function loadSettingsPage() {
     const style = await API.settings.get();
     document.getElementById('profile-name').value = style.name || (currentUser && currentUser.name) || '';
     document.getElementById('profile-title').value = style.title || (currentUser && currentUser.title) || '';
+    if (document.getElementById('profile-company-name'))  document.getElementById('profile-company-name').value  = style.companyName  || '';
+    if (document.getElementById('profile-company-pitch')) document.getElementById('profile-company-pitch').value = style.companyPitch || '';
     document.getElementById('style-tone').value = style.tone || 'warm';
     document.getElementById('style-notes').value = style.notes || '';
     document.getElementById('style-use').value = (style.use || []).join(', ');

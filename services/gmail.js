@@ -152,6 +152,21 @@ async function getAuthedClient(user) {
   return oauth2Client;
 }
 
+// Detect invalid_grant (expired/revoked token) and mark Gmail as disconnected
+// so users get a clear prompt to reconnect instead of a cryptic API error.
+async function handleGmailError(err, user) {
+  const msg = (err.message || '').toLowerCase();
+  const isInvalidGrant = msg.includes('invalid_grant') ||
+    (err.response && err.response.data && err.response.data.error === 'invalid_grant');
+  if (isInvalidGrant && user && user.gmail) {
+    user.gmail.connected = false;
+    user.gmail.tokens = null;
+    await storage.saveUser(user);
+    throw new Error('GMAIL_REAUTH_REQUIRED: Your Gmail connection has expired. Please go to Settings → Email and reconnect Gmail.');
+  }
+  throw err;
+}
+
 function stripToPlainText(body) {
   return body
     .replace(/<[^>]+>/g, '')          // strip HTML tags
@@ -239,7 +254,12 @@ async function sendEmail(userId, { to, subject, body, threadId, inReplyTo, refer
   const user = await storage.getUserById(userId);
   if (!user) throw new Error('User not found');
 
-  const auth = await getAuthedClient(user);
+  let auth;
+  try {
+    auth = await getAuthedClient(user);
+  } catch (err) {
+    await handleGmailError(err, user);
+  }
   const gmail = google.gmail({ version: 'v1', auth });
 
   // Build "Display Name <email>" — this is what recipients see as the sender name
@@ -259,10 +279,12 @@ async function sendEmail(userId, { to, subject, body, threadId, inReplyTo, refer
   const requestBody = { raw };
   if (threadId) requestBody.threadId = threadId;
 
-  const response = await gmail.users.messages.send({
-    userId: 'me',
-    requestBody
-  });
+  let response;
+  try {
+    response = await gmail.users.messages.send({ userId: 'me', requestBody });
+  } catch (err) {
+    await handleGmailError(err, user);
+  }
 
   // Fetch the sent message to retrieve its SMTP Message-ID header.
   // This is required for correct In-Reply-To / References threading in replies.
@@ -295,7 +317,12 @@ async function fetchUnreadReplies(userId, candidateEmails = [], candidateThreadI
   const user = await storage.getUserById(userId);
   if (!user) throw new Error('User not found');
 
-  const auth = await getAuthedClient(user);
+  let auth;
+  try {
+    auth = await getAuthedClient(user);
+  } catch (err) {
+    await handleGmailError(err, user);
+  }
   const gmail = google.gmail({ version: 'v1', auth });
 
   const threadIds = Object.keys(candidateThreadIds);
@@ -474,8 +501,7 @@ function buildSignatureHtml(user) {
 
   const name       = (user.name  || '').trim();
   const title      = (user.title || 'Senior Talent Acquisition Coordinator').trim();
-  const company    = 'Welltower Inc.';
-  const ticker     = 'NYSE: WELL';
+  const company    = (user.companyName || '').trim() || 'our company';
   const photo      = (sig.photoUrl  || '').trim();
   const website    = (sig.website   || '').trim();
   const location   = (sig.location  || '').trim();
@@ -527,7 +553,7 @@ function buildSignatureHtml(user) {
       <td style="vertical-align:top;border-left:3px solid #1a3e72;padding-left:14px">
         <p style="margin:0;font-size:15px;font-weight:700;color:#0f172a;font-family:Arial,sans-serif;line-height:1.3">${name}</p>
         <p style="margin:3px 0 0;font-size:12px;color:#475569;font-family:Arial,sans-serif;line-height:1.4">${title}</p>
-        <p style="margin:3px 0 0;font-size:12px;font-weight:600;color:#1a3e72;font-family:Arial,sans-serif;line-height:1.4">${company}&nbsp;&nbsp;<span style="color:#94a3b8;font-weight:400">|</span>&nbsp;&nbsp;<span style="color:#64748b;font-weight:400">${ticker}</span></p>
+        ${company ? `<p style="margin:3px 0 0;font-size:12px;font-weight:600;color:#1a3e72;font-family:Arial,sans-serif;line-height:1.4">${company}</p>` : ''}
         ${contactLine}
       </td>
     </tr>
@@ -542,12 +568,13 @@ function buildSignaturePlainText(user) {
   if (!sig.enabled) return '';
   const name    = user.name  || '';
   const title   = user.title || 'Senior Talent Acquisition Coordinator';
+  const company = (user.companyName || '').trim() || '';
   const lines = [
     '',
     '—',
     name,
     title,
-    'Welltower Inc. | NYSE: WELL'
+    ...(company ? [company] : [])
   ];
   if (sig.website)  lines.push(sig.website);
   if (sig.location) lines.push(sig.location);

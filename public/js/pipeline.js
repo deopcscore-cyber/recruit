@@ -1283,7 +1283,10 @@ function renderThreadTab(body) {
       _modalOnUpdate(_modalCandidate);
       Toast.success('Email sent');
       renderThreadTab(body);
-    } catch (err) { Toast.error(err.message); }
+    } catch (err) {
+      if (typeof handleReauthError === 'function' && handleReauthError(err)) { /* handled */ }
+      else Toast.error(err.message);
+    }
     finally { btn.disabled = false; btn.textContent = 'Send Email'; }
   });
 }

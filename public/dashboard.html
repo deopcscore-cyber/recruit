@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Welltower Recruiter</title>
+  <title>Recruit Pro</title>
   <link rel="stylesheet" href="/css/app.css" />
 </head>
 <body>
@@ -166,11 +166,19 @@
                 <form id="profile-form">
                   <div class="form-group">
                     <label>Full Name</label>
-                    <input type="text" id="profile-name" placeholder="Jill Barror" />
+                    <input type="text" id="profile-name" placeholder="Your Name" />
                   </div>
                   <div class="form-group">
                     <label>Job Title <span class="text-muted text-xs">(shown in signatures)</span></label>
                     <input type="text" id="profile-title" placeholder="Senior Talent Acquisition Coordinator" />
+                  </div>
+                  <div class="form-group">
+                    <label>Company Name <span class="text-muted text-xs">(used in emails &amp; AI outreach)</span></label>
+                    <input type="text" id="profile-company-name" placeholder="Acme Corp" />
+                  </div>
+                  <div class="form-group">
+                    <label>Company Pitch <span class="text-muted text-xs">(AI uses this as your company intro in every email)</span></label>
+                    <textarea id="profile-company-pitch" rows="4" placeholder="I'm reaching out on behalf of Acme Corp — we're a leading provider of... [Describe your company in 2-3 sentences. This will appear in AI-generated outreach emails as paragraph 2.]" style="width:100%;resize:vertical"></textarea>
                   </div>
                   <button type="submit" class="btn btn-primary btn-sm">Save Profile</button>
                 </form>

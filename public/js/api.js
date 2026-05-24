@@ -19,7 +19,9 @@ const API = {
     }
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
-      throw new Error(data.error || `Request failed (${res.status})`);
+      const err = new Error(data.error || `Request failed (${res.status})`);
+      if (data.reauth) err.reauth = data.reauth; // e.g. 'gmail'
+      throw err;
     }
     return data;
   },
