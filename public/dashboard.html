@@ -219,6 +219,33 @@
             </div>
           </div>
 
+          <!-- LinkedIn Bookmarklet -->
+          <div class="settings-card">
+            <div class="settings-card-header">
+              <h3>LinkedIn Bookmarklet</h3>
+              <span class="settings-card-hint">One-click import from any LinkedIn profile</span>
+            </div>
+            <div class="settings-card-body">
+              <p style="font-size:0.855rem;color:var(--text-mid);line-height:1.65;margin:0 0 14px">
+                The bookmarklet runs <strong>inside your browser</strong> while you're logged into LinkedIn — bypassing the block entirely. Drag it to your bookmarks bar, then click it on any LinkedIn profile.
+              </p>
+              <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px">
+                <a id="li-bookmarklet-link" href="#"
+                   style="display:inline-flex;align-items:center;gap:7px;padding:9px 16px;background:var(--blue);color:#fff;border-radius:var(--radius);font-size:0.855rem;font-weight:600;text-decoration:none;cursor:grab;box-shadow:0 1px 3px rgba(59,91,219,.3)"
+                   title="Drag this to your bookmarks bar">
+                  <span style="font-size:1rem">🔗</span> Import to Recruit Pro
+                </a>
+                <span style="font-size:0.8rem;color:var(--text-muted)">← Drag this to your bookmarks bar</span>
+              </div>
+              <div style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px;font-size:0.82rem;color:var(--text-mid);line-height:1.9">
+                <strong style="color:var(--text)">Step 1</strong> — Drag the blue button above to your browser bookmarks bar<br>
+                <strong style="color:var(--text)">Step 2</strong> — Log into LinkedIn and open any profile page<br>
+                <strong style="color:var(--text)">Step 3</strong> — Click <em>Import to Recruit Pro</em> in your bookmarks bar<br>
+                <strong style="color:var(--text)">Step 4</strong> — This dashboard opens automatically with the profile pre-filled ✓
+              </div>
+            </div>
+          </div>
+
           <!-- Add Colleague -->
           <div class="settings-card">
             <div class="settings-card-header">
@@ -677,42 +704,61 @@
 
 <!-- ========== LINKEDIN IMPORT MODAL ========== -->
 <div class="modal-overlay" id="linkedin-import-modal">
-  <div class="modal" style="max-width:560px">
+  <div class="modal" style="max-width:580px">
     <div class="modal-header">
       <h3>Import from LinkedIn</h3>
       <button class="modal-close">&times;</button>
     </div>
-    <div class="modal-body">
+    <div class="modal-body" style="display:flex;flex-direction:column;gap:14px">
+
+      <!-- Step 1: URL -->
       <div id="li-step-url">
-        <div class="form-group">
+        <div class="form-group" style="margin-bottom:6px">
           <label>LinkedIn Profile URL</label>
-          <input type="url" id="li-url" placeholder="https://linkedin.com/in/username" style="width:100%" />
+          <input type="url" id="li-url" placeholder="https://www.linkedin.com/in/username" />
         </div>
-        <p style="font-size:0.8rem;color:var(--text-muted);margin:8px 0 0;line-height:1.5">
+        <p style="font-size:0.8rem;color:var(--text-muted);margin:0;line-height:1.5">
           We'll try to auto-import the profile. If LinkedIn blocks it, you'll be asked to paste the text manually.
         </p>
       </div>
+
+      <!-- Step 2: Paste fallback (shown when LinkedIn blocks auto-import) -->
       <div id="li-step-paste" style="display:none">
-        <div style="background:#fffbeb;border:1px solid #fcd34d;border-radius:8px;padding:12px;margin-bottom:12px;font-size:0.82rem;color:#92400e">
-          ⚠️ LinkedIn blocked automatic import. Please paste the profile text below.<br>
+        <div style="background:var(--yellow-light);border:1px solid #fde68a;border-radius:var(--radius);padding:12px;margin-bottom:10px;font-size:0.82rem;color:#7d4000;line-height:1.6">
+          ⚠️ <strong>LinkedIn blocked automatic import.</strong> Please paste the profile text below.<br>
           <strong>How:</strong> Open the LinkedIn profile → Select All (Ctrl+A) → Copy (Ctrl+C) → paste here.
         </div>
-        <div class="form-group">
+        <div class="form-group" style="margin-bottom:0">
           <label>Paste Profile Text</label>
-          <textarea id="li-rawtext" rows="8" placeholder="Paste the LinkedIn profile page text here…" style="width:100%;resize:vertical"></textarea>
+          <textarea id="li-rawtext" rows="7" placeholder="Paste the full LinkedIn profile page text here…" style="resize:vertical"></textarea>
         </div>
       </div>
-      <div id="li-preview" style="display:none;margin-top:12px;padding:14px;background:var(--bg-secondary);border-radius:8px;border:1px solid var(--border)">
-        <div style="font-size:0.78rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted);margin-bottom:10px">Parsed Profile — review before importing</div>
-        <div id="li-preview-content"></div>
+
+      <!-- Parsed preview -->
+      <div id="li-preview" style="display:none;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden">
+        <div style="padding:10px 14px;border-bottom:1px solid var(--border);background:var(--surface);font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--text-muted)">
+          Parsed Profile — Review Before Importing
+        </div>
+        <div style="padding:14px">
+          <div id="li-preview-content"></div>
+          <!-- Manual email override -->
+          <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
+            <label style="font-size:0.79rem;font-weight:600;color:var(--text-mid);display:block;margin-bottom:5px">
+              Email Address
+              <span style="font-weight:400;color:var(--text-muted)"> — edit or enter manually if not found above</span>
+            </label>
+            <input type="email" id="li-email-override" placeholder="candidate@company.com" style="font-size:0.875rem" />
+          </div>
+        </div>
       </div>
+
     </div>
     <div class="modal-footer">
-      <span id="li-status" style="font-size:0.82rem;color:var(--text-muted);margin-right:auto"></span>
-      <button class="btn btn-secondary" id="li-cancel-btn">Cancel</button>
-      <button class="btn btn-secondary" id="li-paste-btn" style="display:none">Enter Text Manually</button>
-      <button class="btn btn-primary" id="li-import-btn">Import Profile</button>
-      <button class="btn btn-primary" id="li-confirm-btn" style="display:none">Add to Pipeline</button>
+      <span id="li-status" style="font-size:0.82rem;margin-right:auto"></span>
+      <button class="btn btn-secondary btn-sm" id="li-cancel-btn">Cancel</button>
+      <button class="btn btn-secondary btn-sm" id="li-paste-btn" style="display:none">Paste Text Manually</button>
+      <button class="btn btn-primary btn-sm" id="li-import-btn">Import Profile</button>
+      <button class="btn btn-primary btn-sm" id="li-confirm-btn" style="display:none">Add to Pipeline</button>
     </div>
   </div>
 </div>

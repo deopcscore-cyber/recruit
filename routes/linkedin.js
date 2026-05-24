@@ -4,15 +4,69 @@
 
 const express    = require('express');
 const router     = express.Router();
+const crypto     = require('crypto');
 const requireAuth = require('../middleware/auth');
 const linkedinSvc = require('../services/linkedin');
 const storage    = require('../services/storage');
 
+/* ── In-memory token store for bookmarklet one-shot imports ──────────────────
+   Tokens expire in 10 minutes and are deleted on first use.
+   No auth required — the token itself is the secret.            */
+const pendingImports = new Map();
+
+function cleanExpired() {
+  const now = Date.now();
+  for (const [k, v] of pendingImports) if (v.expires < now) pendingImports.delete(k);
+}
+
+// ── CORS preflight for bookmarklet (called from linkedin.com) ─────────────
+router.options('/bookmarklet', (req, res) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Content-Type');
+  res.sendStatus(204);
+});
+
+// POST /api/linkedin/bookmarklet  — called by the browser bookmarklet
+// No session auth — the request comes from linkedin.com
+router.post('/bookmarklet', async (req, res) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Headers', 'Content-Type');
+
+  const { url, text } = req.body;
+  if (!text || text.trim().length < 50) {
+    return res.status(400).json({ error: 'Profile text is too short — make sure you copied the full page.' });
+  }
+  try {
+    const profile = await linkedinSvc.parseFromText(text, url || '');
+    if (!profile || !profile.name) {
+      return res.status(422).json({ error: 'Could not extract a name from the profile text. Try selecting more of the page.' });
+    }
+    const token = crypto.randomBytes(10).toString('hex');
+    cleanExpired();
+    pendingImports.set(token, { profile: { ...profile, linkedin: url || '' }, expires: Date.now() + 10 * 60 * 1000 });
+    return res.json({ token });
+  } catch (err) {
+    console.error('Bookmarklet parse error:', err);
+    return res.status(500).json({ error: 'Parse failed: ' + err.message });
+  }
+});
+
+// GET /api/linkedin/bookmarklet/:token  — dashboard retrieves the parsed profile
+// No session auth — one-time token is the secret; expires in 10 min
+router.get('/bookmarklet/:token', (req, res) => {
+  cleanExpired();
+  const entry = pendingImports.get(req.params.token);
+  if (!entry) return res.status(404).json({ error: 'Import token not found or expired. Please run the bookmarklet again.' });
+  pendingImports.delete(req.params.token); // one-time use
+  return res.json(entry.profile);
+});
+
+// ── Auth-required routes ──────────────────────────────────────────────────
 router.use(requireAuth);
 
 // POST /api/linkedin/import
 // Body: { url?, rawText? }
-// Returns parsed profile fields ready to pre-fill the add-candidate form
 router.post('/import', async (req, res) => {
   try {
     const { url, rawText } = req.body;
@@ -23,11 +77,9 @@ router.post('/import', async (req, res) => {
     let profile = null;
 
     // 1. Try URL scraping
-    if (url) {
-      profile = await linkedinSvc.scrapeFromUrl(url);
-    }
+    if (url) profile = await linkedinSvc.scrapeFromUrl(url);
 
-    // 2. If URL scraping failed and we have raw text, parse with Claude
+    // 2. Fall back to Claude text parsing
     if ((!profile || !profile.name) && rawText) {
       profile = await linkedinSvc.parseFromText(rawText, url || '');
     }

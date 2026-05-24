@@ -161,7 +161,19 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // Load candidates
   await loadCandidates();
-  navigateTo('candidates');
+
+  // Check for bookmarklet import token in URL (?li=TOKEN)
+  const liToken = params.get('li');
+  if (liToken) {
+    window.history.replaceState({}, '', '/dashboard');
+    navigateTo('candidates');
+    handleBookmarkletImport(liToken);
+  } else {
+    navigateTo('candidates');
+  }
+
+  // Generate the bookmarklet href using this app's origin
+  buildBookmarkletLink();
 
   // Register for push notifications (asks permission, no-op if not supported or denied)
   registerPushNotifications();
@@ -1843,9 +1855,11 @@ function wireLinkedInImport() {
   document.getElementById('li-confirm-btn')?.addEventListener('click', async () => {
     if (!_liParsed) return;
     try {
+      // Use manual email override if provided, else fall back to parsed email
+      const emailOverride = (document.getElementById('li-email-override')?.value || '').trim();
       const candidate = await API.candidates.create({
         name:       _liParsed.name || '',
-        email:      _liParsed.email || '',
+        email:      emailOverride || _liParsed.email || '',
         title:      _liParsed.title || '',
         company:    _liParsed.company || '',
         linkedin:   _liParsed.linkedin || '',
@@ -1870,21 +1884,86 @@ function showLinkedInPreview(p) {
   const content = document.getElementById('li-preview-content');
   preview.style.display = 'block';
   content.innerHTML = `
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:0.85rem">
-      <div><span style="color:var(--text-muted)">Name:</span> <strong>${escapeHtml(p.name || '—')}</strong></div>
-      <div><span style="color:var(--text-muted)">Email:</span> ${p.email ? `<strong style="color:#16a34a">${escapeHtml(p.email)}</strong>` : '<span style="color:#94a3b8">Not found</span>'}</div>
-      <div><span style="color:var(--text-muted)">Title:</span> ${escapeHtml(p.title || '—')}</div>
-      <div><span style="color:var(--text-muted)">Company:</span> ${escapeHtml(p.company || '—')}</div>
-      <div><span style="color:var(--text-muted)">Location:</span> ${escapeHtml(p.location || '—')}</div>
-      <div><span style="color:var(--text-muted)">Positions:</span> ${(p.career || []).length}</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px 16px;font-size:0.855rem">
+      <div><span style="color:var(--text-muted)">Name</span><div style="font-weight:600;color:var(--text);margin-top:1px">${escapeHtml(p.name || '—')}</div></div>
+      <div><span style="color:var(--text-muted)">Company</span><div style="font-weight:600;color:var(--text);margin-top:1px">${escapeHtml(p.company || '—')}</div></div>
+      <div><span style="color:var(--text-muted)">Title</span><div style="font-weight:500;color:var(--text);margin-top:1px">${escapeHtml(p.title || '—')}</div></div>
+      <div><span style="color:var(--text-muted)">Location</span><div style="font-weight:500;color:var(--text);margin-top:1px">${escapeHtml(p.location || '—')}</div></div>
     </div>
-    ${p.summary ? `<div style="margin-top:8px;font-size:0.82rem;color:var(--text-muted);line-height:1.5">${escapeHtml(p.summary.substring(0, 150))}${p.summary.length > 150 ? '…' : ''}</div>` : ''}
-    ${!p.email ? `<div style="margin-top:8px;font-size:0.78rem;color:#d97706">⚠ No email found. Add Hunter.io API key in Settings → Account to auto-find work emails.</div>` : ''}
+    ${p.summary ? `<div style="margin-top:10px;font-size:0.81rem;color:var(--text-muted);line-height:1.55">${escapeHtml(p.summary.substring(0, 180))}${p.summary.length > 180 ? '…' : ''}</div>` : ''}
+    ${(p.career||[]).length > 0 ? `<div style="margin-top:6px;font-size:0.77rem;color:var(--text-faint)">${(p.career||[]).length} position${(p.career||[]).length !== 1 ? 's' : ''} found</div>` : ''}
   `;
+  // Pre-fill the email override field
+  const emailField = document.getElementById('li-email-override');
+  if (emailField) emailField.value = p.email || '';
+
   document.getElementById('li-import-btn').style.display = 'none';
   document.getElementById('li-confirm-btn').style.display = 'inline-flex';
-  document.getElementById('li-status').textContent = 'Profile parsed successfully. Review and confirm.';
-  document.getElementById('li-status').style.color = '#16a34a';
+  const statusEl = document.getElementById('li-status');
+  statusEl.textContent = p.email ? '✓ Profile parsed — email found' : '✓ Profile parsed — enter email below if known';
+  statusEl.style.color = p.email ? 'var(--green)' : 'var(--yellow)';
+}
+
+// ================================================================
+// LINKEDIN BOOKMARKLET
+// ================================================================
+
+function buildBookmarkletLink() {
+  const el = document.getElementById('li-bookmarklet-link');
+  if (!el) return;
+  const origin = window.location.origin;
+  // Minified bookmarklet — extracts page text from LinkedIn and posts to our server
+  const code = `(function(){
+    if(!location.href.includes('linkedin.com/in/')){alert('Open a LinkedIn profile page first, then click this bookmark.');return;}
+    var btn=document.createElement('div');
+    btn.style.cssText='position:fixed;top:16px;right:16px;z-index:99999;background:#3b5bdb;color:#fff;padding:10px 18px;border-radius:8px;font-size:14px;font-family:sans-serif;box-shadow:0 4px 20px rgba(0,0,0,.25);cursor:default';
+    btn.textContent='⏳ Importing…';document.body.appendChild(btn);
+    var url=location.href;
+    var text=document.body.innerText;
+    fetch('${origin}/api/linkedin/bookmarklet',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url:url,text:text})})
+    .then(function(r){return r.json();})
+    .then(function(j){
+      if(j.error){btn.style.background='#e03131';btn.textContent='❌ '+j.error;setTimeout(function(){btn.remove();},4000);return;}
+      btn.textContent='✓ Imported! Opening app…';
+      window.open('${origin}/dashboard?li='+j.token,'_blank');
+      setTimeout(function(){btn.remove();},2000);
+    })
+    .catch(function(e){btn.style.background='#e03131';btn.textContent='❌ Error: '+e.message;setTimeout(function(){btn.remove();},4000);});
+  })()`;
+  el.href = 'javascript:' + encodeURIComponent(code.replace(/\s+/g, ' ').trim());
+  // Prevent the default link navigation when clicked (it should only work when dragged)
+  el.addEventListener('click', e => {
+    e.preventDefault();
+    Toast.show('Drag this button to your bookmarks bar — don\'t click it here');
+  });
+}
+
+async function handleBookmarkletImport(token) {
+  // Open the LinkedIn import modal and show a loading state
+  _liParsed = null;
+  document.getElementById('li-url').value = '';
+  document.getElementById('li-rawtext').value = '';
+  document.getElementById('li-step-url').style.display = 'block';
+  document.getElementById('li-step-paste').style.display = 'none';
+  document.getElementById('li-preview').style.display = 'none';
+  document.getElementById('li-import-btn').style.display = 'none';
+  document.getElementById('li-confirm-btn').style.display = 'none';
+  document.getElementById('li-paste-btn').style.display = 'none';
+  const statusEl = document.getElementById('li-status');
+  statusEl.textContent = '⏳ Loading imported profile…';
+  statusEl.style.color = 'var(--blue)';
+  new Modal('linkedin-import-modal').open();
+
+  try {
+    const profile = await API.linkedin.bookmarkletResult(token);
+    _liParsed = profile;
+    if (profile.linkedin) document.getElementById('li-url').value = profile.linkedin;
+    showLinkedInPreview(profile);
+  } catch (err) {
+    statusEl.textContent = '❌ ' + (err.message || 'Token expired — please run the bookmarklet again');
+    statusEl.style.color = 'var(--red)';
+    document.getElementById('li-import-btn').style.display = 'inline-flex';
+  }
 }
 
 // ================================================================

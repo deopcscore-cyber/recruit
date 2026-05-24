@@ -109,7 +109,8 @@ const API = {
 
   // LinkedIn Import
   linkedin: {
-    import(data) { return API.post('/api/linkedin/import', data); }
+    import(data) { return API.post('/api/linkedin/import', data); },
+    bookmarkletResult(token) { return API.get(`/api/linkedin/bookmarklet/${token}`); }
   },
 
   // Push Notifications
