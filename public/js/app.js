@@ -1215,28 +1215,19 @@ async function loadAnalyticsPage() {
 
 // ---- Settings ----
 function initSettingsPage() {
-  // ── Tab switching — driven entirely by JS so CSS caching can never break it ──
+  // ── Tab switching — CSS class-based, no inline style juggling ──
   const tabBtns   = Array.from(document.querySelectorAll('.settings-tab-btn'));
   const tabPanels = Array.from(document.querySelectorAll('.settings-tab-panel'));
+  const scrollEl  = document.querySelector('.settings-scroll');
 
   function activateTab(tabName) {
-    tabBtns.forEach(b => {
-      b.classList.toggle('active', b.dataset.tab === tabName);
-    });
-    tabPanels.forEach(p => {
-      const isActive = p.dataset.panel === tabName;
-      p.style.display   = isActive ? 'flex'  : 'none';
-      p.style.flexDirection = isActive ? 'column' : '';
-      p.style.gap           = isActive ? '16px'  : '';
-      p.style.padding       = isActive ? '20px'  : '';
-      p.style.overflowY     = isActive ? 'auto'  : '';
-      p.style.flex          = isActive ? '1'     : '';
-      p.classList.toggle('active', isActive);
-    });
+    tabBtns.forEach(b => b.classList.toggle('active', b.dataset.tab === tabName));
+    tabPanels.forEach(p => p.classList.toggle('active', p.dataset.panel === tabName));
+    // Scroll back to top when switching tabs
+    if (scrollEl) scrollEl.scrollTop = 0;
     try { localStorage.setItem('settings-tab', tabName); } catch (_) {}
   }
 
-  // Force-initialise immediately — hide every panel, then show the right one
   const savedTab = (() => { try { return localStorage.getItem('settings-tab'); } catch (_) { return null; } })();
   const startTab = (savedTab && tabBtns.some(b => b.dataset.tab === savedTab)) ? savedTab : 'account';
   activateTab(startTab);

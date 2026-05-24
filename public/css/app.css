@@ -1106,9 +1106,12 @@ select { appearance: auto; }
   background: var(--surface);
   flex-shrink: 0;
   gap: 2px;
+  overflow-x: auto;
 }
+.settings-tabs::-webkit-scrollbar { height: 0; }
+
 .settings-tab-btn {
-  padding: 12px 18px;
+  padding: 12px 16px;
   font-size: 0.845rem;
   font-weight: 500;
   color: var(--text-muted);
@@ -1119,24 +1122,30 @@ select { appearance: auto; }
   transition: color var(--transition), border-color var(--transition);
   white-space: nowrap;
   letter-spacing: -0.005em;
+  flex-shrink: 0;
 }
 .settings-tab-btn:hover  { color: var(--text); }
 .settings-tab-btn.active { color: var(--blue); border-bottom-color: var(--blue); font-weight: 600; }
 
-.settings-tab-panel { display: none; }
-.settings-tab-panel.active {
+/* Simple scroll container — all content lives here, tabs just show/hide panels */
+.settings-scroll {
+  flex: 1;
+  overflow-y: auto;
+  padding: 24px;
   display: flex;
   flex-direction: column;
-  gap: 16px;
-  padding: 22px 24px;
-  overflow-y: auto;
-  flex: 1;
+  gap: 0; /* panels manage their own gap */
 }
+.settings-scroll::-webkit-scrollbar { width: 5px; }
+.settings-scroll::-webkit-scrollbar-thumb { background: var(--border-mid); border-radius: 4px; }
 
-.settings-2col { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
-@media (max-width: 860px) { .settings-2col { grid-template-columns: 1fr; } }
-
-.settings-wrapper { flex: 1; overflow: hidden; display: flex; flex-direction: column; }
+/* Each panel is a vertical stack of cards */
+.settings-tab-panel {
+  display: none;
+  flex-direction: column;
+  gap: 16px;
+}
+.settings-tab-panel.active { display: flex; }
 
 .settings-card {
   background: var(--surface);
@@ -1151,8 +1160,7 @@ select { appearance: auto; }
   background: var(--surface2);
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 10px;
+  gap: 12px;
 }
 .settings-card-header h3 {
   margin: 0;
@@ -1160,6 +1168,12 @@ select { appearance: auto; }
   font-weight: 650;
   color: var(--text);
   letter-spacing: -0.01em;
+  flex-shrink: 0;
+}
+.settings-card-hint {
+  font-size: 0.77rem;
+  color: var(--text-muted);
+  font-weight: 400;
 }
 .settings-card-body { padding: 20px; }
 .settings-card-body .form-group:last-child { margin-bottom: 0; }

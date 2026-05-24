@@ -166,95 +166,65 @@
 
       <!-- Tab bar -->
       <div class="settings-tabs">
-        <button class="settings-tab-btn active" data-tab="account">Account</button>
+        <button class="settings-tab-btn" data-tab="account">Account</button>
         <button class="settings-tab-btn" data-tab="email">Email</button>
+        <button class="settings-tab-btn" data-tab="signature">Signature</button>
         <button class="settings-tab-btn" data-tab="ai">AI &amp; Style</button>
+        <button class="settings-tab-btn" data-tab="deliverability">Deliverability</button>
       </div>
 
-      <div class="settings-wrapper">
+      <!-- Single scroll container — no nested overflow tricks needed -->
+      <div class="settings-scroll">
 
         <!-- ═══ ACCOUNT TAB ═══════════════════════════════════════════════════ -->
-        <div class="settings-tab-panel active" data-panel="account" style="display:flex;flex-direction:column;gap:16px;padding:20px;overflow-y:auto;flex:1">
+        <div class="settings-tab-panel" data-panel="account">
 
-          <div class="settings-2col">
-
-            <!-- Profile -->
-            <div class="settings-card">
-              <div class="settings-card-header"><h3>Your Profile</h3></div>
-              <div class="settings-card-body">
-                <form id="profile-form">
+          <!-- Profile -->
+          <div class="settings-card">
+            <div class="settings-card-header">
+              <h3>Your Profile</h3>
+              <span class="settings-card-hint">Used in AI-generated emails and signatures</span>
+            </div>
+            <div class="settings-card-body">
+              <form id="profile-form">
+                <div class="form-row">
                   <div class="form-group">
                     <label>Full Name</label>
                     <input type="text" id="profile-name" placeholder="Your Name" />
                   </div>
                   <div class="form-group">
-                    <label>Job Title <span class="text-muted text-xs">(shown in signatures)</span></label>
+                    <label>Job Title</label>
                     <input type="text" id="profile-title" placeholder="Senior Talent Acquisition Coordinator" />
                   </div>
+                </div>
+                <div class="form-row">
                   <div class="form-group">
-                    <label>Company Name <span class="text-muted text-xs">(used in emails &amp; AI outreach)</span></label>
+                    <label>Company Name</label>
                     <input type="text" id="profile-company-name" placeholder="Acme Corp" />
                   </div>
                   <div class="form-group">
-                    <label>Company Pitch <span class="text-muted text-xs">(AI uses this as your company intro in every email)</span></label>
-                    <textarea id="profile-company-pitch" rows="4" placeholder="I'm reaching out on behalf of Acme Corp — we're a leading provider of... [Describe your company in 2-3 sentences. This will appear in AI-generated outreach emails as paragraph 2.]" style="width:100%;resize:vertical"></textarea>
-                  </div>
-                  <div class="form-group">
-                    <label>Hunter.io API Key <span class="text-muted text-xs">(optional — finds email addresses when importing LinkedIn profiles)</span></label>
+                    <label>Hunter.io API Key <span class="text-muted text-xs">(optional)</span></label>
                     <input type="password" id="profile-hunter-key" placeholder="Paste key from hunter.io/api-keys" autocomplete="off" />
-                    <p style="font-size:0.75rem;color:var(--text-muted);margin:4px 0 0">Free plan: 25 email lookups/month. <a href="https://hunter.io" target="_blank" style="color:var(--primary)">Get a free key →</a></p>
                   </div>
+                </div>
+                <div class="form-group">
+                  <label>Company Pitch <span class="text-muted text-xs">(AI includes this in every outreach email as paragraph 2)</span></label>
+                  <textarea id="profile-company-pitch" rows="4" placeholder="We're a leading provider of… [2–3 sentences describing your company. This is inserted automatically into all AI-generated emails.]"></textarea>
+                </div>
+                <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
+                  <p style="margin:0;font-size:0.76rem;color:var(--text-muted)">Hunter.io — <a href="https://hunter.io" target="_blank" style="color:var(--blue)">get a free API key</a> (25 email lookups/month) to find emails when importing LinkedIn profiles.</p>
                   <button type="submit" class="btn btn-primary btn-sm">Save Profile</button>
-                </form>
-              </div>
-            </div>
-
-            <!-- Email Integration -->
-            <div class="settings-card">
-              <div class="settings-card-header"><h3>Email Integration</h3></div>
-              <div class="settings-card-body" style="display:flex;flex-direction:column;gap:18px">
-
-                <!-- Gmail -->
-                <div>
-                  <div style="font-size:0.78rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text-mid);margin-bottom:10px">Gmail</div>
-                  <div id="gmail-status-indicator" class="gmail-status disconnected" style="margin-bottom:10px">
-                    <span class="status-dot"></span> Not connected
-                  </div>
-                  <div style="display:flex;gap:8px;flex-wrap:wrap">
-                    <button class="btn btn-primary btn-sm" id="connect-gmail-btn">Connect Gmail</button>
-                    <button class="btn btn-secondary btn-sm hidden" id="disconnect-gmail-btn">Disconnect</button>
-                    <button class="btn btn-secondary btn-sm hidden" id="test-email-btn">Send Test Email</button>
-                  </div>
-                  <p style="font-size:0.78rem;color:var(--text-muted);margin:8px 0 0;line-height:1.5">OAuth2 — no password stored.</p>
                 </div>
-
-                <hr style="border:none;border-top:1px solid var(--border);margin:0">
-
-                <!-- Zoho Mail -->
-                <div>
-                  <div style="font-size:0.78rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text-mid);margin-bottom:10px">Zoho Mail</div>
-                  <div id="zoho-status-indicator" style="display:flex;align-items:center;gap:6px;font-size:0.82rem;margin-bottom:10px">
-                    <span id="zoho-status-dot" style="width:8px;height:8px;border-radius:50%;background:var(--text-faint);display:inline-block"></span>
-                    <span id="zoho-status-text">Not connected</span>
-                  </div>
-                  <div id="zoho-connect-form" style="display:flex;gap:8px;flex-wrap:wrap">
-                    <button class="btn btn-primary btn-sm" id="connect-zoho-btn">Connect Zoho</button>
-                  </div>
-                  <div id="zoho-connected-actions" style="display:none;gap:8px;flex-wrap:wrap">
-                    <button class="btn btn-secondary btn-sm" id="disconnect-zoho-btn">Disconnect</button>
-                    <button class="btn btn-secondary btn-sm" id="test-zoho-btn">Send Test Email</button>
-                  </div>
-                  <p style="font-size:0.78rem;color:var(--text-muted);margin:8px 0 0;line-height:1.5">OAuth2 — authorise via Zoho, no password stored.</p>
-                </div>
-
-              </div>
+              </form>
             </div>
+          </div>
 
-          </div><!-- /.settings-2col -->
-
-          <!-- Colleague — full width -->
+          <!-- Add Colleague -->
           <div class="settings-card">
-            <div class="settings-card-header"><h3>Add Colleague Account</h3></div>
+            <div class="settings-card-header">
+              <h3>Add Colleague Account</h3>
+              <span class="settings-card-hint">Give a team member access to the platform</span>
+            </div>
             <div class="settings-card-body">
               <form id="colleague-form">
                 <div class="form-row">
@@ -263,8 +233,8 @@
                     <input type="text" id="col-name" placeholder="Jane Smith" required />
                   </div>
                   <div class="form-group">
-                    <label>Email</label>
-                    <input type="email" id="col-email" placeholder="jane@welltower.com" required />
+                    <label>Email Address</label>
+                    <input type="email" id="col-email" placeholder="jane@company.com" required />
                   </div>
                 </div>
                 <div class="form-group">
@@ -279,22 +249,71 @@
         </div><!-- /account panel -->
 
         <!-- ═══ EMAIL TAB ════════════════════════════════════════════════════ -->
-        <div class="settings-tab-panel" data-panel="email" style="display:none">
+        <div class="settings-tab-panel" data-panel="email">
 
-          <!-- Signature -->
+          <!-- Gmail -->
           <div class="settings-card">
-            <div class="settings-card-header"><h3>Email Signature</h3></div>
+            <div class="settings-card-header">
+              <h3>Gmail</h3>
+              <span class="settings-card-hint">Send emails directly from your Gmail account</span>
+            </div>
+            <div class="settings-card-body">
+              <div id="gmail-status-indicator" class="gmail-status disconnected" style="margin-bottom:14px">
+                <span class="status-dot"></span> Not connected
+              </div>
+              <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
+                <button class="btn btn-primary btn-sm" id="connect-gmail-btn">Connect Gmail</button>
+                <button class="btn btn-secondary btn-sm hidden" id="disconnect-gmail-btn">Disconnect</button>
+                <button class="btn btn-secondary btn-sm hidden" id="test-email-btn">Send Test Email</button>
+              </div>
+              <p style="margin:0;font-size:0.78rem;color:var(--text-muted);line-height:1.6">Connects via OAuth2 — no password stored. You'll be redirected to Google to authorise access.</p>
+            </div>
+          </div>
+
+          <!-- Zoho Mail -->
+          <div class="settings-card">
+            <div class="settings-card-header">
+              <h3>Zoho Mail</h3>
+              <span class="settings-card-hint">Alternative to Gmail — great for custom domain addresses</span>
+            </div>
+            <div class="settings-card-body">
+              <div id="zoho-status-indicator" style="display:flex;align-items:center;gap:8px;font-size:0.875rem;font-weight:500;margin-bottom:14px">
+                <span id="zoho-status-dot" style="width:8px;height:8px;border-radius:50%;background:var(--text-faint);display:inline-block;flex-shrink:0"></span>
+                <span id="zoho-status-text" style="color:var(--text-muted)">Not connected</span>
+              </div>
+              <div id="zoho-connect-form" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
+                <button class="btn btn-primary btn-sm" id="connect-zoho-btn">Connect Zoho Mail</button>
+              </div>
+              <div id="zoho-connected-actions" style="display:none;gap:8px;flex-wrap:wrap;margin-bottom:10px">
+                <button class="btn btn-secondary btn-sm" id="disconnect-zoho-btn">Disconnect</button>
+                <button class="btn btn-secondary btn-sm" id="test-zoho-btn">Send Test Email</button>
+              </div>
+              <p style="margin:0;font-size:0.78rem;color:var(--text-muted);line-height:1.6">Connects via OAuth2 — no password stored. You'll be redirected to Zoho to authorise access.</p>
+            </div>
+          </div>
+
+        </div><!-- /email panel -->
+
+        <!-- ═══ SIGNATURE TAB ════════════════════════════════════════════════ -->
+        <div class="settings-tab-panel" data-panel="signature">
+
+          <div class="settings-card">
+            <div class="settings-card-header">
+              <h3>Email Signature</h3>
+              <span class="settings-card-hint">Appended automatically to every outgoing email</span>
+            </div>
             <div class="settings-card-body">
               <form id="signature-form">
-                <div class="form-group" style="margin-bottom:14px">
-                  <label style="display:flex;align-items:center;gap:10px;cursor:pointer">
-                    <input type="checkbox" id="sig-enabled" style="width:16px;height:16px" />
-                    <span>Enable signature on all outgoing emails</span>
+                <div class="form-group">
+                  <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:0.875rem">
+                    <input type="checkbox" id="sig-enabled" style="width:16px;height:16px;flex-shrink:0" />
+                    <span style="font-weight:500;color:var(--text)">Enable signature on all outgoing emails</span>
                   </label>
                 </div>
+
                 <div class="form-row">
                   <div class="form-group">
-                    <label>Profile Photo URL <span class="text-muted text-xs">(direct link)</span></label>
+                    <label>Profile Photo URL <span class="text-muted text-xs">(direct image link)</span></label>
                     <input type="url" id="sig-photo" placeholder="https://example.com/photo.jpg" />
                   </div>
                   <div class="form-group">
@@ -302,12 +321,13 @@
                     <input type="text" id="sig-location" placeholder="Toledo, OH" />
                   </div>
                 </div>
+
                 <div class="form-group">
                   <label>Website URL</label>
-                  <input type="url" id="sig-website" placeholder="https://welltower.com" />
+                  <input type="url" id="sig-website" placeholder="https://yourcompany.com" />
                 </div>
-                <!-- Social links — compact 3-col -->
-                <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">
+
+                <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:14px">
                   <div class="form-group" style="margin-bottom:0">
                     <label>LinkedIn</label>
                     <input type="url" id="sig-linkedin" placeholder="linkedin.com/in/…" />
@@ -321,15 +341,18 @@
                     <input type="url" id="sig-twitter" placeholder="x.com/…" />
                   </div>
                 </div>
-                <div class="form-group" style="margin-top:14px">
+
+                <div class="form-group">
                   <label>Legal Disclaimer <span class="text-muted text-xs">(optional)</span></label>
                   <textarea id="sig-disclaimer" style="min-height:60px" placeholder="This email and any attachments are intended only for the use of the individual or entity to which they are addressed…"></textarea>
                 </div>
-                <div id="sig-preview-box" style="display:none;margin-top:14px;padding:16px;background:var(--surface2);border:1px solid var(--border);border-radius:8px">
-                  <p style="font-size:11px;color:var(--text-faint);text-transform:uppercase;letter-spacing:.5px;margin:0 0 10px;font-weight:600">Preview</p>
+
+                <div id="sig-preview-box" style="display:none;margin-bottom:14px;padding:16px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-lg)">
+                  <p style="font-size:0.7rem;color:var(--text-faint);text-transform:uppercase;letter-spacing:.06em;margin:0 0 10px;font-weight:700">Signature Preview</p>
                   <div id="sig-preview-content"></div>
                 </div>
-                <div style="display:flex;gap:8px;margin-top:14px">
+
+                <div style="display:flex;gap:8px">
                   <button type="submit" class="btn btn-primary btn-sm">Save Signature</button>
                   <button type="button" id="sig-preview-btn" class="btn btn-secondary btn-sm">Preview</button>
                 </div>
@@ -337,77 +360,16 @@
             </div>
           </div>
 
-          <!-- Deliverability Dashboard -->
-          <div class="settings-card">
-            <div class="settings-card-header"><h3>Deliverability Dashboard</h3></div>
-            <div class="settings-card-body" style="display:flex;flex-direction:column;gap:22px">
-
-              <!-- ① Content Score -->
-              <div>
-                <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:10px">
-                  <div>
-                    <div style="font-size:0.8rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text-mid)">① Content Score</div>
-                    <p style="margin:2px 0 0;font-size:0.78rem;color:var(--text-faint)">Instant scan — no email sent. Flags spam trigger words, caps, link density.</p>
-                  </div>
-                  <button class="btn btn-secondary btn-sm" id="content-score-btn" style="white-space:nowrap;flex-shrink:0">Analyze</button>
-                </div>
-                <div style="display:flex;flex-direction:column;gap:8px">
-                  <input type="text" id="cs-subject" placeholder="Subject line (optional)" style="font-size:0.85rem" />
-                  <textarea id="cs-body" style="min-height:80px;font-size:0.85rem;resize:vertical" placeholder="Paste email body — or leave blank to test the standard outreach template"></textarea>
-                </div>
-                <div id="cs-result" style="display:none;margin-top:12px"></div>
-              </div>
-
-              <hr style="border:none;border-top:1px solid var(--border);margin:0">
-
-              <!-- ② Inbox / Spam Test -->
-              <div>
-                <div style="font-size:0.8rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text-mid)">② Inbox / Spam Test</div>
-                <p style="margin:2px 0 10px;font-size:0.78rem;color:var(--text-faint)">Sends a real email and checks where it lands. Add a secondary inbox for cross-provider results.</p>
-                <div style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap">
-                  <input type="email" id="secondary-test-email" placeholder="Secondary inbox — e.g. you@outlook.com" style="flex:1;min-width:180px;font-size:0.85rem" />
-                  <button class="btn btn-secondary btn-xs" id="save-secondary-btn">Save</button>
-                </div>
-                <label style="display:flex;align-items:center;gap:8px;font-size:0.82rem;color:var(--text-mid);margin-bottom:12px;cursor:pointer">
-                  <input type="checkbox" id="include-secondary-cb" style="width:14px;height:14px" />
-                  Include secondary inbox in this test
-                </label>
-                <button class="btn btn-primary btn-sm" id="deliverability-run-btn">Send Test Emails</button>
-                <div id="deliverability-result" style="display:none;margin-top:14px">
-                  <div id="deliverability-status" style="display:flex;align-items:center;gap:12px;padding:13px 16px;border-radius:10px;font-size:0.875rem;font-weight:500"></div>
-                  <div id="deliverability-secondary-note" style="display:none;margin-top:8px;padding:10px 14px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;font-size:0.82rem;color:var(--text-mid);line-height:1.6"></div>
-                  <div id="deliverability-tips" style="margin-top:10px;font-size:0.82rem;color:var(--text-mid);line-height:1.7"></div>
-                </div>
-              </div>
-
-              <hr style="border:none;border-top:1px solid var(--border);margin:0">
-
-              <!-- ③ Mail-Tester -->
-              <div>
-                <div style="font-size:0.8rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text-mid)">③ Mail-Tester <span style="font-weight:400;text-transform:none;letter-spacing:0;font-size:0.75rem;color:var(--text-faint)">— most comprehensive (free)</span></div>
-                <p style="margin:2px 0 10px;font-size:0.78rem;color:var(--text-faint)">SPF/DKIM/DMARC, 50+ blacklists, SpamAssassin, HTML/text ratio.</p>
-                <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:11px 13px;font-size:0.82rem;color:var(--text-mid);line-height:1.9;margin-bottom:10px">
-                  <strong style="color:var(--text)">Step 1</strong> — Go to <a href="https://www.mail-tester.com" target="_blank" style="color:var(--blue);font-weight:600">mail-tester.com</a> and copy the test address shown<br>
-                  <strong style="color:var(--text)">Step 2</strong> — Paste it below and click <em>Send</em><br>
-                  <strong style="color:var(--text)">Step 3</strong> — Wait 30 seconds, then click <em>View Report</em>
-                </div>
-                <div style="display:flex;gap:8px;flex-wrap:wrap">
-                  <input type="email" id="mailtester-address" placeholder="test-abc123@srv1.mail-tester.com" style="flex:1;min-width:200px;font-size:0.85rem" />
-                  <button class="btn btn-secondary btn-sm" id="mailtester-send-btn" style="white-space:nowrap">Send</button>
-                </div>
-                <div id="mailtester-status" style="display:none;margin-top:10px;font-size:0.82rem"></div>
-              </div>
-
-            </div>
-          </div>
-
-        </div><!-- /email panel -->
+        </div><!-- /signature panel -->
 
         <!-- ═══ AI & STYLE TAB ═══════════════════════════════════════════════ -->
-        <div class="settings-tab-panel" data-panel="ai" style="display:none">
+        <div class="settings-tab-panel" data-panel="ai">
 
           <div class="settings-card">
-            <div class="settings-card-header"><h3>AI Writing Style</h3></div>
+            <div class="settings-card-header">
+              <h3>AI Writing Style</h3>
+              <span class="settings-card-hint">Controls the tone and language of all AI-generated emails</span>
+            </div>
             <div class="settings-card-body">
               <form id="style-form">
                 <div class="form-row">
@@ -430,17 +392,99 @@
                   <input type="text" id="style-avoid" placeholder="e.g. synergy, leverage, circle back" />
                 </div>
                 <div class="form-group">
-                  <label>Additional Instructions</label>
-                  <textarea id="style-notes" style="min-height:80px" placeholder="e.g. Always mention our global footprint, reference the mission-driven culture, emphasise the growth opportunity…"></textarea>
+                  <label>Additional Instructions for the AI</label>
+                  <textarea id="style-notes" style="min-height:100px" placeholder="e.g. Always mention our global footprint. Reference the mission-driven culture. Emphasise growth opportunity. Keep emails under 180 words."></textarea>
                 </div>
-                <button type="submit" class="btn btn-primary btn-sm">Save Style</button>
+                <button type="submit" class="btn btn-primary btn-sm">Save Style Settings</button>
               </form>
             </div>
           </div>
 
         </div><!-- /ai panel -->
 
-      </div><!-- /.settings-wrapper -->
+        <!-- ═══ DELIVERABILITY TAB ════════════════════════════════════════════ -->
+        <div class="settings-tab-panel" data-panel="deliverability">
+
+          <!-- ① Content Score -->
+          <div class="settings-card">
+            <div class="settings-card-header">
+              <h3>① Content Score</h3>
+              <span class="settings-card-hint">Instant scan — no email sent</span>
+            </div>
+            <div class="settings-card-body">
+              <p style="margin:0 0 12px;font-size:0.84rem;color:var(--text-muted);line-height:1.6">Flags spam trigger words, ALL CAPS, excessive exclamation marks, link density, and other patterns that cause emails to land in spam.</p>
+              <div class="form-group">
+                <label>Subject Line <span class="text-muted text-xs">(optional)</span></label>
+                <input type="text" id="cs-subject" placeholder="e.g. Exciting opportunity at Acme Corp!!!" />
+              </div>
+              <div class="form-group">
+                <label>Email Body</label>
+                <textarea id="cs-body" style="min-height:120px;resize:vertical" placeholder="Paste your email body here — or leave blank to test the standard AI outreach template"></textarea>
+              </div>
+              <button class="btn btn-primary btn-sm" id="content-score-btn">Analyze Content</button>
+              <div id="cs-result" style="display:none;margin-top:14px"></div>
+            </div>
+          </div>
+
+          <!-- ② Inbox / Spam Test -->
+          <div class="settings-card">
+            <div class="settings-card-header">
+              <h3>② Inbox / Spam Test</h3>
+              <span class="settings-card-hint">Sends a real email to check where it lands</span>
+            </div>
+            <div class="settings-card-body">
+              <p style="margin:0 0 14px;font-size:0.84rem;color:var(--text-muted);line-height:1.6">Sends the standard AI outreach email to your inbox and an optional secondary inbox (e.g. Outlook) to check for spam filtering across providers.</p>
+              <div class="form-row">
+                <div class="form-group">
+                  <label>Secondary Inbox <span class="text-muted text-xs">(optional — cross-provider check)</span></label>
+                  <input type="email" id="secondary-test-email" placeholder="you@outlook.com" />
+                </div>
+                <div class="form-group" style="display:flex;align-items:flex-end">
+                  <button class="btn btn-secondary btn-sm" id="save-secondary-btn" style="width:100%">Save Secondary Inbox</button>
+                </div>
+              </div>
+              <label style="display:flex;align-items:center;gap:8px;font-size:0.84rem;color:var(--text-mid);margin-bottom:16px;cursor:pointer">
+                <input type="checkbox" id="include-secondary-cb" style="width:15px;height:15px" />
+                Include secondary inbox in this test
+              </label>
+              <button class="btn btn-primary btn-sm" id="deliverability-run-btn">Send Test Emails</button>
+              <div id="deliverability-result" style="display:none;margin-top:16px">
+                <div id="deliverability-status" style="display:flex;align-items:center;gap:12px;padding:13px 16px;border-radius:var(--radius);font-size:0.875rem;font-weight:500"></div>
+                <div id="deliverability-secondary-note" style="display:none;margin-top:8px;padding:10px 14px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);font-size:0.82rem;color:var(--text-mid);line-height:1.6"></div>
+                <div id="deliverability-tips" style="margin-top:10px;font-size:0.82rem;color:var(--text-mid);line-height:1.8"></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- ③ Mail-Tester -->
+          <div class="settings-card">
+            <div class="settings-card-header">
+              <h3>③ Mail-Tester</h3>
+              <span class="settings-card-hint">Most comprehensive free test — SPF, DKIM, DMARC, blacklists</span>
+            </div>
+            <div class="settings-card-body">
+              <p style="margin:0 0 14px;font-size:0.84rem;color:var(--text-muted);line-height:1.6">Checks SPF/DKIM/DMARC records, 50+ spam blacklists, SpamAssassin score, and HTML/text ratio. Results appear on mail-tester.com.</p>
+              <div style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px;font-size:0.83rem;color:var(--text-mid);line-height:2;margin-bottom:14px">
+                <strong style="color:var(--text)">Step 1</strong> — Go to <a href="https://www.mail-tester.com" target="_blank" style="color:var(--blue);font-weight:600">mail-tester.com</a> and copy the test address shown<br>
+                <strong style="color:var(--text)">Step 2</strong> — Paste the address below and click <em>Send</em><br>
+                <strong style="color:var(--text)">Step 3</strong> — Wait 30 seconds, then click <em>View Report</em> on mail-tester.com
+              </div>
+              <div class="form-row">
+                <div class="form-group">
+                  <label>Mail-Tester Address</label>
+                  <input type="email" id="mailtester-address" placeholder="test-abc123@srv1.mail-tester.com" />
+                </div>
+                <div class="form-group" style="display:flex;align-items:flex-end">
+                  <button class="btn btn-primary btn-sm" id="mailtester-send-btn" style="width:100%">Send Test Email</button>
+                </div>
+              </div>
+              <div id="mailtester-status" style="display:none;margin-top:10px;font-size:0.83rem"></div>
+            </div>
+          </div>
+
+        </div><!-- /deliverability panel -->
+
+      </div><!-- /.settings-scroll -->
     </div><!-- /page-settings -->
 
     <!-- ===== FOLLOW-UPS PAGE ===== -->
