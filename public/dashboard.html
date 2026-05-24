@@ -4,6 +4,9 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Recruit Pro</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;450;500;550;600;650;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/css/app.css" />
 </head>
 <body>
@@ -12,8 +15,11 @@
   <!-- ========== SIDEBAR ========== -->
   <aside class="sidebar">
     <div class="sidebar-logo">
-      <h2 id="sidebar-company-name">Recruit Pro</h2>
-      <p>Recruiter Platform</p>
+      <div class="sidebar-logo-icon">🎯</div>
+      <div class="sidebar-logo-text">
+        <h2 id="sidebar-company-name">Recruit Pro</h2>
+        <p>Recruiter Platform</p>
+      </div>
     </div>
 
     <nav class="sidebar-nav">
@@ -49,10 +55,10 @@
     </nav>
 
     <div class="sidebar-footer">
-      <span id="sidebar-user-name" style="font-size:0.85rem;font-weight:500;color:rgba(255,255,255,0.8)"></span>
-      <span id="sidebar-user-email" style="font-size:0.72rem;color:rgba(255,255,255,0.35)"></span>
-      <div style="margin-top:10px;display:flex;align-items:center;gap:8px">
-        <a href="#" id="logout-btn" style="color:rgba(255,255,255,0.4);text-decoration:none;font-size:0.75rem">Sign out</a>
+      <div class="sidebar-footer-user" id="sidebar-user-name"></div>
+      <div class="sidebar-footer-email" id="sidebar-user-email"></div>
+      <div class="sidebar-footer-actions">
+        <a href="#" id="logout-btn">Sign out</a>
         <button class="dark-toggle" id="dark-toggle-btn" title="Toggle dark mode">☽</button>
       </div>
     </div>
