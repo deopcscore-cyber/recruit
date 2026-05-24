@@ -89,7 +89,9 @@ router.post('/login', async (req, res) => {
       name: user.name,
       email: user.email,
       gmail: user.gmail,
-      style: user.style
+      style: user.style,
+      companyName: user.companyName || '',
+      companyPitch: user.companyPitch || ''
     });
   } catch (err) {
     console.error('Login error:', err);
@@ -121,7 +123,9 @@ router.get('/me', requireAuth, async (req, res) => {
       name: user.name,
       email: user.email,
       gmail: user.gmail,
-      style: user.style
+      style: user.style,
+      companyName: user.companyName || '',
+      companyPitch: user.companyPitch || ''
     });
   } catch (err) {
     console.error('Get me error:', err);

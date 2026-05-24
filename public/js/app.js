@@ -58,6 +58,10 @@ document.addEventListener('DOMContentLoaded', async () => {
   document.getElementById('sidebar-user-name').textContent = currentUser.name;
   document.getElementById('sidebar-user-email').textContent = currentUser.email;
 
+  // Show the user's company name in the sidebar (falls back to "Recruit Pro")
+  const _sidebarName = document.getElementById('sidebar-company-name');
+  if (_sidebarName && currentUser.companyName) _sidebarName.textContent = currentUser.companyName;
+
   // Nav
   document.querySelectorAll('.nav-item').forEach(item => {
     item.addEventListener('click', () => {
@@ -1319,7 +1323,13 @@ function initSettingsPage() {
       if (currentUser) {
         if (data.name) currentUser.name = data.name;
         currentUser.title = data.title;
+        currentUser.companyName = data.companyName;
+        currentUser.companyPitch = data.companyPitch;
       }
+      // Update sidebar company name live
+      const _sbn = document.getElementById('sidebar-company-name');
+      if (_sbn) _sbn.textContent = data.companyName || 'Recruit Pro';
+      document.getElementById('sidebar-user-name').textContent = data.name || currentUser.name;
       Toast.success('Profile saved');
     } catch (err) { Toast.error(err.message); }
     finally { btn.disabled = false; btn.textContent = 'Save Profile'; }
