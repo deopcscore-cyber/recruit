@@ -65,9 +65,11 @@
     }
 
     // ── Step 2: receive profile data from bookmarklet and POST to API ─────────
+    // NOTE: the bookmarklet runs on linkedin.com, so evt.origin will be
+    // https://www.linkedin.com — we cannot restrict by our own origin here.
+    // Security: the /api/linkedin/bookmarklet endpoint requires no session
+    // and only parses text; no sensitive data is exposed.
     window.addEventListener('message', function(evt) {
-      // Accept messages from our own origin only (bookmarklet forwards data here)
-      if (evt.origin !== origin) return;
       var data = evt.data;
       if (!data || !data.text) return;
 
