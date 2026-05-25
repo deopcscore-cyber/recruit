@@ -1943,26 +1943,44 @@ function buildBookmarkletLink() {
   const el = document.getElementById('li-bookmarklet-link');
   if (!el) return;
   const origin = window.location.origin;
-  // Minified bookmarklet — extracts page text from LinkedIn and posts to our server
+
+  // ── Why popup + postMessage instead of fetch() ───────────────────────────
+  // LinkedIn's strict Content-Security-Policy blocks all fetch() calls to
+  // external domains (connect-src only allows *.linkedin.com). So we open a
+  // popup on OUR domain — which has no such restriction — and relay the page
+  // text via postMessage. The popup makes the same-origin API call instead.
   const code = `(function(){
     if(!location.href.includes('linkedin.com/in/')){alert('Open a LinkedIn profile page first, then click this bookmark.');return;}
     var btn=document.createElement('div');
-    btn.style.cssText='position:fixed;top:16px;right:16px;z-index:99999;background:#3b5bdb;color:#fff;padding:10px 18px;border-radius:8px;font-size:14px;font-family:sans-serif;box-shadow:0 4px 20px rgba(0,0,0,.25);cursor:default';
+    btn.style.cssText='position:fixed;top:16px;right:16px;z-index:99999;background:#3b5bdb;color:#fff;padding:10px 20px;border-radius:8px;font-size:14px;font-family:sans-serif;box-shadow:0 4px 20px rgba(0,0,0,.3);cursor:default';
     btn.textContent='⏳ Importing…';document.body.appendChild(btn);
     var url=location.href;
     var text=document.body.innerText;
-    fetch('${origin}/api/linkedin/bookmarklet',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url:url,text:text})})
-    .then(function(r){return r.json();})
-    .then(function(j){
-      if(j.error){btn.style.background='#e03131';btn.textContent='❌ '+j.error;setTimeout(function(){btn.remove();},4000);return;}
-      btn.textContent='✓ Imported! Opening app…';
-      window.open('${origin}/dashboard?li='+j.token,'_blank');
-      setTimeout(function(){btn.remove();},2000);
-    })
-    .catch(function(e){btn.style.background='#e03131';btn.textContent='❌ Error: '+e.message;setTimeout(function(){btn.remove();},4000);});
+    var origin='${origin}';
+    var w=window.open(origin+'/li-capture','_blank','width=540,height=320,resizable=yes');
+    if(!w){
+      btn.style.background='#e03131';
+      btn.textContent='❌ Pop-up blocked! Allow pop-ups for linkedin.com and try again.';
+      setTimeout(function(){btn.remove();},6000);
+      return;
+    }
+    function onMsg(evt){
+      if(evt.origin!==origin)return;
+      if(!evt.data||!evt.data.ready)return;
+      window.removeEventListener('message',onMsg);
+      w.postMessage({url:url,text:text},origin);
+      btn.textContent='✔ Sent! Opening dashboard…';
+      setTimeout(function(){btn.remove();},2500);
+    }
+    window.addEventListener('message',onMsg);
+    setTimeout(function(){
+      window.removeEventListener('message',onMsg);
+      if(btn.parentNode){btn.style.background='#e03131';btn.textContent='❌ Timed out — please try again.';setTimeout(function(){btn.remove();},4000);}
+    },20000);
   })()`;
-  el.href = 'javascript:' + encodeURIComponent(code.replace(/\s+/g, ' ').trim());
-  // Prevent the default link navigation when clicked (it should only work when dragged)
+
+  el.href = 'javascript:' + encodeURIComponent(code.replace(/\n\s+/g, ' ').trim());
+  // Prevent the default link navigation when clicked (it should only be dragged)
   el.addEventListener('click', e => {
     e.preventDefault();
     Toast.show('Drag this button to your bookmarks bar — don\'t click it here');

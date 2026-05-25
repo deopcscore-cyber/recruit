@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Importing LinkedIn Profile…</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, sans-serif;
+      display: flex; align-items: center; justify-content: center;
+      min-height: 100vh; background: #f0f4ff;
+    }
+    .card {
+      background: #fff; border-radius: 16px; padding: 40px 32px;
+      text-align: center; box-shadow: 0 8px 40px rgba(59,91,219,.14);
+      max-width: 380px; width: 100%; margin: 24px;
+    }
+    .logo { font-size: 40px; margin-bottom: 12px; }
+    .spinner {
+      width: 44px; height: 44px;
+      border: 4px solid #e0e7ff; border-top-color: #3b5bdb;
+      border-radius: 50%; animation: spin .8s linear infinite;
+      margin: 0 auto 20px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    h2 { color: #1a1a2e; font-size: 18px; font-weight: 600; margin-bottom: 8px; }
+    p { color: #64748b; font-size: 13px; line-height: 1.5; }
+    .error-icon { font-size: 40px; display: none; margin-bottom: 12px; }
+    .card.is-error .spinner { display: none; }
+    .card.is-error .error-icon { display: block; }
+    .card.is-error h2 { color: #e03131; }
+    .card.is-success .spinner { border-top-color: #2f9e44; }
+  </style>
+</head>
+<body>
+  <div class="card" id="card">
+    <div class="logo">🎯</div>
+    <div class="spinner" id="spinner"></div>
+    <div class="error-icon">❌</div>
+    <h2 id="status">Connecting to LinkedIn page…</h2>
+    <p id="sub">This window will redirect to your dashboard automatically.</p>
+  </div>
+
+  <script>
+    var origin = window.location.origin;
+
+    function setStatus(msg, sub, state) {
+      document.getElementById('status').textContent = msg;
+      if (sub) document.getElementById('sub').textContent = sub;
+      if (state) document.getElementById('card').className = 'card ' + state;
+    }
+
+    // ── Step 1: tell the LinkedIn page we are ready ──────────────────────────
+    if (window.opener) {
+      try {
+        // targetOrigin='*' because we are posting to linkedin.com (unknown origin)
+        window.opener.postMessage({ ready: true }, '*');
+        setStatus('Waiting for profile data…');
+      } catch (e) {
+        setStatus('Could not reach bookmarklet', 'Close this window, reopen the LinkedIn tab and try the bookmark again.', 'is-error');
+      }
+    } else {
+      setStatus('No opener found', 'Please use this page only via the LinkedIn bookmarklet.', 'is-error');
+    }
+
+    // ── Step 2: receive profile data from bookmarklet and POST to API ─────────
+    window.addEventListener('message', function(evt) {
+      // Accept messages from our own origin only (bookmarklet forwards data here)
+      if (evt.origin !== origin) return;
+      var data = evt.data;
+      if (!data || !data.text) return;
+
+      setStatus('Importing profile…', 'Analysing with AI — almost done!', 'is-success');
+
+      fetch('/api/linkedin/bookmarklet', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: data.url || '', text: data.text })
+      })
+      .then(function(r) {
+        if (!r.ok) return r.json().then(function(e) { throw new Error(e.error || 'Server error ' + r.status); });
+        return r.json();
+      })
+      .then(function(j) {
+        if (j.error) throw new Error(j.error);
+        setStatus('Profile imported!', 'Opening your dashboard…', 'is-success');
+        document.getElementById('spinner').style.borderTopColor = '#2f9e44';
+        // Expand the window to dashboard size before navigating
+        try { window.resizeTo(1280, 820); window.moveTo(80, 60); } catch (e) {}
+        window.location.href = '/dashboard?li=' + j.token;
+      })
+      .catch(function(e) {
+        setStatus('Import failed: ' + e.message, 'Close this window and try the bookmark again.', 'is-error');
+      });
+    });
+
+    // ── Timeout: no data received in 15 s ────────────────────────────────────
+    setTimeout(function() {
+      if (document.getElementById('status').textContent === 'Waiting for profile data…') {
+        setStatus('No data received', 'The bookmarklet didn\'t send profile data. Make sure you\'re on a linkedin.com/in/ profile page and try again.', 'is-error');
+      }
+    }, 15000);
+  </script>
+</body>
+</html>
