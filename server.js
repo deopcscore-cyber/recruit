@@ -120,17 +120,124 @@ app.get('/auth/zoho/callback', async (req, res) => {
 });
 
 // ─── Chrome extension download ────────────────────────────────────────────────
-// GET /extension/download — serves the pre-built zip (public/recruit-pro-extension.zip).
-// Auth-protected so only logged-in users can download it.
+// GET /extension/download — builds a zip of extension/ on the fly using only
+// Node built-ins (no archiver dep). Auth-protected.
 const requireAuth = require('./middleware/auth');
 
 app.get('/extension/download', requireAuth, (req, res) => {
-  const zipPath = path.join(__dirname, 'public', 'recruit-pro-extension.zip');
-  if (!fs.existsSync(zipPath)) {
-    return res.status(404).json({ error: 'Extension zip not found' });
+  const extDir = path.join(__dirname, 'extension');
+  if (!fs.existsSync(extDir)) return res.status(404).json({ error: 'Extension not found' });
+
+  try {
+    const zip = buildZip(extDir, 'recruit-pro-extension');
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader('Content-Disposition', 'attachment; filename="recruit-pro-extension.zip"');
+    res.send(zip);
+  } catch (err) {
+    console.error('Extension zip error:', err);
+    res.status(500).json({ error: 'Failed to build extension zip' });
   }
-  res.download(zipPath, 'recruit-pro-extension.zip');
 });
+
+// Pure-Node ZIP builder — no dependencies.
+// Supports flat files and one level of subdirectories.
+function buildZip (dir, rootName) {
+  const zlib = require('zlib');
+  const entries = [];
+
+  function addDir (absDir, zipDir) {
+    for (const name of fs.readdirSync(absDir)) {
+      const abs  = path.join(absDir, name);
+      const zip  = zipDir ? `${zipDir}/${name}` : name;
+      const stat = fs.statSync(abs);
+      if (stat.isDirectory()) {
+        addDir(abs, zip);
+      } else {
+        entries.push({ name: zip, data: fs.readFileSync(abs) });
+      }
+    }
+  }
+  addDir(dir, rootName);
+
+  // Build ZIP: Local File Headers + data, then Central Directory + EOCD
+  const localHeaders = [];
+  let offset = 0;
+
+  const parts = entries.map(({ name, data }) => {
+    const deflated   = zlib.deflateRawSync(data, { level: 6 });
+    const useDef     = deflated.length < data.length;
+    const fileData   = useDef ? deflated : data;
+    const method     = useDef ? 8 : 0;
+    const nameBytes  = Buffer.from(name, 'utf8');
+    const crc        = crc32(data);
+    const now        = new Date();
+    const dosTime    = (now.getHours() << 11) | (now.getMinutes() << 5) | (now.getSeconds() >> 1);
+    const dosDate    = ((now.getFullYear() - 1980) << 9) | ((now.getMonth() + 1) << 5) | now.getDate();
+
+    const local = Buffer.alloc(30 + nameBytes.length);
+    local.writeUInt32LE(0x04034b50, 0);       // signature
+    local.writeUInt16LE(20, 4);               // version needed
+    local.writeUInt16LE(0, 6);                // flags
+    local.writeUInt16LE(method, 8);           // compression
+    local.writeUInt16LE(dosTime, 10);
+    local.writeUInt16LE(dosDate, 12);
+    local.writeUInt32LE(crc, 14);             // CRC-32
+    local.writeUInt32LE(fileData.length, 18); // compressed size
+    local.writeUInt32LE(data.length, 22);     // uncompressed size
+    local.writeUInt16LE(nameBytes.length, 26);
+    local.writeUInt16LE(0, 28);               // extra field length
+    nameBytes.copy(local, 30);
+
+    localHeaders.push({ name, nameBytes, method, crc, compSize: fileData.length, uncompSize: data.length, dosTime, dosDate, offset });
+    offset += local.length + fileData.length;
+
+    return Buffer.concat([local, fileData]);
+  });
+
+  const centralParts = localHeaders.map(h => {
+    const cd = Buffer.alloc(46 + h.nameBytes.length);
+    cd.writeUInt32LE(0x02014b50, 0);        // central dir signature
+    cd.writeUInt16LE(20, 4);               // version made by
+    cd.writeUInt16LE(20, 6);               // version needed
+    cd.writeUInt16LE(0, 8);               // flags
+    cd.writeUInt16LE(h.method, 10);
+    cd.writeUInt16LE(h.dosTime, 12);
+    cd.writeUInt16LE(h.dosDate, 14);
+    cd.writeUInt32LE(h.crc, 16);
+    cd.writeUInt32LE(h.compSize, 20);
+    cd.writeUInt32LE(h.uncompSize, 24);
+    cd.writeUInt16LE(h.nameBytes.length, 28);
+    cd.writeUInt16LE(0, 30); cd.writeUInt16LE(0, 32); // extra, comment
+    cd.writeUInt16LE(0, 34); cd.writeUInt16LE(0, 36); // disk start, int attr
+    cd.writeUInt32LE(0, 38);               // ext attr
+    cd.writeUInt32LE(h.offset, 42);        // local header offset
+    h.nameBytes.copy(cd, 46);
+    return cd;
+  });
+
+  const centralBuf  = Buffer.concat(centralParts);
+  const cdOffset    = offset;
+  const eocd        = Buffer.alloc(22);
+  eocd.writeUInt32LE(0x06054b50, 0);
+  eocd.writeUInt16LE(0, 4); eocd.writeUInt16LE(0, 6);
+  eocd.writeUInt16LE(entries.length, 8);
+  eocd.writeUInt16LE(entries.length, 10);
+  eocd.writeUInt32LE(centralBuf.length, 12);
+  eocd.writeUInt32LE(cdOffset, 16);
+  eocd.writeUInt16LE(0, 20);
+
+  return Buffer.concat([...parts, centralBuf, eocd]);
+}
+
+// CRC-32 implementation (no deps)
+function crc32 (buf) {
+  let crc = 0xFFFFFFFF;
+  for (let i = 0; i < buf.length; i++) {
+    crc ^= buf[i];
+    for (let j = 0; j < 8; j++) crc = (crc >>> 1) ^ (crc & 1 ? 0xEDB88320 : 0);
+  }
+  return (crc ^ 0xFFFFFFFF) >>> 0;
+}
 
 // ─── SPA catch-all ───────────────────────────────────────────────────────────
 const NO_CACHE = { 'Cache-Control': 'no-cache, no-store, must-revalidate', Pragma: 'no-cache', Expires: '0' };
