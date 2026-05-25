@@ -121,8 +121,9 @@ app.get('/auth/zoho/callback', async (req, res) => {
 
 // ─── SPA catch-all ───────────────────────────────────────────────────────────
 const NO_CACHE = { 'Cache-Control': 'no-cache, no-store, must-revalidate', Pragma: 'no-cache', Expires: '0' };
-app.get('/dashboard', (req, res) => { res.set(NO_CACHE); res.sendFile(path.join(__dirname, 'public', 'dashboard.html')); });
-app.get('/',          (req, res) => { res.set(NO_CACHE); res.sendFile(path.join(__dirname, 'public', 'index.html')); });
+app.get('/dashboard',  (req, res) => { res.set(NO_CACHE); res.sendFile(path.join(__dirname, 'public', 'dashboard.html')); });
+app.get('/li-capture', (req, res) => { res.set(NO_CACHE); res.sendFile(path.join(__dirname, 'public', 'li-capture.html')); });
+app.get('/',           (req, res) => { res.set(NO_CACHE); res.sendFile(path.join(__dirname, 'public', 'index.html')); });
 
 // ─── Health check (Railway uses this) ────────────────────────────────────────
 app.get('/health', (req, res) => {
