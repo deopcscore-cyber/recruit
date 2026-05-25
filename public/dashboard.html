@@ -276,33 +276,72 @@
             </div>
           </div>
 
-          <!-- Chrome Extension Download -->
+          <!-- LinkedIn Import Methods -->
           <div class="settings-card">
             <div class="settings-card-header">
-              <h3>Chrome Extension</h3>
-              <span class="settings-card-hint">One-click LinkedIn import — install in 60 seconds</span>
+              <h3>LinkedIn Import</h3>
+              <span class="settings-card-hint">Three ways to import — pick what works for you</span>
             </div>
-            <div class="settings-card-body">
-              <p style="font-size:0.855rem;color:var(--text-mid);line-height:1.65;margin:0 0 16px">
-                The extension adds an <strong>🎯 Import to Recruit Pro</strong> button to every LinkedIn profile page. It also reads emails that <strong>ContactOut</strong> has already revealed, so no extra steps are needed.
-              </p>
+            <div class="settings-card-body" style="gap:20px">
 
-              <!-- Download button -->
-              <a href="/extension/download"
-                 style="display:inline-flex;align-items:center;gap:8px;padding:10px 20px;background:var(--blue);color:#fff;border-radius:var(--radius);font-size:0.875rem;font-weight:600;text-decoration:none;box-shadow:0 1px 4px rgba(59,91,219,.3);margin-bottom:18px">
-                <span style="font-size:1.1rem">⬇️</span> Download Extension (.zip)
-              </a>
-
-              <!-- Install steps -->
-              <div style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;font-size:0.82rem;color:var(--text-mid);line-height:2">
-                <strong style="color:var(--text);font-size:0.84rem">Installation (one-time, 60 seconds)</strong><br>
-                <strong style="color:var(--text)">1.</strong> Download the zip above and unzip it<br>
-                <strong style="color:var(--text)">2.</strong> Open Chrome → go to <code style="background:var(--border);padding:1px 5px;border-radius:4px">chrome://extensions</code><br>
-                <strong style="color:var(--text)">3.</strong> Toggle <strong>Developer mode</strong> ON (top-right)<br>
-                <strong style="color:var(--text)">4.</strong> Click <strong>Load unpacked</strong> → select the unzipped folder<br>
-                <strong style="color:var(--text)">5.</strong> Click the 🎯 extension icon → paste this app's URL → Save<br>
-                <strong style="color:var(--text)">6.</strong> Open any <code style="background:var(--border);padding:1px 5px;border-radius:4px">linkedin.com/in/…</code> profile and click the blue button ✓
+              <!-- Method 1: Chrome Extension (recommended) -->
+              <div style="background:var(--surface2);border:1.5px solid var(--blue);border-radius:var(--radius);padding:16px 18px">
+                <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+                  <span style="font-size:1.3rem">🧩</span>
+                  <div>
+                    <strong style="font-size:0.9rem;color:var(--text)">Chrome Extension</strong>
+                    <span style="margin-left:8px;font-size:0.7rem;background:#dbeafe;color:#1d4ed8;padding:2px 8px;border-radius:999px;font-weight:600">Recommended</span>
+                  </div>
+                </div>
+                <p style="font-size:0.82rem;color:var(--text-mid);line-height:1.6;margin:0 0 12px">
+                  Adds a blue <strong>🎯 Import</strong> button to every LinkedIn profile. Also auto-reads emails from ContactOut if you have it installed. One-time setup.
+                </p>
+                <a href="/extension/download"
+                   style="display:inline-flex;align-items:center;gap:7px;padding:9px 18px;background:var(--blue);color:#fff;border-radius:var(--radius);font-size:0.83rem;font-weight:600;text-decoration:none;margin-bottom:12px">
+                  ⬇️ Download Extension (.zip)
+                </a>
+                <div style="font-size:0.79rem;color:var(--text-mid);line-height:1.85">
+                  <strong style="color:var(--text)">1.</strong> Unzip the file &nbsp;→&nbsp;
+                  <strong style="color:var(--text)">2.</strong> <code style="background:var(--border);padding:1px 5px;border-radius:4px;font-size:0.78rem">chrome://extensions</code> → Developer mode ON → Load unpacked &nbsp;→&nbsp;
+                  <strong style="color:var(--text)">3.</strong> Click the 🎯 icon → enter this app's URL → Save
+                </div>
               </div>
+
+              <!-- Method 2: Bookmarklet -->
+              <div style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:16px 18px">
+                <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+                  <span style="font-size:1.3rem">🔖</span>
+                  <strong style="font-size:0.9rem;color:var(--text)">Bookmarklet</strong>
+                  <span style="font-size:0.75rem;color:var(--text-muted)">Works in any browser, no install needed</span>
+                </div>
+                <p style="font-size:0.82rem;color:var(--text-mid);line-height:1.6;margin:0 0 12px">
+                  Drag the button below to your bookmarks bar. Click it on any LinkedIn profile to import instantly.
+                </p>
+                <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+                  <a id="li-bookmarklet-link" href="#"
+                     style="display:inline-flex;align-items:center;gap:7px;padding:9px 16px;background:#5c7cfa;color:#fff;border-radius:var(--radius);font-size:0.83rem;font-weight:600;text-decoration:none;cursor:grab"
+                     title="Drag this to your bookmarks bar">
+                    🎯 Import to Recruit Pro
+                  </a>
+                  <span style="font-size:0.78rem;color:var(--text-muted)">← Drag to bookmarks bar</span>
+                </div>
+              </div>
+
+              <!-- Method 3: Copy-Paste -->
+              <div style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:16px 18px">
+                <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+                  <span style="font-size:1.3rem">📋</span>
+                  <strong style="font-size:0.9rem;color:var(--text)">Copy & Paste</strong>
+                  <span style="font-size:0.75rem;color:var(--text-muted)">No setup, works always</span>
+                </div>
+                <p style="font-size:0.82rem;color:var(--text-mid);line-height:1.6;margin:0 0 12px">
+                  Open a LinkedIn profile → <kbd style="background:var(--border);padding:1px 6px;border-radius:4px;font-size:0.78rem">Ctrl+A</kbd> to select all → <kbd style="background:var(--border);padding:1px 6px;border-radius:4px;font-size:0.78rem">Ctrl+C</kbd> to copy → come back here and click the button below.
+                </p>
+                <button onclick="document.getElementById('linkedin-import-btn')?.click()" class="btn btn-secondary" style="font-size:0.83rem;padding:8px 16px">
+                  📥 Open Import Modal
+                </button>
+              </div>
+
             </div>
           </div>
 
