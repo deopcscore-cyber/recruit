@@ -300,14 +300,29 @@
                    style="display:inline-flex;align-items:center;gap:7px;padding:9px 18px;background:var(--blue);color:#fff;border-radius:var(--radius);font-size:0.83rem;font-weight:600;text-decoration:none;margin-bottom:6px">
                   ⬇️ Download Extension (.zip)
                 </a>
-                <p style="font-size:0.78rem;color:var(--text-muted);margin:0 0 12px">
-                  ⚠️ You must <strong>unzip this file first</strong> before loading it in Chrome — Chrome needs a folder, not a zip.
+                <p style="font-size:0.78rem;color:var(--text-muted);margin:0 0 14px">
+                  ⚠️ Unzip the file first — Chrome needs a folder, not a zip.
                 </p>
+
+                <!-- Extension API Token -->
+                <div style="margin-bottom:14px">
+                  <label style="display:block;font-size:0.78rem;font-weight:600;color:var(--text-mid);margin-bottom:6px">Your Extension Token <span style="font-weight:400;color:var(--text-muted)">(paste this into the extension popup)</span></label>
+                  <div style="display:flex;gap:8px;align-items:center">
+                    <input id="extension-token-display" type="text" readonly
+                      style="flex:1;font-family:monospace;font-size:0.78rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:7px 10px;color:var(--text)"
+                      value="Loading…">
+                    <button onclick="
+                      const v = document.getElementById('extension-token-display').value;
+                      navigator.clipboard.writeText(v).then(() => this.textContent='✓ Copied!');
+                      setTimeout(() => this.textContent='Copy', 2000);
+                    " class="btn btn-secondary" style="font-size:0.78rem;padding:7px 12px;white-space:nowrap">Copy</button>
+                  </div>
+                </div>
+
                 <div style="font-size:0.79rem;color:var(--text-mid);line-height:2">
-                  <strong style="color:var(--text)">1.</strong> Download the zip → <strong>double-click it to unzip</strong> → a folder appears<br>
-                  <strong style="color:var(--text)">2.</strong> Open Chrome → go to <code style="background:var(--border);padding:1px 5px;border-radius:4px;font-size:0.78rem">chrome://extensions</code> → toggle <strong>Developer mode</strong> ON<br>
-                  <strong style="color:var(--text)">3.</strong> Click <strong>Load unpacked</strong> → select the <strong>unzipped folder</strong> (not the zip)<br>
-                  <strong style="color:var(--text)">4.</strong> Click the 🎯 extension icon in Chrome toolbar → enter this app's URL → Save
+                  <strong style="color:var(--text)">1.</strong> Download → <strong>unzip</strong> → <code style="background:var(--border);padding:1px 5px;border-radius:4px;font-size:0.78rem">chrome://extensions</code> → Developer mode ON → <strong>Load unpacked folder</strong><br>
+                  <strong style="color:var(--text)">2.</strong> Click the 🎯 icon in Chrome toolbar → paste your app URL + token above → Save<br>
+                  <strong style="color:var(--text)">3.</strong> Open any LinkedIn profile → click <strong>🎯 Import to Recruit Pro</strong> — stays on LinkedIn ✓
                 </div>
               </div>
 

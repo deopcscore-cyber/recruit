@@ -2087,6 +2087,10 @@ async function loadSettingsPage() {
     document.getElementById('sig-twitter').value         = sig.twitter    || '';
     document.getElementById('sig-disclaimer').value      = sig.disclaimer || '';
 
+    // Extension token
+    const tokenEl = document.getElementById('extension-token-display');
+    if (tokenEl && style.extensionToken) tokenEl.value = style.extensionToken;
+
     await updateGmailStatus();
     await updateZohoStatus();
   } catch (err) {

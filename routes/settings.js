@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const bcrypt = require('bcrypt');
 const { v4: uuidv4 } = require('uuid');
+const crypto = require('crypto');
 const storage = require('../services/storage');
 const requireAuth = require('../middleware/auth');
 const zohoService = require('../services/zoho');
@@ -14,6 +15,13 @@ router.get('/', async (req, res) => {
   try {
     const user = await storage.getUserById(req.session.userId);
     if (!user) return res.status(404).json({ error: 'User not found' });
+
+    // Auto-generate extension token on first access
+    if (!user.extensionToken) {
+      user.extensionToken = crypto.randomBytes(24).toString('hex');
+      await storage.saveUser(user);
+    }
+
     return res.json({
       ...(user.style || { tone: 'warm', notes: '', use: [], avoid: [] }),
       name: user.name || '',
@@ -24,7 +32,8 @@ router.get('/', async (req, res) => {
       secondaryTestEmail:  user.secondaryTestEmail  || '',
       hunterApiKey:        user.hunterApiKey        ? '••••••••' : '',
       contactOutApiKey:    user.contactOutApiKey    ? '••••••••' : '',
-      apolloApiKey:        user.apolloApiKey        ? '••••••••' : ''
+      apolloApiKey:        user.apolloApiKey        ? '••••••••' : '',
+      extensionToken:      user.extensionToken      || ''
     });
   } catch (err) {
     console.error('Get settings error:', err);

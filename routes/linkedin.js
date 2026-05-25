@@ -5,6 +5,7 @@
 const express    = require('express');
 const router     = express.Router();
 const crypto     = require('crypto');
+const { v4: uuidv4 } = require('uuid');
 const requireAuth = require('../middleware/auth');
 const linkedinSvc = require('../services/linkedin');
 const storage    = require('../services/storage');
@@ -138,6 +139,121 @@ router.post('/import', async (req, res) => {
     console.error('LinkedIn import error:', err);
     return res.status(500).json({ error: 'Import failed: ' + err.message });
   }
+});
+
+// ── Extension quick-import (no session — uses per-user extension token) ───────
+// POST /api/linkedin/quick-import
+// Called directly by the Chrome extension's background service worker.
+// Auth: X-Extension-Token header — a per-user secret stored in user.extensionToken.
+// Returns { success, candidate } and saves directly to the pipeline.
+// No tab redirect needed — the extension stays on LinkedIn.
+router.post('/quick-import', async (req, res) => {
+  // CORS for Chrome extension origins
+  const origin = req.headers.origin || '';
+  if (origin.startsWith('chrome-extension://')) {
+    res.header('Access-Control-Allow-Origin', origin);
+    res.header('Access-Control-Allow-Headers', 'Content-Type, X-Extension-Token');
+  }
+
+  const token = req.headers['x-extension-token'];
+  if (!token) return res.status(401).json({ error: 'Missing extension token. Open the extension popup and re-enter your token.' });
+
+  try {
+    // Look up user by extension token
+    const users = await storage.getAllUsers();
+    const user = users.find(u => u.extensionToken === token);
+    if (!user) return res.status(401).json({ error: 'Invalid extension token. Copy it again from Settings → Account.' });
+
+    const { url, text, coEmails } = req.body;
+    if (!text || text.trim().length < 50) {
+      return res.status(400).json({ error: 'Profile text too short — make sure you\'re on a LinkedIn profile page.' });
+    }
+
+    // 1. Parse profile with Claude
+    const profile = await linkedinSvc.parseFromText(text, url || '');
+    if (!profile || !profile.name) {
+      return res.status(422).json({ error: 'Could not extract a name — try a different profile.' });
+    }
+
+    // 2. Build email from ContactOut DOM data first (already on the page)
+    const PERSONAL_RE = /@(gmail|yahoo|hotmail|outlook|icloud|me|live|aol|protonmail|pm)\./i;
+    const extras = Array.isArray(coEmails) ? coEmails.filter(e => e && e.includes('@')) : [];
+    let personalEmail = extras.find(e => PERSONAL_RE.test(e)) || '';
+    let workEmail     = extras.find(e => !PERSONAL_RE.test(e)) || '';
+    let emailSource   = (personalEmail || workEmail) ? 'ContactOut (extension)' : '';
+
+    // 3. Fill gaps with server-side enrichment APIs
+    if (!personalEmail || !workEmail) {
+      const enriched = await linkedinSvc.enrichContact({
+        name:             profile.name,
+        company:          profile.company,
+        linkedinUrl:      url || '',
+        hunterApiKey:     user.hunterApiKey     || '',
+        contactOutApiKey: user.contactOutApiKey  || '',
+        apolloApiKey:     user.apolloApiKey      || ''
+      });
+      if (!personalEmail && enriched.personalEmail) { personalEmail = enriched.personalEmail; emailSource = enriched.source; }
+      if (!workEmail     && enriched.workEmail)     { workEmail     = enriched.workEmail; }
+      if (!personalEmail && enriched.email)         { personalEmail = enriched.email;     emailSource = enriched.source; }
+    }
+
+    const bestEmail = personalEmail || workEmail || '';
+
+    // 4. Duplicate check
+    const existing = await storage.getUserCandidates(user.id);
+    if (bestEmail) {
+      const dupe = existing.find(c => c.email && c.email.toLowerCase() === bestEmail.toLowerCase());
+      if (dupe) return res.status(409).json({ error: `${dupe.name} is already in your pipeline.` });
+    }
+
+    // 5. Save candidate
+    const candidate = {
+      id:          uuidv4(),
+      userId:      user.id,
+      name:        profile.name,
+      email:       bestEmail,
+      title:       profile.title       || '',
+      company:     profile.company     || '',
+      linkedin:    url                 || '',
+      summary:     profile.summary     || '',
+      background:  profile.summary     || '',
+      phone:       '',
+      career:      profile.career      || [],
+      education:   profile.education   || [],
+      stage:       'Imported',
+      tags:        [],
+      notes:       '',
+      personalEmail,
+      workEmail,
+      emailSource,
+      stepsCompleted: {},
+      createdAt:   new Date().toISOString()
+    };
+
+    await storage.saveCandidate(candidate);
+
+    return res.status(201).json({
+      success:  true,
+      name:     candidate.name,
+      email:    candidate.email,
+      company:  candidate.company,
+      id:       candidate.id
+    });
+  } catch (err) {
+    console.error('Quick-import error:', err);
+    return res.status(500).json({ error: 'Import failed: ' + err.message });
+  }
+});
+
+// CORS preflight for quick-import
+router.options('/quick-import', (req, res) => {
+  const origin = req.headers.origin || '';
+  if (origin.startsWith('chrome-extension://')) {
+    res.header('Access-Control-Allow-Origin', origin);
+    res.header('Access-Control-Allow-Methods', 'POST, OPTIONS');
+    res.header('Access-Control-Allow-Headers', 'Content-Type, X-Extension-Token');
+  }
+  res.sendStatus(204);
 });
 
 module.exports = router;

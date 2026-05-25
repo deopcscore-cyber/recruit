@@ -71,7 +71,8 @@
         setTimeout(resetBtn, 5000);
         return;
       }
-      setBtn('✓ Imported! Dashboard opened →', '#2f9e44');
+      const label = response.name ? `✓ ${response.name} added!` : '✓ Added to pipeline!';
+      setBtn(label, '#2f9e44');
       setTimeout(resetBtn, 4000);
     });
   }

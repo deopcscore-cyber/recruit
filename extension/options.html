@@ -71,10 +71,14 @@
     </div>
   </div>
 
-  <label for="appUrl">Your Recruit Pro URL</label>
+  <label for="appUrl">App URL</label>
   <input type="text" id="appUrl"
     placeholder="https://recruit-production-xxxx.up.railway.app">
-  <button class="btn" id="saveBtn">Save</button>
+
+  <label for="apiToken" style="margin-top:12px">Extension Token <span style="font-weight:400;color:#94a3b8">(from Settings → Account)</span></label>
+  <input type="text" id="apiToken" placeholder="Paste token from your dashboard">
+
+  <button class="btn" id="saveBtn" style="margin-top:12px">Save</button>
   <div class="status" id="status"></div>
 
   <a class="open-link" id="openDashboard" href="#" target="_blank">
@@ -83,12 +87,12 @@
 
   <div class="hint">
     <strong>How to use:</strong><br>
-    1. Enter your app URL above and Save.<br>
+    1. Paste your app URL and token above → Save.<br>
     2. Open any LinkedIn profile (<code>linkedin.com/in/…</code>).<br>
-    3. Click the blue <strong>🎯 Import to Recruit Pro</strong> button.<br>
-    4. Your dashboard opens in a new tab with the profile ready.
+    3. Click <strong>🎯 Import to Recruit Pro</strong>.<br>
+    4. Candidate is added silently — you stay on LinkedIn ✓
     <br><br>
-    <strong>ContactOut tip:</strong> If you have the ContactOut extension installed and have already revealed emails on the profile, they'll be imported automatically.
+    <strong>ContactOut tip:</strong> Reveal emails with ContactOut first, then click Import — they'll be captured automatically.
   </div>
 
   <script src="options.js"></script>
