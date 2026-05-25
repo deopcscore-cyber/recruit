@@ -98,6 +98,16 @@ router.post('/', async (req, res) => {
       return res.status(400).json({ error: 'Name and email are required' });
     }
 
+    // Duplicate check — same email already in this user's pipeline
+    const existing = await storage.getUserCandidates(req.session.userId);
+    const dupe = existing.find(c => c.email && c.email.toLowerCase() === email.toLowerCase().trim());
+    if (dupe) {
+      return res.status(409).json({
+        error: `${dupe.name} is already in your pipeline with this email address.`,
+        existingId: dupe.id
+      });
+    }
+
     const candidate = {
       ...makeDefaultCandidate(req.session.userId),
       name: name.trim(),

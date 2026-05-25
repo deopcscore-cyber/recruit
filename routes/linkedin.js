@@ -33,7 +33,9 @@ router.post('/bookmarklet', async (req, res) => {
   res.header('Access-Control-Allow-Origin', '*');
   res.header('Access-Control-Allow-Headers', 'Content-Type');
 
-  const { url, text } = req.body;
+  // coEmails: optional array of emails already harvested by the Chrome extension
+  // (e.g. read from ContactOut's injected DOM on the same page)
+  const { url, text, coEmails } = req.body;
   if (!text || text.trim().length < 50) {
     return res.status(400).json({ error: 'Profile text is too short — make sure you copied the full page.' });
   }
@@ -42,12 +44,29 @@ router.post('/bookmarklet', async (req, res) => {
     if (!profile || !profile.name) {
       return res.status(422).json({ error: 'Could not extract a name from the profile text. Try selecting more of the page.' });
     }
-    // Note: bookmarklet has no user session, so no API-key enrichment here.
-    // Enrichment happens when the user clicks "Add to Pipeline" in the dashboard
-    // (the import modal calls /api/linkedin/import with the URL for enrichment).
+
+    // If the Chrome extension already harvested emails from ContactOut's DOM,
+    // store them on the profile so the dashboard can pre-fill the email field.
+    const PERSONAL_RE = /@(gmail|yahoo|hotmail|outlook|icloud|me|live|aol|protonmail|pm)\./i;
+    const extraEmails = Array.isArray(coEmails) ? coEmails.filter(e => e && e.includes('@')) : [];
+    const personalEmail = extraEmails.find(e => PERSONAL_RE.test(e)) || '';
+    const workEmail     = extraEmails.find(e => !PERSONAL_RE.test(e)) || '';
+    const bestEmail     = personalEmail || workEmail || extraEmails[0] || '';
+
     const token = crypto.randomBytes(10).toString('hex');
     cleanExpired();
-    pendingImports.set(token, { profile: { ...profile, linkedin: url || '' }, expires: Date.now() + 10 * 60 * 1000 });
+    pendingImports.set(token, {
+      profile: {
+        ...profile,
+        linkedin:      url || '',
+        // Pre-populate email fields if ContactOut data was available
+        email:         bestEmail,
+        personalEmail: personalEmail,
+        workEmail:     workEmail,
+        emailSource:   bestEmail ? 'ContactOut (extension)' : ''
+      },
+      expires: Date.now() + 10 * 60 * 1000
+    });
     return res.json({ token });
   } catch (err) {
     console.error('Bookmarklet parse error:', err);

@@ -1894,7 +1894,13 @@ function wireLinkedInImport() {
       renderTagFilterBar();
       new Modal('linkedin-import-modal').close();
       Toast.success(`${_liParsed.name || 'Candidate'} imported successfully!`);
-    } catch (err) { Toast.error('Failed to add candidate: ' + err.message); }
+    } catch (err) {
+      if (err.status === 409 || (err.message && err.message.includes('already in your pipeline'))) {
+        Toast.error('⚠️ ' + (err.message || 'This candidate is already in your pipeline.'));
+      } else {
+        Toast.error('Failed to add candidate: ' + err.message);
+      }
+    }
   });
 }
 

@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Recruit Pro — Settings</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #fff; color: #1a1a2e;
+      width: 320px; padding: 20px;
+    }
+    .logo {
+      display: flex; align-items: center; gap: 10px;
+      margin-bottom: 18px; padding-bottom: 14px;
+      border-bottom: 1px solid #f0f0f0;
+    }
+    .logo-icon {
+      width: 36px; height: 36px; border-radius: 8px;
+      background: linear-gradient(135deg,#3b5bdb,#845ef7);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 20px;
+    }
+    .logo-text h2 { font-size: 15px; font-weight: 700; }
+    .logo-text p  { font-size: 11px; color: #64748b; }
+
+    label { display: block; font-size: 12px; font-weight: 600; color: #374151; margin-bottom: 6px; }
+    input[type=text] {
+      width: 100%; padding: 9px 12px; border: 1.5px solid #e2e8f0;
+      border-radius: 7px; font-size: 13px; color: #1a1a2e;
+      outline: none; transition: border-color .2s;
+    }
+    input[type=text]:focus { border-color: #3b5bdb; }
+
+    .btn {
+      display: block; width: 100%; margin-top: 12px;
+      padding: 10px; border-radius: 7px; border: none;
+      background: #3b5bdb; color: #fff;
+      font-size: 13px; font-weight: 600; cursor: pointer;
+      transition: background .2s;
+    }
+    .btn:hover { background: #2f4fcc; }
+
+    .status {
+      margin-top: 10px; font-size: 12px; text-align: center;
+      min-height: 18px;
+    }
+    .status.ok  { color: #2f9e44; }
+    .status.err { color: #e03131; }
+
+    .hint {
+      margin-top: 16px; padding: 12px; background: #f8f9ff;
+      border-radius: 8px; font-size: 11.5px; color: #5a6a8a; line-height: 1.6;
+    }
+    .hint strong { color: #3b5bdb; }
+
+    .open-link {
+      display: block; margin-top: 10px; text-align: center;
+      font-size: 12px; color: #3b5bdb; text-decoration: none;
+      padding: 8px; border-radius: 6px; border: 1.5px solid #e0e7ff;
+    }
+    .open-link:hover { background: #f0f4ff; }
+  </style>
+</head>
+<body>
+  <div class="logo">
+    <div class="logo-icon">🎯</div>
+    <div class="logo-text">
+      <h2>Recruit Pro</h2>
+      <p>LinkedIn Importer</p>
+    </div>
+  </div>
+
+  <label for="appUrl">Your Recruit Pro URL</label>
+  <input type="text" id="appUrl"
+    placeholder="https://recruit-production-xxxx.up.railway.app">
+  <button class="btn" id="saveBtn">Save</button>
+  <div class="status" id="status"></div>
+
+  <a class="open-link" id="openDashboard" href="#" target="_blank">
+    Open Dashboard ↗
+  </a>
+
+  <div class="hint">
+    <strong>How to use:</strong><br>
+    1. Enter your app URL above and Save.<br>
+    2. Open any LinkedIn profile (<code>linkedin.com/in/…</code>).<br>
+    3. Click the blue <strong>🎯 Import to Recruit Pro</strong> button.<br>
+    4. Your dashboard opens in a new tab with the profile ready.
+    <br><br>
+    <strong>ContactOut tip:</strong> If you have the ContactOut extension installed and have already revealed emails on the profile, they'll be imported automatically.
+  </div>
+
+  <script src="options.js"></script>
+</body>
+</html>
