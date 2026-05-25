@@ -27,21 +27,25 @@ chrome.storage.sync.get('appUrl', ({ appUrl }) => {
 });
 
 saveBtn.addEventListener('click', () => {
-  let url = urlInput.value.trim().replace(/\/+$/, '');
+  let raw = urlInput.value.trim();
 
-  if (!url) {
+  if (!raw) {
     show('Please enter your app URL', 'err');
     return;
   }
 
   // Auto-prefix https:// if missing
-  if (!/^https?:\/\//i.test(url)) url = 'https://' + url;
+  if (!/^https?:\/\//i.test(raw)) raw = 'https://' + raw;
+
+  // Always store just the origin (strip /dashboard or any other path)
+  let url = raw;
+  try { url = new URL(raw).origin; } catch (_) {}
 
   chrome.storage.sync.set({ appUrl: url }, () => {
     urlInput.value = url;
     openLink.href = url;
-    show('✓ Saved!', 'ok');
-    setTimeout(() => show('', ''), 3000);
+    show('✓ Saved! (' + url + ')', 'ok');
+    setTimeout(() => show('', ''), 4000);
   });
 });
 

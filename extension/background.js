@@ -29,10 +29,17 @@ async function handleImport ({ url, text, coEmails }) {
       headers: { 'Content-Type': 'application/json' },
       body:    JSON.stringify({ url, text, coEmails: coEmails || [] })
     });
+
+    // If the response isn't JSON (e.g. HTML 404 page), the URL is probably wrong
+    const ct = res.headers.get('content-type') || '';
+    if (!ct.includes('application/json')) {
+      return { error: `Wrong app URL — got HTML instead of JSON (${res.status}). Click the 🎯 extension icon and check your URL.` };
+    }
+
     data = await res.json();
     if (!res.ok) return { error: data.error || `Server error ${res.status}` };
   } catch (err) {
-    return { error: `Network error: ${err.message}` };
+    return { error: `Request failed: ${err.message}` };
   }
 
   if (data.error) return { error: data.error };
