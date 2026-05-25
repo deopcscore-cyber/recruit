@@ -119,6 +119,28 @@ app.get('/auth/zoho/callback', async (req, res) => {
   }
 });
 
+// ─── Chrome extension download ────────────────────────────────────────────────
+// GET /extension/download — zips the extension/ folder on the fly and sends it.
+// Requires auth so only logged-in users can download it.
+const requireAuth = require('./middleware/auth');
+const archiver    = require('archiver');
+
+app.get('/extension/download', requireAuth, (req, res) => {
+  const extDir = path.join(__dirname, 'extension');
+  if (!fs.existsSync(extDir)) {
+    return res.status(404).json({ error: 'Extension folder not found' });
+  }
+
+  res.setHeader('Content-Type', 'application/zip');
+  res.setHeader('Content-Disposition', 'attachment; filename="recruit-pro-extension.zip"');
+
+  const archive = archiver('zip', { zlib: { level: 9 } });
+  archive.on('error', err => { console.error('Extension zip error:', err); res.end(); });
+  archive.pipe(res);
+  archive.directory(extDir, 'recruit-pro-extension');
+  archive.finalize();
+});
+
 // ─── SPA catch-all ───────────────────────────────────────────────────────────
 const NO_CACHE = { 'Cache-Control': 'no-cache, no-store, must-revalidate', Pragma: 'no-cache', Expires: '0' };
 app.get('/dashboard',  (req, res) => { res.set(NO_CACHE); res.sendFile(path.join(__dirname, 'public', 'dashboard.html')); });
