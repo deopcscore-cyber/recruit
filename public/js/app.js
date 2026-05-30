@@ -1637,7 +1637,8 @@ function initSettingsPage() {
     const box     = document.getElementById('sig-preview-box');
     const content = document.getElementById('sig-preview-content');
     const name    = document.getElementById('profile-name').value.trim()  || (currentUser && currentUser.name) || 'Your Name';
-    const title   = document.getElementById('profile-title').value.trim() || 'Senior Talent Acquisition Coordinator';
+    const title   = document.getElementById('profile-title').value.trim() || '';
+    const company = document.getElementById('profile-company-name').value.trim();
     const photo   = document.getElementById('sig-photo').value.trim();
     const website = document.getElementById('sig-website').value.trim();
     const loc     = document.getElementById('sig-location').value.trim();
@@ -1683,8 +1684,8 @@ function initSettingsPage() {
           ${photo ? `<div style="flex-shrink:0;margin-right:18px">${photoHtml}</div>` : ''}
           <div style="border-left:3px solid #1a3e72;padding-left:14px;line-height:1.4">
             <p style="margin:0;font-size:16px;font-weight:700;color:#0f172a;letter-spacing:-.2px">${name}</p>
-            <p style="margin:3px 0 0;font-size:12px;color:#475569">${title}</p>
-            <p style="margin:3px 0 0;font-size:12px;font-weight:600;color:#1a3e72">Welltower Inc. &nbsp;<span style="color:#94a3b8;font-weight:400">|</span>&nbsp; <span style="color:#64748b;font-weight:500">NYSE: WELL</span></p>
+            ${title ? `<p style="margin:3px 0 0;font-size:12px;color:#475569">${title}</p>` : ''}
+            ${company ? `<p style="margin:3px 0 0;font-size:12px;font-weight:600;color:#1a3e72">${company}</p>` : ''}
             ${contactLine}
           </div>
         </div>
