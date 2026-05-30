@@ -52,11 +52,19 @@
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
         <span>Settings</span>
       </div>
+      <!-- Admin link — only shown for admin users via JS -->
+      <a class="nav-item hidden" id="admin-nav-link" href="/admin" style="text-decoration:none;color:inherit">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+        <span>Admin Panel</span>
+      </a>
     </nav>
 
     <div class="sidebar-footer">
       <div class="sidebar-footer-user" id="sidebar-user-name"></div>
       <div class="sidebar-footer-email" id="sidebar-user-email"></div>
+      <div id="sidebar-credits" style="font-size:11px;color:#a5b4fc;margin:2px 0 6px;display:none">
+        Credits: <span id="sidebar-credits-val">—</span>
+      </div>
       <div class="sidebar-footer-actions">
         <a href="#" id="logout-btn">Sign out</a>
         <button class="dark-toggle" id="dark-toggle-btn" title="Toggle dark mode">☽</button>
@@ -434,6 +442,28 @@
                 <button class="btn btn-secondary btn-sm" id="test-zoho-btn">Send Test Email</button>
               </div>
               <p style="margin:0;font-size:0.78rem;color:var(--text-muted);line-height:1.6">Connects via OAuth2 — no password stored. You'll be redirected to Zoho to authorise access.</p>
+            </div>
+          </div>
+
+          <!-- Outlook -->
+          <div class="settings-card">
+            <div class="settings-card-header">
+              <h3>Outlook / Hotmail</h3>
+              <span class="settings-card-hint">Connect your personal @outlook.com or @hotmail.com account</span>
+            </div>
+            <div class="settings-card-body">
+              <div id="outlook-status-indicator" style="display:flex;align-items:center;gap:8px;font-size:0.875rem;font-weight:500;margin-bottom:14px">
+                <span id="outlook-status-dot" style="width:8px;height:8px;border-radius:50%;background:var(--text-faint);display:inline-block;flex-shrink:0"></span>
+                <span id="outlook-status-text" style="color:var(--text-muted)">Not connected</span>
+              </div>
+              <div id="outlook-connect-form" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
+                <button class="btn btn-primary btn-sm" id="connect-outlook-btn">Connect Outlook</button>
+              </div>
+              <div id="outlook-connected-actions" style="display:none;gap:8px;flex-wrap:wrap;margin-bottom:10px">
+                <button class="btn btn-secondary btn-sm" id="disconnect-outlook-btn">Disconnect</button>
+                <button class="btn btn-secondary btn-sm" id="test-outlook-btn">Send Test Email</button>
+              </div>
+              <p style="margin:0;font-size:0.78rem;color:var(--text-muted);line-height:1.6">Connects via Microsoft OAuth2 — no password stored. Works with @outlook.com and @hotmail.com accounts.<br>Requires: set <code>MICROSOFT_CLIENT_ID</code> and <code>MICROSOFT_CLIENT_SECRET</code> in Railway environment variables.</p>
             </div>
           </div>
 

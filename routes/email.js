@@ -4,19 +4,23 @@ const path = require('path');
 const fs = require('fs');
 const { v4: uuidv4 } = require('uuid');
 const { google } = require('googleapis');
-const gmailService = require('../services/gmail');
-const zohoService  = require('../services/zoho');
+const gmailService   = require('../services/gmail');
+const zohoService    = require('../services/zoho');
+const outlookService = require('../services/outlook');
 
-// Zoho is only usable if it has valid OAuth2 tokens (not old SMTP credentials)
 function isZohoOAuthReady(user) {
-  return !!(user.zoho && user.zoho.connected && user.zoho.accessToken && user.zoho.refreshToken);
+  return !!(user.zoho?.connected && user.zoho.accessToken && user.zoho.refreshToken);
+}
+function isOutlookReady(user) {
+  return !!(user.outlook?.connected && user.outlook.accessToken);
 }
 function getEmailService(user) {
-  if (isZohoOAuthReady(user)) return zohoService;
+  if (isOutlookReady(user)) return outlookService;
+  if (isZohoOAuthReady(user))  return zohoService;
   return gmailService;
 }
 function isEmailConnected(user) {
-  return (user.gmail && user.gmail.connected) || isZohoOAuthReady(user);
+  return !!(user.gmail?.connected) || isZohoOAuthReady(user) || isOutlookReady(user);
 }
 const storage = require('../services/storage');
 const requireAuth = require('../middleware/auth');
@@ -83,7 +87,7 @@ router.post('/send', requireAuth, async (req, res) => {
     const user = await storage.getUserById(req.session.userId);
     if (!user) return res.status(404).json({ error: 'User not found' });
     if (!isEmailConnected(user)) {
-      return res.status(400).json({ error: 'No email account connected. Connect Gmail or Zoho Mail in Settings.' });
+      return res.status(400).json({ error: 'No email account connected. Connect Gmail, Zoho Mail, or Outlook in Settings.' });
     }
 
     // Fresh tracking pixel for every outbound email — resets the opened badge

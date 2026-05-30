@@ -3,6 +3,17 @@ const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 const MODEL = 'claude-sonnet-4-6';
 
+// Cost per million tokens in cents (claude-sonnet-4 pricing)
+const COST_INPUT_PER_M  = 300;  // $3.00 / MTok = 300 cents
+const COST_OUTPUT_PER_M = 1500; // $15.00 / MTok = 1500 cents
+
+function calcCostCents(usage) {
+  if (!usage) return 0;
+  const inp = usage.input_tokens  || 0;
+  const out = usage.output_tokens || 0;
+  return Math.ceil((inp * COST_INPUT_PER_M + out * COST_OUTPUT_PER_M) / 1_000_000);
+}
+
 // ─── Company context helper ───────────────────────────────────────────────────
 // Each user sets their own company name & pitch in Settings → Account.
 // These replace every hardcoded "Welltower Inc." reference in the AI prompts,
@@ -140,7 +151,7 @@ Write the email now:`;
     model: MODEL, max_tokens: 800,
     messages: [{ role: 'user', content: prompt }]
   });
-  return response.content[0].text.trim();
+  return { text: response.content[0].text.trim(), costCents: calcCostCents(response.usage) };
 }
 
 // ── Independent Recruiter outreach ────────────────────────────────────────────
@@ -202,7 +213,7 @@ Write the email now:`;
     model: MODEL, max_tokens: 800,
     messages: [{ role: 'user', content: prompt }]
   });
-  return response.content[0].text.trim();
+  return { text: response.content[0].text.trim(), costCents: calcCostCents(response.usage) };
 }
 
 // ── Company Recruiter outreach (original) ─────────────────────────────────────
@@ -280,7 +291,7 @@ Write the outreach email now:`;
     messages: [{ role: 'user', content: prompt }]
   });
 
-  return response.content[0].text.trim();
+  return { text: response.content[0].text.trim(), costCents: calcCostCents(response.usage) };
 }
 
 async function generateRoleJD(candidate, user) {
@@ -352,7 +363,7 @@ Write the role description now:`;
     messages: [{ role: 'user', content: prompt }]
   });
 
-  return response.content[0].text.trim();
+  return { text: response.content[0].text.trim(), costCents: calcCostCents(response.usage) };
 }
 
 async function generateResumeFeedback(candidate, user) {
@@ -437,18 +448,14 @@ Return ONLY the JSON object, no markdown, no extra text.`;
   });
 
   const text = response.content[0].text.trim();
+  const costCents = calcCostCents(response.usage);
   try {
-    // Strip markdown code blocks if present
     const clean = text.replace(/^```json\s*/i, '').replace(/```\s*$/, '').trim();
-    return JSON.parse(clean);
+    return { ...JSON.parse(clean), costCents };
   } catch (err) {
-    // Try to extract JSON if embedded in text
     const match = text.match(/\{[\s\S]*\}/);
-    if (match) {
-      return JSON.parse(match[0]);
-    }
-    // Fallback: return as structured object
-    return { gaps: text, email: '' };
+    if (match) return { ...JSON.parse(match[0]), costCents };
+    return { gaps: text, email: '', costCents };
   }
 }
 
@@ -513,7 +520,7 @@ Write the introduction email now:`;
     messages: [{ role: 'user', content: prompt }]
   });
 
-  return response.content[0].text.trim();
+  return { text: response.content[0].text.trim(), costCents: calcCostCents(response.usage) };
 }
 
 async function generateReply(candidate, user, lastMessage) {
@@ -619,7 +626,7 @@ Write the reply now:`;
     messages: [{ role: 'user', content: prompt }]
   });
 
-  return response.content[0].text.trim();
+  return { text: response.content[0].text.trim(), costCents: calcCostCents(response.usage) };
 }
 
 async function generateFollowUp(candidate, user) {
@@ -720,7 +727,7 @@ Write the follow-up email now:`;
     messages: [{ role: 'user', content: prompt }]
   });
 
-  return response.content[0].text.trim();
+  return { text: response.content[0].text.trim(), costCents: calcCostCents(response.usage) };
 }
 
 async function scoreCandidate(candidate, user) {
@@ -752,12 +759,13 @@ Return ONLY the JSON.`;
   });
 
   const text = response.content[0].text.trim();
+  const costCents = calcCostCents(response.usage);
   const clean = text.replace(/^```json\s*/i, '').replace(/```\s*$/, '').trim();
   try {
-    return JSON.parse(clean);
+    return { ...JSON.parse(clean), costCents };
   } catch {
     const match = text.match(/\{[\s\S]*\}/);
-    if (match) return JSON.parse(match[0]);
+    if (match) return { ...JSON.parse(match[0]), costCents };
     throw new Error('Could not parse score response');
   }
 }

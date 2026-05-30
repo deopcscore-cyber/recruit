@@ -120,9 +120,12 @@ router.get('/me', requireAuth, async (req, res) => {
       email: user.email,
       gmail: user.gmail,
       style: user.style,
-      userType: user.userType || 'recruiter_company',
+      userType:    user.userType    || 'recruiter_company',
       companyName: user.companyName || '',
-      companyPitch: user.companyPitch || ''
+      companyPitch: user.companyPitch || '',
+      isAdmin:  user.isAdmin  || false,
+      credits:  user.credits  || 0,
+      totalSpent: user.totalSpent || 0
     });
   } catch (err) {
     console.error('Get me error:', err);

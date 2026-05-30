@@ -223,4 +223,57 @@ router.delete('/zoho', async (req, res) => {
   }
 });
 
+// ── Outlook (Microsoft) ───────────────────────────────────────────────────────
+const outlookService = require('../services/outlook');
+
+// GET /api/settings/outlook-status
+router.get('/outlook-status', async (req, res) => {
+  try {
+    const user = await storage.getUserById(req.session.userId);
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    const outlook = user.outlook || {};
+    return res.json({ connected: !!outlook.connected, address: outlook.address || '' });
+  } catch (err) {
+    return res.status(500).json({ error: 'Failed to get Outlook status' });
+  }
+});
+
+// GET /api/settings/outlook-connect — start OAuth2 flow
+router.get('/outlook-connect', async (req, res) => {
+  try {
+    const url = outlookService.getAuthUrl(req.session.userId);
+    return res.json({ url });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// DELETE /api/settings/outlook — disconnect
+router.delete('/outlook', async (req, res) => {
+  try {
+    const user = await storage.getUserById(req.session.userId);
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    user.outlook = { connected: false, address: '', accessToken: '', refreshToken: '' };
+    await storage.saveUser(user);
+    return res.json({ success: true });
+  } catch (err) {
+    return res.status(500).json({ error: 'Failed to disconnect Outlook' });
+  }
+});
+
+// GET /api/settings/credits — return current credit balance
+router.get('/credits', async (req, res) => {
+  try {
+    const user = await storage.getUserById(req.session.userId);
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    return res.json({
+      credits:    user.credits    || 0,
+      totalSpent: user.totalSpent || 0,
+      isAdmin:    user.isAdmin    || false
+    });
+  } catch (err) {
+    return res.status(500).json({ error: 'Failed to get credits' });
+  }
+});
+
 module.exports = router;

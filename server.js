@@ -1,4 +1,4 @@
-const { DATA_DIR, BASE_URL, SESSION_SECRET, PORT, IS_PRODUCTION } = require('./config');
+const { DATA_DIR, BASE_URL, SESSION_SECRET, PORT, IS_PRODUCTION, ADMIN_EMAIL } = require('./config');
 
 const express = require('express');
 const session = require('express-session');
@@ -71,6 +71,7 @@ app.use('/api/queue',      require('./routes/queue'));
 app.use('/api/push',       require('./routes/push'));
 app.use('/api/templates',  require('./routes/templates'));
 app.use('/api/linkedin',   require('./routes/linkedin'));
+app.use('/api/admin',      require('./routes/admin'));
 
 // ─── Email open tracking pixel ────────────────────────────────────────────────
 const BLANK_GIF = Buffer.from('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7', 'base64');
@@ -116,6 +117,22 @@ app.get('/auth/zoho/callback', async (req, res) => {
   } catch (err) {
     console.error('Zoho callback error:', err);
     return res.redirect('/dashboard?zoho=error&reason=' + encodeURIComponent(err.message));
+  }
+});
+
+// ─── Outlook (Microsoft) OAuth callback ──────────────────────────────────────
+const outlookService = require('./services/outlook');
+app.get('/auth/outlook/callback', async (req, res) => {
+  const { code, state, error } = req.query;
+  if (error || !code) return res.redirect('/dashboard?outlook=error&reason=' + encodeURIComponent(error || 'no_code'));
+  const userId = state || (req.session && req.session.userId);
+  if (!userId) return res.redirect('/dashboard?outlook=error&reason=no_user');
+  try {
+    await outlookService.exchangeCode(userId, code);
+    return res.redirect('/dashboard?outlook=connected');
+  } catch (err) {
+    console.error('Outlook callback error:', err);
+    return res.redirect('/dashboard?outlook=error&reason=' + encodeURIComponent(err.message));
   }
 });
 
@@ -242,6 +259,7 @@ function crc32 (buf) {
 // ─── SPA catch-all ───────────────────────────────────────────────────────────
 const NO_CACHE = { 'Cache-Control': 'no-cache, no-store, must-revalidate', Pragma: 'no-cache', Expires: '0' };
 app.get('/dashboard',  (req, res) => { res.set(NO_CACHE); res.sendFile(path.join(__dirname, 'public', 'dashboard.html')); });
+app.get('/admin',      (req, res) => { res.set(NO_CACHE); res.sendFile(path.join(__dirname, 'public', 'admin.html')); });
 app.get('/li-capture', (req, res) => { res.set(NO_CACHE); res.sendFile(path.join(__dirname, 'public', 'li-capture.html')); });
 app.get('/login',      (req, res) => { res.set(NO_CACHE); res.sendFile(path.join(__dirname, 'public', 'login.html')); });
 app.get('/',           (req, res) => { res.set(NO_CACHE); res.sendFile(path.join(__dirname, 'public', 'landing.html')); });
@@ -252,7 +270,7 @@ app.get('/health', (req, res) => {
 });
 
 // ─── Listen ───────────────────────────────────────────────────────────────────
-app.listen(PORT, () => {
+app.listen(PORT, async () => {
   console.log(`Welltower Recruiter listening on port ${PORT}`);
   console.log(`DATA_DIR in use: ${DATA_DIR}`);
 
@@ -266,27 +284,53 @@ app.listen(PORT, () => {
     console.error('DATA_DIR write check: FAILED —', err.message);
     console.error('Users will not be able to register or log in!');
   }
+
+  // Auto-grant admin to ADMIN_EMAIL if set
+  if (ADMIN_EMAIL) {
+    try {
+      const storageService = require('./services/storage');
+      const adminUser = await storageService.getUserByEmail(ADMIN_EMAIL);
+      if (adminUser && !adminUser.isAdmin) {
+        adminUser.isAdmin = true;
+        await storageService.saveUser(adminUser);
+        console.log(`Admin granted to: ${ADMIN_EMAIL}`);
+      } else if (adminUser) {
+        console.log(`Admin already set: ${ADMIN_EMAIL}`);
+      } else {
+        console.log(`ADMIN_EMAIL set to ${ADMIN_EMAIL} but no matching account found yet`);
+      }
+    } catch (e) {
+      console.error('Admin init error:', e.message);
+    }
+  }
 });
 
 // ─── Bulk outreach queue processor ───────────────────────────────────────────
-const queueSvc   = require('./services/queue');
-const claudeSvc  = require('./services/claude');
-const gmailSvc2  = require('./services/gmail');
-const zohoSvc2   = require('./services/zoho');
+const queueSvc      = require('./services/queue');
+const claudeSvc     = require('./services/claude');
+const gmailSvc2     = require('./services/gmail');
+const zohoSvc2      = require('./services/zoho');
+const outlookSvc2   = require('./services/outlook');
 const { v4: queueUuid } = require('uuid');
 
 // Provider helpers (mirrors routes/email.js dispatcher)
 function _isZohoOAuthReady(user) {
-  return !!(user.zoho && user.zoho.connected && user.zoho.accessToken && user.zoho.refreshToken);
+  return !!(user.zoho?.connected && user.zoho.accessToken && user.zoho.refreshToken);
+}
+function _isOutlookReady(user) {
+  return !!(user.outlook?.connected && user.outlook.accessToken);
 }
 function _getEmailService(user) {
-  return _isZohoOAuthReady(user) ? zohoSvc2 : gmailSvc2;
+  if (_isOutlookReady(user))  return outlookSvc2;
+  if (_isZohoOAuthReady(user)) return zohoSvc2;
+  return gmailSvc2;
 }
 function _isEmailConnected(user) {
-  return (user.gmail && user.gmail.connected) || _isZohoOAuthReady(user);
+  return !!(user.gmail?.connected) || _isZohoOAuthReady(user) || _isOutlookReady(user);
 }
 function _getUserEmailAddress(user) {
-  if (_isZohoOAuthReady(user) && user.zoho.address) return user.zoho.address;
+  if (_isOutlookReady(user) && user.outlook.address) return user.outlook.address;
+  if (_isZohoOAuthReady(user) && user.zoho.address)  return user.zoho.address;
   return (user.gmail && user.gmail.address) || null;
 }
 
@@ -308,8 +352,14 @@ async function processQueueJob() {
     if (!user || !candidate) throw new Error('User or candidate not found');
     if (!_isEmailConnected(user)) throw new Error('No email provider connected');
 
-    // Generate personalised outreach
-    const draft = await claudeSvc.generateOutreach(candidate, user);
+    // Generate personalised outreach (deduct credits)
+    const outreachResult = await claudeSvc.generateOutreach(candidate, user);
+    const draft = outreachResult.text;
+    if (outreachResult.costCents) {
+      user.credits    = Math.max(0, (user.credits    || 0) - outreachResult.costCents);
+      user.totalSpent = (user.totalSpent || 0) + outreachResult.costCents;
+      await storageSvc.saveUser(user);
+    }
 
     // Fresh tracking pixel — resets opened badge for this new email
     const { v4: queueUuidV4 } = require('uuid');

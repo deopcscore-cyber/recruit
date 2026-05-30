@@ -53,10 +53,33 @@ document.addEventListener('DOMContentLoaded', async () => {
   } else if (params.get('zoho') === 'error') {
     Toast.error('Zoho connection failed: ' + (params.get('reason') || 'Unknown error'));
     window.history.replaceState({}, '', '/dashboard');
+  } else if (params.get('outlook') === 'connected') {
+    Toast.success('Outlook connected successfully!');
+    window.history.replaceState({}, '', '/dashboard');
+    currentUser = await API.auth.me();
+  } else if (params.get('outlook') === 'error') {
+    Toast.error('Outlook connection failed: ' + (params.get('reason') || 'Unknown error'));
+    window.history.replaceState({}, '', '/dashboard');
   }
 
   document.getElementById('sidebar-user-name').textContent = currentUser.name;
   document.getElementById('sidebar-user-email').textContent = currentUser.email;
+
+  // Credits display
+  const creditsEl = document.getElementById('sidebar-credits');
+  const creditsVal = document.getElementById('sidebar-credits-val');
+  if (creditsEl && creditsVal) {
+    creditsEl.style.display = 'block';
+    const bal = (currentUser.credits || 0) / 100;
+    creditsVal.textContent = `$${bal.toFixed(2)}`;
+    creditsVal.style.color = bal <= 0 ? '#f87171' : bal < 0.50 ? '#fbbf24' : '#86efac';
+  }
+
+  // Admin link
+  if (currentUser.isAdmin) {
+    const adminLink = document.getElementById('admin-nav-link');
+    if (adminLink) adminLink.classList.remove('hidden');
+  }
 
   // Show the user's company name in the sidebar (falls back to "Recruit Pro")
   const _sidebarName = document.getElementById('sidebar-company-name');
@@ -1325,6 +1348,39 @@ function initSettingsPage() {
     finally { btn.disabled = false; btn.textContent = 'Send Test Email'; }
   });
 
+  // ── Outlook ─────────────────────────────────────────────────────────────────
+  document.getElementById('connect-outlook-btn').addEventListener('click', async () => {
+    const btn = document.getElementById('connect-outlook-btn');
+    btn.disabled = true; btn.textContent = 'Redirecting…';
+    try {
+      const { url } = await API.settings.getOutlookConnectUrl();
+      window.location.href = url;
+    } catch (err) {
+      Toast.error(err.message);
+      btn.disabled = false; btn.textContent = 'Connect Outlook';
+    }
+  });
+
+  document.getElementById('disconnect-outlook-btn').addEventListener('click', async () => {
+    const ok = await showConfirm('Disconnect Outlook?', 'Disconnect');
+    if (!ok) return;
+    try {
+      await API.settings.disconnectOutlook();
+      Toast.success('Outlook disconnected');
+      updateOutlookStatus();
+    } catch (err) { Toast.error(err.message); }
+  });
+
+  document.getElementById('test-outlook-btn').addEventListener('click', async () => {
+    const btn = document.getElementById('test-outlook-btn');
+    btn.disabled = true; btn.textContent = 'Sending…';
+    try {
+      await API.email.test();
+      Toast.success('Test email sent to your Outlook inbox');
+    } catch (err) { Toast.error(err.message); }
+    finally { btn.disabled = false; btn.textContent = 'Send Test Email'; }
+  });
+
   // ════════════════════════════════════════════════════════════════════════════
   // DELIVERABILITY DASHBOARD
   // ════════════════════════════════════════════════════════════════════════════
@@ -2094,6 +2150,7 @@ async function loadSettingsPage() {
 
     await updateGmailStatus();
     await updateZohoStatus();
+    await updateOutlookStatus();
   } catch (err) {
     Toast.error('Failed to load settings');
   }
@@ -2138,6 +2195,29 @@ async function updateZohoStatus() {
       acts.style.display = 'flex';
     } else {
       dot.style.background  = 'var(--text-faint)';
+      text.textContent = 'Not connected';
+      form.style.display = 'block';
+      acts.style.display = 'none';
+    }
+  } catch { /* ignore */ }
+}
+
+async function updateOutlookStatus() {
+  try {
+    const status = await API.settings.outlookStatus();
+    const dot  = document.getElementById('outlook-status-dot');
+    const text = document.getElementById('outlook-status-text');
+    const form = document.getElementById('outlook-connect-form');
+    const acts = document.getElementById('outlook-connected-actions');
+    if (!dot) return;
+
+    if (status.connected) {
+      dot.style.background = '#22c55e';
+      text.textContent = `Connected as ${status.address}`;
+      form.style.display = 'none';
+      acts.style.display = 'flex';
+    } else {
+      dot.style.background = 'var(--text-faint)';
       text.textContent = 'Not connected';
       form.style.display = 'block';
       acts.style.display = 'none';

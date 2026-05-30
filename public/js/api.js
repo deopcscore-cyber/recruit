@@ -20,7 +20,8 @@ const API = {
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
       const err = new Error(data.error || `Request failed (${res.status})`);
-      if (data.reauth) err.reauth = data.reauth; // e.g. 'gmail'
+      if (data.reauth) err.reauth = data.reauth;
+      if (data.code === 'NO_CREDITS') err.noCredits = true;
       throw err;
     }
     return data;
@@ -96,7 +97,19 @@ const API = {
     addColleague(data) { return API.post('/api/settings/colleague', data); },
     getZohoConnectUrl() { return API.get('/api/settings/zoho-connect'); },
     disconnectZoho() { return API.delete('/api/settings/zoho'); },
-    zohoStatus() { return API.get('/api/settings/zoho-status'); }
+    zohoStatus() { return API.get('/api/settings/zoho-status'); },
+    getOutlookConnectUrl() { return API.get('/api/settings/outlook-connect'); },
+    disconnectOutlook() { return API.delete('/api/settings/outlook'); },
+    outlookStatus() { return API.get('/api/settings/outlook-status'); },
+    credits() { return API.get('/api/settings/credits'); }
+  },
+
+  // Admin
+  admin: {
+    users()                         { return API.get('/api/admin/users'); },
+    addCredits(userId, cents)       { return API.post(`/api/admin/users/${userId}/credits`, { amount: cents }); },
+    setAdmin(userId, isAdmin)       { return API.put(`/api/admin/users/${userId}`, { isAdmin }); },
+    deleteUser(userId)              { return API.delete(`/api/admin/users/${userId}`); }
   },
 
   // Email Templates

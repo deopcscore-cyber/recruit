@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Admin — Recruit Pro</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Inter', sans-serif; background: #f0f4ff; min-height: 100vh; display: flex; flex-direction: column; }
+
+    /* ── Top bar ── */
+    .topbar {
+      background: #1a1a2e; color: #fff; padding: 0 28px; height: 60px;
+      display: flex; align-items: center; justify-content: space-between; flex-shrink: 0;
+    }
+    .topbar-logo { display: flex; align-items: center; gap: 10px; text-decoration: none; color: #fff; }
+    .topbar-logo-icon {
+      width: 34px; height: 34px; border-radius: 8px;
+      background: linear-gradient(135deg,#3b5bdb,#845ef7);
+      display: flex; align-items: center; justify-content: center; font-size: 18px;
+    }
+    .topbar-logo span { font-size: 15px; font-weight: 700; }
+    .topbar-right { display: flex; align-items: center; gap: 16px; }
+    .topbar-badge {
+      background: #845ef7; color: #fff; font-size: 11px; font-weight: 700;
+      padding: 3px 10px; border-radius: 999px; letter-spacing: .5px;
+    }
+    .topbar-link { color: #a5b4fc; font-size: 13px; text-decoration: none; }
+    .topbar-link:hover { color: #fff; }
+
+    /* ── Content ── */
+    .content { flex: 1; padding: 32px 28px; max-width: 1200px; margin: 0 auto; width: 100%; }
+
+    h1 { font-size: 22px; font-weight: 800; color: #1a1a2e; margin-bottom: 4px; }
+    .subtitle { font-size: 13px; color: #64748b; margin-bottom: 28px; }
+
+    /* ── Stats row ── */
+    .stats-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 16px; margin-bottom: 28px; }
+    .stat-card {
+      background: #fff; border: 1px solid #e8ecf5; border-radius: 12px; padding: 18px 20px;
+    }
+    .stat-card .sc-label { font-size: 11px; font-weight: 700; color: #94a3b8; text-transform: uppercase; letter-spacing: .8px; margin-bottom: 6px; }
+    .stat-card .sc-value { font-size: 26px; font-weight: 800; color: #1a1a2e; }
+    .stat-card .sc-sub { font-size: 12px; color: #64748b; margin-top: 2px; }
+
+    /* ── Table card ── */
+    .card { background: #fff; border: 1px solid #e8ecf5; border-radius: 14px; overflow: hidden; }
+    .card-header {
+      padding: 18px 22px; border-bottom: 1px solid #e8ecf5;
+      display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;
+    }
+    .card-header h2 { font-size: 15px; font-weight: 700; color: #1a1a2e; }
+    .card-header-search input {
+      padding: 7px 12px; border: 1.5px solid #e2e8f0; border-radius: 7px;
+      font-size: 13px; font-family: inherit; outline: none; width: 220px;
+    }
+    .card-header-search input:focus { border-color: #3b5bdb; }
+
+    table { width: 100%; border-collapse: collapse; }
+    th {
+      padding: 10px 14px; text-align: left; font-size: 11px; font-weight: 700;
+      color: #64748b; text-transform: uppercase; letter-spacing: .8px;
+      background: #f8f9ff; border-bottom: 1px solid #e8ecf5;
+    }
+    td { padding: 13px 14px; font-size: 13px; color: #1a1a2e; border-bottom: 1px solid #f1f5f9; vertical-align: middle; }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: #fafbff; }
+
+    .badge {
+      display: inline-block; font-size: 11px; font-weight: 600;
+      padding: 2px 8px; border-radius: 999px;
+    }
+    .badge-gmail    { background: #fef3c7; color: #92400e; }
+    .badge-zoho     { background: #e0f2fe; color: #0369a1; }
+    .badge-outlook  { background: #ede9fe; color: #5b21b6; }
+    .badge-none     { background: #f1f5f9; color: #64748b; }
+    .badge-admin    { background: #e0e7ff; color: #3730a3; }
+    .badge-company  { background: #e0f2fe; color: #0369a1; }
+    .badge-indep    { background: #fef3c7; color: #92400e; }
+    .badge-consult  { background: #dcfce7; color: #14532d; }
+
+    .credits-cell { font-weight: 700; }
+    .credits-cell.low { color: #dc2626; }
+    .credits-cell.ok  { color: #16a34a; }
+    .credits-cell.zero { color: #94a3b8; }
+
+    .btn { padding: 6px 12px; border-radius: 6px; font-size: 12px; font-weight: 600; font-family: inherit; cursor: pointer; border: none; transition: background .15s; }
+    .btn-add  { background: #3b5bdb; color: #fff; }
+    .btn-add:hover { background: #2f4fcc; }
+    .btn-del  { background: #fff; color: #dc2626; border: 1.5px solid #fecaca; }
+    .btn-del:hover { background: #fef2f2; }
+    .btn-set-admin { background: #fff; color: #3b5bdb; border: 1.5px solid #c7d2fe; }
+    .btn-set-admin:hover { background: #eef2ff; }
+    .actions-cell { display: flex; gap: 6px; flex-wrap: wrap; }
+
+    /* ── Modal ── */
+    .modal-overlay {
+      position: fixed; inset: 0; background: rgba(0,0,0,.45);
+      display: flex; align-items: center; justify-content: center; z-index: 1000;
+    }
+    .modal-overlay.hidden { display: none; }
+    .modal {
+      background: #fff; border-radius: 14px; padding: 28px; width: 380px;
+      box-shadow: 0 20px 60px rgba(0,0,0,.18);
+    }
+    .modal h3 { font-size: 17px; font-weight: 700; color: #1a1a2e; margin-bottom: 6px; }
+    .modal p  { font-size: 13px; color: #64748b; margin-bottom: 20px; line-height: 1.5; }
+    .modal label { font-size: 12px; font-weight: 600; color: #374151; display: block; margin-bottom: 6px; }
+    .modal input {
+      width: 100%; padding: 9px 12px; border: 1.5px solid #e2e8f0;
+      border-radius: 7px; font-size: 14px; font-family: inherit; outline: none;
+    }
+    .modal input:focus { border-color: #3b5bdb; }
+    .modal-actions { display: flex; gap: 10px; margin-top: 20px; justify-content: flex-end; }
+    .btn-modal-cancel { background: #f1f5f9; color: #475569; border: none; }
+    .btn-modal-cancel:hover { background: #e2e8f0; }
+    .btn-modal-confirm { background: #3b5bdb; color: #fff; border: none; }
+    .btn-modal-confirm:hover { background: #2f4fcc; }
+
+    /* ── Toast ── */
+    #toast {
+      position: fixed; bottom: 24px; right: 24px;
+      background: #1a1a2e; color: #fff; padding: 12px 18px;
+      border-radius: 8px; font-size: 13px; font-weight: 600;
+      box-shadow: 0 8px 24px rgba(0,0,0,.2); z-index: 9999;
+      transition: opacity .3s; opacity: 0; pointer-events: none;
+    }
+    #toast.show { opacity: 1; }
+    #toast.error { background: #dc2626; }
+
+    .loading { text-align: center; padding: 60px; color: #94a3b8; font-size: 14px; }
+    .empty   { text-align: center; padding: 40px; color: #94a3b8; font-size: 13px; }
+  </style>
+</head>
+<body>
+
+<!-- Top bar -->
+<div class="topbar">
+  <a class="topbar-logo" href="/dashboard">
+    <div class="topbar-logo-icon">🎯</div>
+    <span>Recruit Pro</span>
+  </a>
+  <div class="topbar-right">
+    <span class="topbar-badge">ADMIN</span>
+    <a class="topbar-link" href="/dashboard">← Back to Dashboard</a>
+    <a class="topbar-link" id="sign-out-btn" href="#">Sign out</a>
+  </div>
+</div>
+
+<!-- Main content -->
+<div class="content">
+  <h1>Admin Panel</h1>
+  <p class="subtitle">Manage users, assign credits, and monitor usage.</p>
+
+  <!-- Stats -->
+  <div class="stats-row" id="stats-row">
+    <div class="stat-card"><div class="sc-label">Total Users</div><div class="sc-value" id="stat-users">—</div></div>
+    <div class="stat-card"><div class="sc-label">Active Email</div><div class="sc-value" id="stat-email">—</div></div>
+    <div class="stat-card"><div class="sc-label">Total Credits (¢)</div><div class="sc-value" id="stat-credits">—</div><div class="sc-sub">across all users</div></div>
+    <div class="stat-card"><div class="sc-label">Total API Spent (¢)</div><div class="sc-value" id="stat-spent">—</div><div class="sc-sub">lifetime</div></div>
+  </div>
+
+  <!-- Users table -->
+  <div class="card">
+    <div class="card-header">
+      <h2>Users</h2>
+      <div class="card-header-search">
+        <input type="text" id="search-input" placeholder="Search name or email…" oninput="renderTable()" />
+      </div>
+    </div>
+    <div id="table-wrap">
+      <div class="loading">Loading users…</div>
+    </div>
+  </div>
+</div>
+
+<!-- Add Credits Modal -->
+<div class="modal-overlay hidden" id="credits-modal">
+  <div class="modal">
+    <h3>Add Credits</h3>
+    <p id="credits-modal-desc">Adding credits to <strong id="credits-modal-name"></strong>.<br>Current balance: <span id="credits-modal-current"></span></p>
+    <label>Amount in dollars (e.g. 3 = $3.00 = 300¢)</label>
+    <input type="number" id="credits-input" min="0" step="0.01" placeholder="3.00" />
+    <div class="modal-actions">
+      <button class="btn btn-modal-cancel" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-modal-confirm" onclick="confirmAddCredits()">Add Credits</button>
+    </div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div id="toast"></div>
+
+<script>
+  let allUsers = [];
+  let activeUserId = null;
+
+  // ── Auth check ────────────────────────────────────────────────────────────
+  async function init() {
+    try {
+      const me = await apiGet('/api/auth/me');
+      if (!me.isAdmin) { window.location.href = '/dashboard'; return; }
+      document.getElementById('sign-out-btn').onclick = async () => {
+        await fetch('/api/auth/logout', { method: 'POST' });
+        window.location.href = '/login';
+      };
+      await loadUsers();
+    } catch {
+      window.location.href = '/login';
+    }
+  }
+
+  // ── API helpers ───────────────────────────────────────────────────────────
+  async function apiGet(url) {
+    const r = await fetch(url, { credentials: 'same-origin' });
+    if (r.status === 401) { window.location.href = '/login'; throw new Error('unauth'); }
+    if (!r.ok) { const d = await r.json().catch(() => ({})); throw new Error(d.error || 'Request failed'); }
+    return r.json();
+  }
+  async function apiPost(url, body) {
+    const r = await fetch(url, {
+      method: 'POST', credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
+    });
+    if (!r.ok) { const d = await r.json().catch(() => ({})); throw new Error(d.error || 'Request failed'); }
+    return r.json();
+  }
+  async function apiDelete(url) {
+    const r = await fetch(url, { method: 'DELETE', credentials: 'same-origin' });
+    if (!r.ok) { const d = await r.json().catch(() => ({})); throw new Error(d.error || 'Request failed'); }
+    return r.json();
+  }
+
+  // ── Load + render ─────────────────────────────────────────────────────────
+  async function loadUsers() {
+    const data = await apiGet('/api/admin/users');
+    allUsers = data.users || [];
+    updateStats();
+    renderTable();
+  }
+
+  function updateStats() {
+    document.getElementById('stat-users').textContent   = allUsers.length;
+    document.getElementById('stat-email').textContent   = allUsers.filter(u => u.emailType !== 'None').length;
+    document.getElementById('stat-credits').textContent = allUsers.reduce((s, u) => s + (u.credits || 0), 0);
+    document.getElementById('stat-spent').textContent   = allUsers.reduce((s, u) => s + (u.totalSpent || 0), 0);
+  }
+
+  function userTypeBadge(t) {
+    if (t === 'recruiter_independent') return '<span class="badge badge-indep">Independent</span>';
+    if (t === 'career_consultant')     return '<span class="badge badge-consult">Consultant</span>';
+    return '<span class="badge badge-company">In-House</span>';
+  }
+  function emailBadge(t) {
+    if (t === 'Gmail')   return '<span class="badge badge-gmail">Gmail</span>';
+    if (t === 'Zoho')    return '<span class="badge badge-zoho">Zoho</span>';
+    if (t === 'Outlook') return '<span class="badge badge-outlook">Outlook</span>';
+    return '<span class="badge badge-none">None</span>';
+  }
+  function creditsCls(c) {
+    if (c <= 0)  return 'zero';
+    if (c < 50)  return 'low';
+    return 'ok';
+  }
+  function fmtCredits(c) {
+    const d = (c / 100).toFixed(2);
+    return `$${d}`;
+  }
+
+  function renderTable() {
+    const q = document.getElementById('search-input').value.toLowerCase();
+    const filtered = allUsers.filter(u =>
+      !q || u.name.toLowerCase().includes(q) || u.email.toLowerCase().includes(q)
+    );
+
+    if (!filtered.length) {
+      document.getElementById('table-wrap').innerHTML = '<div class="empty">No users found.</div>';
+      return;
+    }
+
+    const rows = filtered.map(u => `
+      <tr data-id="${u.id}">
+        <td>
+          <div style="font-weight:600">${u.name || '—'}</div>
+          <div style="color:#64748b;font-size:12px">${u.email}</div>
+          ${u.isAdmin ? '<span class="badge badge-admin" style="margin-top:4px">Admin</span>' : ''}
+        </td>
+        <td>${userTypeBadge(u.userType)}</td>
+        <td>${emailBadge(u.emailType)}</td>
+        <td><span class="credits-cell ${creditsCls(u.credits || 0)}">${fmtCredits(u.credits || 0)}</span></td>
+        <td style="color:#64748b">${fmtCredits(u.totalSpent || 0)}</td>
+        <td>${u.candidateCount || 0}</td>
+        <td style="color:#94a3b8;font-size:12px">${u.createdAt ? u.createdAt.slice(0,10) : '—'}</td>
+        <td>
+          <div class="actions-cell">
+            <button class="btn btn-add" onclick="openCreditsModal('${u.id}')">+ Credits</button>
+            ${!u.isAdmin ? `<button class="btn btn-set-admin" onclick="makeAdmin('${u.id}')">Make Admin</button>` : ''}
+            <button class="btn btn-del" onclick="deleteUser('${u.id}', '${u.name.replace(/'/g,"\\'")}')">Delete</button>
+          </div>
+        </td>
+      </tr>
+    `).join('');
+
+    document.getElementById('table-wrap').innerHTML = `
+      <table>
+        <thead>
+          <tr>
+            <th>User</th>
+            <th>Type</th>
+            <th>Email</th>
+            <th>Credits</th>
+            <th>Spent</th>
+            <th>Candidates</th>
+            <th>Joined</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+    `;
+  }
+
+  // ── Credits modal ─────────────────────────────────────────────────────────
+  function openCreditsModal(userId) {
+    activeUserId = userId;
+    const user = allUsers.find(u => u.id === userId);
+    document.getElementById('credits-modal-name').textContent    = user.name;
+    document.getElementById('credits-modal-current').textContent = fmtCredits(user.credits || 0);
+    document.getElementById('credits-input').value = '';
+    document.getElementById('credits-modal').classList.remove('hidden');
+    setTimeout(() => document.getElementById('credits-input').focus(), 50);
+  }
+
+  function closeModal() {
+    document.getElementById('credits-modal').classList.add('hidden');
+    activeUserId = null;
+  }
+
+  async function confirmAddCredits() {
+    const raw = parseFloat(document.getElementById('credits-input').value);
+    if (isNaN(raw) || raw <= 0) { showToast('Enter a valid amount', true); return; }
+    const cents = Math.round(raw * 100);
+    try {
+      const result = await apiPost(`/api/admin/users/${activeUserId}/credits`, { amount: cents });
+      // Update local state
+      const idx = allUsers.findIndex(u => u.id === activeUserId);
+      if (idx >= 0) allUsers[idx].credits = result.credits;
+      updateStats();
+      renderTable();
+      closeModal();
+      showToast(`Added $${raw.toFixed(2)} to ${result.name}`);
+    } catch (err) {
+      showToast(err.message, true);
+    }
+  }
+
+  // ── Make admin ────────────────────────────────────────────────────────────
+  async function makeAdmin(userId) {
+    if (!confirm('Grant admin access to this user?')) return;
+    try {
+      await fetch(`/api/admin/users/${userId}`, {
+        method: 'PUT', credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ isAdmin: true })
+      });
+      const idx = allUsers.findIndex(u => u.id === userId);
+      if (idx >= 0) allUsers[idx].isAdmin = true;
+      renderTable();
+      showToast('Admin access granted');
+    } catch (err) { showToast(err.message, true); }
+  }
+
+  // ── Delete user ───────────────────────────────────────────────────────────
+  async function deleteUser(userId, name) {
+    if (!confirm(`Delete ${name}? This cannot be undone.`)) return;
+    try {
+      await apiDelete(`/api/admin/users/${userId}`);
+      allUsers = allUsers.filter(u => u.id !== userId);
+      updateStats();
+      renderTable();
+      showToast(`${name} deleted`);
+    } catch (err) { showToast(err.message, true); }
+  }
+
+  // ── Toast ─────────────────────────────────────────────────────────────────
+  let _toastTimer;
+  function showToast(msg, isError = false) {
+    const el = document.getElementById('toast');
+    el.textContent = msg;
+    el.className = 'show' + (isError ? ' error' : '');
+    clearTimeout(_toastTimer);
+    _toastTimer = setTimeout(() => { el.className = ''; }, 3000);
+  }
+
+  // Close modal on overlay click
+  document.getElementById('credits-modal').addEventListener('click', function(e) {
+    if (e.target === this) closeModal();
+  });
+
+  // Enter to confirm
+  document.getElementById('credits-input').addEventListener('keydown', e => {
+    if (e.key === 'Enter') confirmAddCredits();
+  });
+
+  init();
+</script>
+</body>
+</html>

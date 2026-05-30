@@ -23,4 +23,14 @@ const IS_PRODUCTION = process.env.NODE_ENV === 'production' || !!process.env.RAI
 const ZOHO_CLIENT_ID     = process.env.ZOHO_CLIENT_ID     || '';
 const ZOHO_CLIENT_SECRET = process.env.ZOHO_CLIENT_SECRET || '';
 
-module.exports = { DATA_DIR, BASE_URL, SESSION_SECRET, PORT, IS_PRODUCTION, ZOHO_CLIENT_ID, ZOHO_CLIENT_SECRET };
+const MICROSOFT_CLIENT_ID     = process.env.MICROSOFT_CLIENT_ID     || '';
+const MICROSOFT_CLIENT_SECRET = process.env.MICROSOFT_CLIENT_SECRET || '';
+
+const ADMIN_EMAIL = (process.env.ADMIN_EMAIL || '').toLowerCase().trim();
+
+module.exports = {
+  DATA_DIR, BASE_URL, SESSION_SECRET, PORT, IS_PRODUCTION,
+  ZOHO_CLIENT_ID, ZOHO_CLIENT_SECRET,
+  MICROSOFT_CLIENT_ID, MICROSOFT_CLIENT_SECRET,
+  ADMIN_EMAIL
+};
