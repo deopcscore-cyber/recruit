@@ -67,6 +67,141 @@ function formatUserStyle(user) {
 }
 
 async function generateOutreach(candidate, user) {
+  // Route to the right prompt based on the user's account type
+  const type = user.userType || 'recruiter_company';
+  if (type === 'career_consultant')      return _generateCareerConsultantOutreach(candidate, user);
+  if (type === 'recruiter_independent')  return _generateIndependentRecruiterOutreach(candidate, user);
+  return _generateCompanyRecruiterOutreach(candidate, user);
+}
+
+// ── Career Consultant outreach ────────────────────────────────────────────────
+// "I see your potential — let me help you get to a better position."
+async function _generateCareerConsultantOutreach(candidate, user) {
+  const candidateInfo = formatCandidateContext(candidate);
+  const styleInfo = formatUserStyle(user);
+  const consultantName  = user.name || 'Your Consultant';
+  const consultantTitle = (user.title && user.title.trim()) || 'Career Strategist';
+  const servicePitch    = (user.companyPitch || '').trim() ||
+    'I specialize in helping experienced professionals reposition themselves for roles that match their actual value — better title, better company, better compensation.';
+  const practiseName    = (user.companyName || '').trim() || '';
+
+  const prompt = `You are ${consultantName}, a career consultant. You are writing a cold outreach email to a professional whose LinkedIn profile you found. Your goal is to open a conversation about helping them advance their career — NOT to hire them for a company. You believe their background is strong but their career positioning and resume may not be reflecting their full value.
+
+YOUR SERVICE:
+${servicePitch}
+
+CANDIDATE INFORMATION:
+${candidateInfo}
+
+STYLE GUIDANCE:
+${styleInfo}
+
+Write a 4-paragraph outreach email. Follow this structure EXACTLY:
+
+PARAGRAPH 1 — I see YOU (specific, not flattering):
+- "Dear [First Name],"
+- One sharp, specific observation about something rare or genuinely impressive in their career — not generic praise. Reference real companies, real roles, real transitions.
+- Show you actually read their background in detail.
+
+PARAGRAPH 2 — The gap you see:
+- Diplomatically name the gap between their actual value and how they are currently positioned.
+- Do NOT say their resume is bad. Say something like: "What I notice is that someone with [their actual experience] is often underrepresented on paper — the full scope of what they've built and led rarely comes through in a standard format."
+- Make them feel seen, not criticised.
+
+PARAGRAPH 3 — What you do:
+- Briefly explain your service: you help professionals like them reposition for better roles — better title, better company, better compensation.
+- Be specific: "I work with [type of professional] to strengthen how their leadership story is told — strategy, positioning, and where to focus the job search."
+- ${practiseName ? `Sign off from ${practiseName}.` : ''}
+
+PARAGRAPH 4 — Low-friction CTA:
+- Do NOT ask for a call. Do NOT say "let's schedule a chat."
+- Create curiosity: "I put together a few specific thoughts on how your background could be framed differently — nothing generic, based on what I actually read. If you're open to it, I'm happy to send them over. No obligation, just a perspective."
+- Or: "Reply here if you'd like to see what I mean — I'll send over two or three specific observations. Takes 5 minutes to read and might be worth it."
+
+SIGNATURE:
+${consultantName}
+${consultantTitle}${practiseName ? '\n' + practiseName : ''}
+
+RULES:
+- DO NOT pitch a specific job or company
+- DO NOT use phrases like "exciting opportunity" or "I came across your profile"
+- Sound like a real human who genuinely read their background — curious, direct, respectful
+- Under 280 words
+- Output ONLY the email body starting with "Dear [First Name],"
+
+Write the email now:`;
+
+  const response = await client.messages.create({
+    model: MODEL, max_tokens: 800,
+    messages: [{ role: 'user', content: prompt }]
+  });
+  return response.content[0].text.trim();
+}
+
+// ── Independent Recruiter outreach ────────────────────────────────────────────
+// "I place talent across multiple companies — your background fits what my clients need."
+async function _generateIndependentRecruiterOutreach(candidate, user) {
+  const candidateInfo = formatCandidateContext(candidate);
+  const styleInfo     = formatUserStyle(user);
+  const recruiterName = user.name || 'Recruiter';
+  const recruiterTitle = (user.title && user.title.trim()) || 'Executive Recruiter';
+  const agencyName    = (user.companyName || '').trim() || '';
+  const pitch         = (user.companyPitch || '').trim() ||
+    'I work with a select group of growing companies — typically well-funded or well-established — that are looking for experienced operators who have actually done the work, not just managed the process.';
+
+  const prompt = `You are ${recruiterName}, an independent executive recruiter${agencyName ? ' at ' + agencyName : ''}. You are NOT writing on behalf of one specific company — you place talent across multiple client companies. You are reaching out to a candidate whose background is a strong fit for the type of roles you typically fill.
+
+YOUR PITCH:
+${pitch}
+
+CANDIDATE INFORMATION:
+${candidateInfo}
+
+STYLE GUIDANCE:
+${styleInfo}
+
+Write a 4-paragraph outreach email following this structure EXACTLY:
+
+PARAGRAPH 1 — Career arc (the heart of the email):
+- "Dear [First Name],"
+- One sharp, specific observation about what makes this person rare — something most people in their field never develop. Reference real companies and roles.
+- Trace their career arc, naming specific companies and transitions chronologically.
+- End with one differentiating detail that reveals depth or character.
+
+PARAGRAPH 2 — Who you are / your positioning:
+- Explain briefly that you are an independent recruiter, not tied to one company.
+- Use the pitch above, lightly adapted for natural flow.
+- The key message: you bring opportunities from multiple companies and you are selective about who you bring them to.
+
+PARAGRAPH 3 — Bridge their background to your clients' needs:
+- "The companies I work with are specifically looking for [type of professional that matches the candidate] who understand [specific thing the candidate has done] from the inside — not just in a support or advisory function."
+- "Your background across [specific domains] is the kind of profile that travels well across [the relevant industry]."
+
+PARAGRAPH 4 — Curiosity CTA:
+- Do NOT say "I have an exciting opportunity." Do NOT ask for a call upfront.
+- "There is a specific situation I have in mind — I kept the details out of this note on purpose because context matters, and I'd rather share them in a reply than cold-drop a job description. If any part of this caught your attention, reply here and I'll send the specifics. No calls to schedule, no commitments."
+
+SIGNATURE:
+${recruiterName}
+${recruiterTitle}${agencyName ? '\nIndependent Recruiter' : ''}
+
+RULES:
+- DO NOT name a specific client company
+- DO NOT use phrases like "I came across your profile" or "exciting opportunity"
+- Sound warm, specific, human — under 300 words
+- Output ONLY the email body starting with "Dear [First Name],"
+
+Write the email now:`;
+
+  const response = await client.messages.create({
+    model: MODEL, max_tokens: 800,
+    messages: [{ role: 'user', content: prompt }]
+  });
+  return response.content[0].text.trim();
+}
+
+// ── Company Recruiter outreach (original) ─────────────────────────────────────
+async function _generateCompanyRecruiterOutreach(candidate, user) {
   const candidateInfo = formatCandidateContext(candidate);
   const styleInfo = formatUserStyle(user);
   const company = getCompanyContext(user);

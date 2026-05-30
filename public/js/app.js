@@ -31,9 +31,9 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   try {
     currentUser = await API.auth.me();
-    if (!currentUser) { window.location.href = '/'; return; }
+    if (!currentUser) { window.location.href = '/login'; return; }
   } catch {
-    window.location.href = '/';
+    window.location.href = '/login';
     return;
   }
 
@@ -76,7 +76,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Logout
   document.getElementById('logout-btn').addEventListener('click', async () => {
     await API.auth.logout();
-    window.location.href = '/';
+    window.location.href = '/login';
   });
 
   // Dark mode toggle

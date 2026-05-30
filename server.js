@@ -243,7 +243,8 @@ function crc32 (buf) {
 const NO_CACHE = { 'Cache-Control': 'no-cache, no-store, must-revalidate', Pragma: 'no-cache', Expires: '0' };
 app.get('/dashboard',  (req, res) => { res.set(NO_CACHE); res.sendFile(path.join(__dirname, 'public', 'dashboard.html')); });
 app.get('/li-capture', (req, res) => { res.set(NO_CACHE); res.sendFile(path.join(__dirname, 'public', 'li-capture.html')); });
-app.get('/',           (req, res) => { res.set(NO_CACHE); res.sendFile(path.join(__dirname, 'public', 'index.html')); });
+app.get('/login',      (req, res) => { res.set(NO_CACHE); res.sendFile(path.join(__dirname, 'public', 'index.html')); });
+app.get('/',           (req, res) => { res.set(NO_CACHE); res.sendFile(path.join(__dirname, 'public', 'landing.html')); });
 
 // ─── Health check (Railway uses this) ────────────────────────────────────────
 app.get('/health', (req, res) => {
@@ -381,10 +382,17 @@ async function runAutoFetch() {
       if (!_isEmailConnected(user)) continue;
       try {
         const svc = _getEmailService(user);
-        const replies = await svc.fetchUnreadReplies(user.id);
-        if (!replies.length) continue;
 
+        // Build candidate context BEFORE calling fetch so Gmail can search
+        // the right threads and email addresses (without these it returns nothing)
         const candidates = await storageService.getUserCandidates(user.id);
+        const candidateEmails    = candidates.map(c => c.email).filter(Boolean);
+        const candidateThreadIds = {};
+        candidates.forEach(c => { if (c.gmailThreadId) candidateThreadIds[c.gmailThreadId] = c.id; });
+
+        // Zoho ignores the extra args; Gmail requires them
+        const replies = await svc.fetchUnreadReplies(user.id, candidateEmails, candidateThreadIds);
+        if (!replies.length) continue;
         const stageOrder = ['Imported','Outreach Sent','Replied','Resume Requested','Resume Received','Interviewing','Closed'];
         let matched = 0;
 

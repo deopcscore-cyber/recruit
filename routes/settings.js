@@ -33,7 +33,8 @@ router.get('/', async (req, res) => {
       hunterApiKey:        user.hunterApiKey        ? '••••••••' : '',
       contactOutApiKey:    user.contactOutApiKey    ? '••••••••' : '',
       apolloApiKey:        user.apolloApiKey        ? '••••••••' : '',
-      extensionToken:      user.extensionToken      || ''
+      extensionToken:      user.extensionToken      || '',
+      userType:            user.userType            || 'recruiter_company'
     });
   } catch (err) {
     console.error('Get settings error:', err);
@@ -47,7 +48,9 @@ router.put('/', async (req, res) => {
     const user = await storage.getUserById(req.session.userId);
     if (!user) return res.status(404).json({ error: 'User not found' });
 
-    const { tone, notes, use, avoid, name, title, companyName, companyPitch, hunterApiKey, contactOutApiKey, apolloApiKey, signature, secondaryTestEmail } = req.body;
+    const { tone, notes, use, avoid, name, title, companyName, companyPitch, hunterApiKey, contactOutApiKey, apolloApiKey, signature, secondaryTestEmail, userType } = req.body;
+    const VALID_TYPES = ['recruiter_company', 'recruiter_independent', 'career_consultant'];
+    if (userType && VALID_TYPES.includes(userType)) user.userType = userType;
 
     user.style = user.style || {};
     if (tone !== undefined) user.style.tone = tone;
@@ -85,7 +88,8 @@ router.put('/', async (req, res) => {
       contactOutApiKey: user.contactOutApiKey ? '••••••••' : '',
       apolloApiKey:     user.apolloApiKey     ? '••••••••' : '',
       signature: user.signature || {},
-      secondaryTestEmail: user.secondaryTestEmail || ''
+      secondaryTestEmail: user.secondaryTestEmail || '',
+      userType:           user.userType           || 'recruiter_company'
     });
   } catch (err) {
     console.error('Update settings error:', err);

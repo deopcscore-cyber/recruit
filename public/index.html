@@ -5,112 +5,103 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Recruit Pro — Sign In</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/css/app.css" />
   <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     body {
-      background: #f0f4f8;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      min-height: 100vh;
-      margin: 0;
+      font-family: 'Inter', sans-serif;
+      background: linear-gradient(135deg, #f0f4ff 0%, #e8f0fe 100%);
+      min-height: 100vh; display: flex; flex-direction: column;
+      align-items: center; justify-content: center; padding: 24px;
     }
+    .back-link {
+      position: fixed; top: 20px; left: 20px;
+      font-size: 13px; color: #64748b; text-decoration: none;
+      display: flex; align-items: center; gap: 6px;
+      transition: color .2s;
+    }
+    .back-link:hover { color: #3b5bdb; }
+
     .auth-card {
-      background: #fff;
-      border-radius: 12px;
-      box-shadow: 0 4px 24px rgba(0,0,0,0.10);
-      padding: 48px 40px 40px;
-      width: 100%;
-      max-width: 400px;
+      background: #fff; border-radius: 16px;
+      box-shadow: 0 8px 40px rgba(59,91,219,.12);
+      padding: 40px 36px; width: 100%; max-width: 440px;
     }
-    .auth-logo {
-      text-align: center;
-      margin-bottom: 32px;
+    .auth-logo { text-align: center; margin-bottom: 28px; }
+    .auth-logo-icon {
+      width: 48px; height: 48px; border-radius: 12px;
+      background: linear-gradient(135deg, #3b5bdb, #845ef7);
+      display: inline-flex; align-items: center; justify-content: center;
+      font-size: 26px; margin-bottom: 12px;
     }
-    .auth-logo h1 {
-      font-size: 1.5rem;
-      font-weight: 700;
-      color: #1a2e44;
-      margin: 0 0 4px;
-    }
-    .auth-logo p {
-      color: #64748b;
-      font-size: 0.9rem;
-      margin: 0;
-    }
+    .auth-logo h1 { font-size: 20px; font-weight: 800; color: #1a1a2e; margin-bottom: 4px; }
+    .auth-logo p { color: #64748b; font-size: 13px; }
+
     .auth-tabs {
-      display: flex;
-      border-bottom: 2px solid #e2e8f0;
-      margin-bottom: 28px;
+      display: flex; border-bottom: 2px solid #e8ecf5; margin-bottom: 24px;
     }
     .auth-tab {
-      flex: 1;
-      text-align: center;
-      padding: 10px;
-      cursor: pointer;
-      font-weight: 500;
-      color: #64748b;
-      border-bottom: 2px solid transparent;
-      margin-bottom: -2px;
-      transition: color 0.15s, border-color 0.15s;
+      flex: 1; text-align: center; padding: 10px; cursor: pointer;
+      font-size: 14px; font-weight: 600; color: #94a3b8;
+      border-bottom: 2px solid transparent; margin-bottom: -2px; transition: color .15s, border-color .15s;
     }
-    .auth-tab.active {
-      color: #2563eb;
-      border-bottom-color: #2563eb;
-    }
+    .auth-tab.active { color: #3b5bdb; border-bottom-color: #3b5bdb; }
+
     .auth-form { display: none; }
     .auth-form.active { display: block; }
-    .form-group { margin-bottom: 18px; }
-    label { display: block; font-size: 0.85rem; font-weight: 500; color: #374151; margin-bottom: 6px; }
+
+    .form-group { margin-bottom: 16px; }
+    label { display: block; font-size: 13px; font-weight: 600; color: #374151; margin-bottom: 6px; }
     input[type="text"], input[type="email"], input[type="password"] {
-      width: 100%;
-      padding: 10px 14px;
-      border: 1.5px solid #d1d5db;
-      border-radius: 8px;
-      font-size: 0.95rem;
-      outline: none;
-      transition: border-color 0.15s;
-      box-sizing: border-box;
+      width: 100%; padding: 10px 14px; border: 1.5px solid #e2e8f0;
+      border-radius: 8px; font-size: 14px; font-family: inherit;
+      outline: none; transition: border-color .15s; color: #1a1a2e;
     }
-    input:focus { border-color: #2563eb; }
+    input:focus { border-color: #3b5bdb; }
+
+    /* User type selector */
+    .user-type-label { font-size: 13px; font-weight: 600; color: #374151; margin-bottom: 10px; display: block; }
+    .user-type-grid { display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; }
+    .user-type-option {
+      display: flex; align-items: flex-start; gap: 12px;
+      border: 1.5px solid #e2e8f0; border-radius: 10px; padding: 12px 14px;
+      cursor: pointer; transition: border-color .15s, background .15s;
+    }
+    .user-type-option:hover { border-color: #3b5bdb; background: #f8f9ff; }
+    .user-type-option.selected { border-color: #3b5bdb; background: #eef2ff; }
+    .user-type-option input[type="radio"] { display: none; }
+    .uto-icon { font-size: 22px; flex-shrink: 0; margin-top: 1px; }
+    .uto-text h4 { font-size: 13px; font-weight: 700; color: #1a1a2e; margin-bottom: 2px; }
+    .uto-text p { font-size: 12px; color: #64748b; line-height: 1.45; }
+
     .btn-primary {
-      width: 100%;
-      padding: 12px;
-      background: #2563eb;
-      color: #fff;
-      border: none;
-      border-radius: 8px;
-      font-size: 1rem;
-      font-weight: 600;
-      cursor: pointer;
-      transition: background 0.15s;
-      margin-top: 8px;
+      width: 100%; padding: 12px; background: #3b5bdb; color: #fff;
+      border: none; border-radius: 8px; font-size: 14px; font-weight: 700;
+      font-family: inherit; cursor: pointer; transition: background .15s; margin-top: 4px;
     }
-    .btn-primary:hover { background: #1d4ed8; }
-    .btn-primary:disabled { background: #93c5fd; cursor: not-allowed; }
-    .auth-error {
-      color: #dc2626;
-      font-size: 0.85rem;
-      margin-top: 12px;
-      text-align: center;
-      min-height: 20px;
-    }
+    .btn-primary:hover { background: #2f4fcc; }
+    .btn-primary:disabled { background: #a5b4fc; cursor: not-allowed; }
+    .auth-error { color: #dc2626; font-size: 13px; margin-top: 10px; text-align: center; min-height: 18px; }
+
+    .divider { text-align: center; font-size: 12px; color: #94a3b8; margin: 16px 0; }
   </style>
 </head>
 <body>
+  <a class="back-link" href="/">← Back to home</a>
+
   <div class="auth-card">
     <div class="auth-logo">
+      <div class="auth-logo-icon">🎯</div>
       <h1>Recruit Pro</h1>
-      <p>Recruiting Automation Platform</p>
+      <p>The smart outreach platform</p>
     </div>
 
     <div class="auth-tabs">
-      <div class="auth-tab active" data-tab="login">Sign In</div>
-      <div class="auth-tab" data-tab="register">Create Account</div>
+      <div class="auth-tab active" data-tab="login">Sign in</div>
+      <div class="auth-tab" data-tab="register">Create account</div>
     </div>
 
+    <!-- Login -->
     <form class="auth-form active" id="login-form">
       <div class="form-group">
         <label for="login-email">Email</label>
@@ -120,10 +111,11 @@
         <label for="login-password">Password</label>
         <input type="password" id="login-password" placeholder="••••••••" required />
       </div>
-      <button type="submit" class="btn-primary" id="login-btn">Sign In</button>
+      <button type="submit" class="btn-primary" id="login-btn">Sign in</button>
       <div class="auth-error" id="login-error"></div>
     </form>
 
+    <!-- Register -->
     <form class="auth-form" id="register-form">
       <div class="form-group">
         <label for="reg-name">Full Name</label>
@@ -137,19 +129,58 @@
         <label for="reg-password">Password</label>
         <input type="password" id="reg-password" placeholder="At least 6 characters" required />
       </div>
-      <button type="submit" class="btn-primary" id="register-btn">Create Account</button>
+
+      <span class="user-type-label">What best describes you?</span>
+      <div class="user-type-grid" id="user-type-grid">
+        <label class="user-type-option selected" data-value="recruiter_company">
+          <input type="radio" name="userType" value="recruiter_company" checked>
+          <span class="uto-icon">🏢</span>
+          <div class="uto-text">
+            <h4>In-House Recruiter</h4>
+            <p>I hire talent for my company</p>
+          </div>
+        </label>
+        <label class="user-type-option" data-value="recruiter_independent">
+          <input type="radio" name="userType" value="recruiter_independent">
+          <span class="uto-icon">🤝</span>
+          <div class="uto-text">
+            <h4>Independent Recruiter</h4>
+            <p>I place talent for multiple client companies</p>
+          </div>
+        </label>
+        <label class="user-type-option" data-value="career_consultant">
+          <input type="radio" name="userType" value="career_consultant">
+          <span class="uto-icon">🚀</span>
+          <div class="uto-text">
+            <h4>Career Consultant</h4>
+            <p>I help professionals advance their careers</p>
+          </div>
+        </label>
+      </div>
+
+      <button type="submit" class="btn-primary" id="register-btn">Create account →</button>
       <div class="auth-error" id="register-error"></div>
     </form>
   </div>
 
   <script>
-    // Tab switching
+    // Tab switching + URL param support (?tab=register)
+    function switchTab(name) {
+      document.querySelectorAll('.auth-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === name));
+      document.querySelectorAll('.auth-form').forEach(f => f.classList.toggle('active', f.id === name + '-form'));
+    }
     document.querySelectorAll('.auth-tab').forEach(tab => {
-      tab.addEventListener('click', () => {
-        document.querySelectorAll('.auth-tab').forEach(t => t.classList.remove('active'));
-        document.querySelectorAll('.auth-form').forEach(f => f.classList.remove('active'));
-        tab.classList.add('active');
-        document.getElementById(tab.dataset.tab + '-form').classList.add('active');
+      tab.addEventListener('click', () => switchTab(tab.dataset.tab));
+    });
+    const urlTab = new URLSearchParams(location.search).get('tab');
+    if (urlTab === 'register') switchTab('register');
+
+    // User type selection
+    document.querySelectorAll('.user-type-option').forEach(opt => {
+      opt.addEventListener('click', () => {
+        document.querySelectorAll('.user-type-option').forEach(o => o.classList.remove('selected'));
+        opt.classList.add('selected');
+        opt.querySelector('input').checked = true;
       });
     });
 
@@ -158,32 +189,16 @@
       e.preventDefault();
       const btn = document.getElementById('login-btn');
       const errEl = document.getElementById('login-error');
-      errEl.textContent = '';
-      btn.disabled = true;
-      btn.textContent = 'Signing in…';
-
+      errEl.textContent = ''; btn.disabled = true; btn.textContent = 'Signing in…';
       try {
         const res = await fetch('/api/auth/login', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            email: document.getElementById('login-email').value.trim(),
-            password: document.getElementById('login-password').value
-          })
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: document.getElementById('login-email').value.trim(), password: document.getElementById('login-password').value })
         });
         const data = await res.json();
-        if (!res.ok) {
-          errEl.textContent = data.error || 'Login failed';
-          btn.disabled = false;
-          btn.textContent = 'Sign In';
-          return;
-        }
+        if (!res.ok) { errEl.textContent = data.error || 'Login failed'; btn.disabled = false; btn.textContent = 'Sign in'; return; }
         window.location.href = '/dashboard';
-      } catch (err) {
-        errEl.textContent = 'Network error. Please try again.';
-        btn.disabled = false;
-        btn.textContent = 'Sign In';
-      }
+      } catch { errEl.textContent = 'Network error. Please try again.'; btn.disabled = false; btn.textContent = 'Sign in'; }
     });
 
     // Register
@@ -191,39 +206,26 @@
       e.preventDefault();
       const btn = document.getElementById('register-btn');
       const errEl = document.getElementById('register-error');
-      errEl.textContent = '';
-      btn.disabled = true;
-      btn.textContent = 'Creating account…';
-
+      const selectedType = document.querySelector('input[name="userType"]:checked')?.value || 'recruiter_company';
+      errEl.textContent = ''; btn.disabled = true; btn.textContent = 'Creating account…';
       try {
         const res = await fetch('/api/auth/register', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             name: document.getElementById('reg-name').value.trim(),
             email: document.getElementById('reg-email').value.trim(),
-            password: document.getElementById('reg-password').value
+            password: document.getElementById('reg-password').value,
+            userType: selectedType
           })
         });
         const data = await res.json();
-        if (!res.ok) {
-          errEl.textContent = data.error || 'Registration failed';
-          btn.disabled = false;
-          btn.textContent = 'Create Account';
-          return;
-        }
+        if (!res.ok) { errEl.textContent = data.error || 'Registration failed'; btn.disabled = false; btn.textContent = 'Create account →'; return; }
         window.location.href = '/dashboard';
-      } catch (err) {
-        errEl.textContent = 'Network error. Please try again.';
-        btn.disabled = false;
-        btn.textContent = 'Create Account';
-      }
+      } catch { errEl.textContent = 'Network error. Please try again.'; btn.disabled = false; btn.textContent = 'Create account →'; }
     });
 
     // Redirect if already logged in
-    fetch('/api/auth/me').then(res => {
-      if (res.ok) window.location.href = '/dashboard';
-    }).catch(() => {});
+    fetch('/api/auth/me').then(r => { if (r.ok) window.location.href = '/dashboard'; }).catch(() => {});
   </script>
 </body>
 </html>

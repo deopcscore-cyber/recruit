@@ -8,11 +8,14 @@ const requireAuth = require('../middleware/auth');
 // POST /api/auth/register
 router.post('/register', async (req, res) => {
   try {
-    const { name, email, password } = req.body;
+    const { name, email, password, userType } = req.body;
 
     if (!name || !email || !password) {
       return res.status(400).json({ error: 'Name, email, and password are required' });
     }
+
+    const VALID_TYPES = ['recruiter_company', 'recruiter_independent', 'career_consultant'];
+    const resolvedType = VALID_TYPES.includes(userType) ? userType : 'recruiter_company';
 
     if (password.length < 6) {
       return res.status(400).json({ error: 'Password must be at least 6 characters' });
@@ -30,17 +33,9 @@ router.post('/register', async (req, res) => {
       name: name.trim(),
       email: email.toLowerCase().trim(),
       password: passwordHash,
-      gmail: {
-        connected: false,
-        tokens: null,
-        address: ''
-      },
-      style: {
-        tone: 'warm',
-        notes: '',
-        use: [],
-        avoid: []
-      },
+      userType: resolvedType,
+      gmail: { connected: false, tokens: null, address: '' },
+      style: { tone: 'warm', notes: '', use: [], avoid: [] },
       createdAt: new Date().toISOString()
     };
 
@@ -90,6 +85,7 @@ router.post('/login', async (req, res) => {
       email: user.email,
       gmail: user.gmail,
       style: user.style,
+      userType: user.userType || 'recruiter_company',
       companyName: user.companyName || '',
       companyPitch: user.companyPitch || ''
     });
@@ -124,6 +120,7 @@ router.get('/me', requireAuth, async (req, res) => {
       email: user.email,
       gmail: user.gmail,
       style: user.style,
+      userType: user.userType || 'recruiter_company',
       companyName: user.companyName || '',
       companyPitch: user.companyPitch || ''
     });

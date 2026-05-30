@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Recruit Pro — The Smart Outreach Platform</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    body { font-family: 'Inter', sans-serif; color: #1a1a2e; background: #fff; line-height: 1.6; }
+
+    /* ── Nav ── */
+    nav {
+      position: sticky; top: 0; z-index: 100;
+      background: rgba(255,255,255,.92); backdrop-filter: blur(12px);
+      border-bottom: 1px solid #e8ecf5;
+      padding: 0 24px; height: 64px;
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .nav-logo { display: flex; align-items: center; gap: 10px; text-decoration: none; }
+    .nav-logo-icon {
+      width: 36px; height: 36px; border-radius: 9px;
+      background: linear-gradient(135deg, #3b5bdb, #845ef7);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 20px;
+    }
+    .nav-logo-text { font-size: 16px; font-weight: 700; color: #1a1a2e; }
+    .nav-actions { display: flex; gap: 10px; align-items: center; }
+    .btn-nav-login {
+      padding: 8px 18px; border-radius: 8px; font-size: 14px; font-weight: 600;
+      border: 1.5px solid #e8ecf5; background: transparent; color: #1a1a2e;
+      cursor: pointer; text-decoration: none; transition: border-color .2s;
+    }
+    .btn-nav-login:hover { border-color: #3b5bdb; color: #3b5bdb; }
+    .btn-nav-signup {
+      padding: 8px 18px; border-radius: 8px; font-size: 14px; font-weight: 600;
+      background: #3b5bdb; color: #fff; border: none;
+      cursor: pointer; text-decoration: none; transition: background .2s;
+    }
+    .btn-nav-signup:hover { background: #2f4fcc; }
+
+    /* ── Hero ── */
+    .hero {
+      padding: 96px 24px 80px;
+      text-align: center;
+      background: linear-gradient(180deg, #f0f4ff 0%, #fff 100%);
+    }
+    .hero-badge {
+      display: inline-flex; align-items: center; gap: 6px;
+      background: #e0e7ff; color: #3b5bdb; border-radius: 999px;
+      font-size: 13px; font-weight: 600; padding: 5px 14px;
+      margin-bottom: 24px;
+    }
+    .hero h1 {
+      font-size: clamp(36px, 6vw, 64px); font-weight: 900;
+      line-height: 1.1; letter-spacing: -1.5px;
+      color: #1a1a2e; max-width: 820px; margin: 0 auto 20px;
+    }
+    .hero h1 span { color: #3b5bdb; }
+    .hero p {
+      font-size: clamp(16px, 2vw, 20px); color: #5a6a8a;
+      max-width: 580px; margin: 0 auto 36px; line-height: 1.65;
+    }
+    .hero-cta { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+    .btn-hero-primary {
+      padding: 14px 32px; border-radius: 10px; font-size: 15px; font-weight: 700;
+      background: #3b5bdb; color: #fff; border: none; cursor: pointer;
+      text-decoration: none; transition: background .2s, transform .15s;
+      box-shadow: 0 4px 20px rgba(59,91,219,.35);
+    }
+    .btn-hero-primary:hover { background: #2f4fcc; transform: translateY(-1px); }
+    .btn-hero-secondary {
+      padding: 14px 32px; border-radius: 10px; font-size: 15px; font-weight: 600;
+      background: #fff; color: #1a1a2e; border: 1.5px solid #e8ecf5;
+      cursor: pointer; text-decoration: none; transition: border-color .2s;
+    }
+    .btn-hero-secondary:hover { border-color: #3b5bdb; color: #3b5bdb; }
+    .hero-sub { margin-top: 16px; font-size: 13px; color: #94a3b8; }
+
+    /* ── Who it's for ── */
+    .section { padding: 80px 24px; }
+    .section-label {
+      text-align: center; font-size: 12px; font-weight: 700; letter-spacing: 1.5px;
+      color: #3b5bdb; text-transform: uppercase; margin-bottom: 12px;
+    }
+    .section h2 {
+      text-align: center; font-size: clamp(28px, 4vw, 42px); font-weight: 800;
+      letter-spacing: -0.5px; margin-bottom: 12px; color: #1a1a2e;
+    }
+    .section-sub {
+      text-align: center; font-size: 16px; color: #5a6a8a;
+      max-width: 520px; margin: 0 auto 52px;
+    }
+    .cards-grid {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 24px; max-width: 1000px; margin: 0 auto;
+    }
+    .user-card {
+      background: #f8f9ff; border: 1.5px solid #e8ecf5; border-radius: 16px;
+      padding: 28px 26px; transition: border-color .2s, box-shadow .2s;
+    }
+    .user-card:hover { border-color: #3b5bdb; box-shadow: 0 8px 32px rgba(59,91,219,.1); }
+    .user-card-icon { font-size: 36px; margin-bottom: 14px; }
+    .user-card h3 { font-size: 18px; font-weight: 700; margin-bottom: 8px; color: #1a1a2e; }
+    .user-card p { font-size: 14px; color: #5a6a8a; line-height: 1.65; margin-bottom: 16px; }
+    .user-card-tag {
+      display: inline-block; font-size: 12px; font-weight: 600;
+      background: #e0e7ff; color: #3b5bdb; padding: 3px 10px; border-radius: 999px;
+      margin-right: 4px; margin-bottom: 4px;
+    }
+    .user-card.highlight { background: #3b5bdb; border-color: #3b5bdb; }
+    .user-card.highlight h3, .user-card.highlight p { color: #fff; }
+    .user-card.highlight .user-card-tag { background: rgba(255,255,255,.2); color: #fff; }
+
+    /* ── Features ── */
+    .features-bg { background: #f8f9ff; }
+    .features-grid {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 20px; max-width: 1000px; margin: 0 auto;
+    }
+    .feature-item {
+      background: #fff; border: 1px solid #e8ecf5; border-radius: 12px; padding: 22px 20px;
+    }
+    .feature-item .fi { font-size: 26px; margin-bottom: 10px; }
+    .feature-item h4 { font-size: 15px; font-weight: 700; margin-bottom: 6px; color: #1a1a2e; }
+    .feature-item p { font-size: 13px; color: #64748b; line-height: 1.55; }
+
+    /* ── CTA Banner ── */
+    .cta-banner {
+      background: linear-gradient(135deg, #1c1f2e, #2d3561);
+      padding: 80px 24px; text-align: center; color: #fff;
+    }
+    .cta-banner h2 { font-size: clamp(28px, 4vw, 42px); font-weight: 800; margin-bottom: 14px; letter-spacing: -.5px; }
+    .cta-banner p { font-size: 16px; color: #a5b4fc; margin-bottom: 32px; max-width: 480px; margin-left: auto; margin-right: auto; }
+    .btn-cta-white {
+      display: inline-block; padding: 14px 36px; border-radius: 10px; font-size: 15px; font-weight: 700;
+      background: #fff; color: #1a1a2e; text-decoration: none; transition: transform .15s;
+    }
+    .btn-cta-white:hover { transform: translateY(-2px); }
+
+    /* ── Footer ── */
+    footer {
+      padding: 28px 24px; text-align: center;
+      border-top: 1px solid #e8ecf5; font-size: 13px; color: #94a3b8;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Nav -->
+  <nav>
+    <a class="nav-logo" href="/">
+      <div class="nav-logo-icon">🎯</div>
+      <span class="nav-logo-text">Recruit Pro</span>
+    </a>
+    <div class="nav-actions">
+      <a class="btn-nav-login" href="/login">Log in</a>
+      <a class="btn-nav-signup" href="/login?tab=register">Get started free</a>
+    </div>
+  </nav>
+
+  <!-- Hero -->
+  <section class="hero">
+    <div class="hero-badge">✦ AI-powered outreach platform</div>
+    <h1>Turn LinkedIn profiles into<br><span>meaningful conversations</span></h1>
+    <p>Write personalised outreach emails in seconds, track replies, manage your pipeline, and grow your career or talent practice — all in one place.</p>
+    <div class="hero-cta">
+      <a class="btn-hero-primary" href="/login?tab=register">Start for free →</a>
+      <a class="btn-hero-secondary" href="/login">Log in to your account</a>
+    </div>
+    <p class="hero-sub">No credit card required · Works with Gmail & Zoho Mail</p>
+  </section>
+
+  <!-- Who it's for -->
+  <section class="section">
+    <p class="section-label">Who it's for</p>
+    <h2>Built for every kind of outreach</h2>
+    <p class="section-sub">Whether you hire for a company, place talent independently, or help professionals advance — Recruit Pro adapts to you.</p>
+    <div class="cards-grid">
+
+      <div class="user-card">
+        <div class="user-card-icon">🏢</div>
+        <h3>In-House Recruiter</h3>
+        <p>You hire talent for your company. Recruit Pro writes personalised outreach emails that sound like a real human read each profile — because the AI did.</p>
+        <span class="user-card-tag">LinkedIn import</span>
+        <span class="user-card-tag">Bulk outreach</span>
+        <span class="user-card-tag">Pipeline tracking</span>
+      </div>
+
+      <div class="user-card highlight">
+        <div class="user-card-icon">🤝</div>
+        <h3>Independent Recruiter</h3>
+        <p>You place talent across multiple client companies. Your emails position you as a connector who brings hand-picked opportunities — not a cold caller with a job description.</p>
+        <span class="user-card-tag">Multi-client</span>
+        <span class="user-card-tag">Email enrichment</span>
+        <span class="user-card-tag">Reply tracking</span>
+      </div>
+
+      <div class="user-card">
+        <div class="user-card-icon">🚀</div>
+        <h3>Career Consultant</h3>
+        <p>You help professionals advance. Your outreach says "I see you and I believe I can help you get to a better position." Recruit Pro generates that message — specific to each person's actual background.</p>
+        <span class="user-card-tag">Career-focused AI</span>
+        <span class="user-card-tag">Resume review flow</span>
+        <span class="user-card-tag">Candidate pipeline</span>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- Features -->
+  <section class="section features-bg">
+    <p class="section-label">Features</p>
+    <h2>Everything you need</h2>
+    <p class="section-sub">One platform. No juggling between tools.</p>
+    <div class="features-grid">
+      <div class="feature-item">
+        <div class="fi">🤖</div>
+        <h4>AI-Written Outreach</h4>
+        <p>Claude reads each person's career history and writes a personalised email that references their actual companies, roles, and career arc.</p>
+      </div>
+      <div class="feature-item">
+        <div class="fi">🧩</div>
+        <h4>1-Click LinkedIn Import</h4>
+        <p>Chrome extension puts a button on every LinkedIn profile. Click it and the candidate lands in your pipeline instantly — no copy-pasting.</p>
+      </div>
+      <div class="feature-item">
+        <div class="fi">📧</div>
+        <h4>Email Enrichment</h4>
+        <p>Automatically finds personal and work email addresses via ContactOut, Apollo.io, and Hunter.io — before you even write the email.</p>
+      </div>
+      <div class="feature-item">
+        <div class="fi">📬</div>
+        <h4>Auto Reply Detection</h4>
+        <p>Syncs with your Gmail or Zoho inbox every 10 minutes. Replies appear in the candidate's conversation thread automatically.</p>
+      </div>
+      <div class="feature-item">
+        <div class="fi">⏰</div>
+        <h4>Scheduled Bulk Outreach</h4>
+        <p>Select 50 candidates and schedule outreach during business hours only. Emails go out spaced and timed — not all at once.</p>
+      </div>
+      <div class="feature-item">
+        <div class="fi">👁️</div>
+        <h4>Email Open Tracking</h4>
+        <p>Know the moment someone opens your email. Get a push notification in real time so you can follow up while you're top of mind.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- CTA Banner -->
+  <section class="cta-banner">
+    <h2>Ready to start?</h2>
+    <p>Create your account in 60 seconds. No credit card, no setup fee.</p>
+    <a class="btn-cta-white" href="/login?tab=register">Create your free account →</a>
+  </section>
+
+  <!-- Footer -->
+  <footer>
+    <p>© 2025 Recruit Pro · <a href="/login" style="color:#3b5bdb;text-decoration:none">Login</a> · <a href="/login?tab=register" style="color:#3b5bdb;text-decoration:none">Sign up</a></p>
+  </footer>
+
+</body>
+</html>

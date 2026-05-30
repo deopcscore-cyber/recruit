@@ -14,7 +14,7 @@ const API = {
     }
     const res = await fetch(url, opts);
     if (res.status === 401) {
-      window.location.href = '/';
+      window.location.href = '/login';
       return null;
     }
     const data = await res.json().catch(() => ({}));
