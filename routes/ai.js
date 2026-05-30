@@ -151,6 +151,22 @@ router.post('/followup', async (req, res) => {
   }
 });
 
+// POST /api/ai/proposal  (career consultant only)
+router.post('/proposal', async (req, res) => {
+  try {
+    const ctx = await getContext(req, res);
+    if (!ctx) return;
+    if (!await checkCredits(ctx.user, res)) return;
+
+    const result = await claude.generateProposal(ctx.candidate, ctx.user);
+    await deductCredits(ctx.user, result.costCents);
+    return res.json({ draft: result.text, creditsRemaining: ctx.user.credits });
+  } catch (err) {
+    console.error('AI proposal error:', err);
+    return res.status(500).json({ error: 'Failed to generate proposal: ' + err.message });
+  }
+});
+
 // POST /api/ai/reply
 router.post('/reply', async (req, res) => {
   try {

@@ -366,7 +366,7 @@ Write the role description now:`;
   return { text: response.content[0].text.trim(), costCents: calcCostCents(response.usage) };
 }
 
-async function generateResumeFeedback(candidate, user) {
+async function _generateRecruiterResumeFeedback(candidate, user) {
   const candidateInfo = formatCandidateContext(candidate);
   const styleInfo = formatUserStyle(user);
   const company = getCompanyContext(user);
@@ -523,7 +523,250 @@ Write the introduction email now:`;
   return { text: response.content[0].text.trim(), costCents: calcCostCents(response.usage) };
 }
 
+// ── Route by userType ─────────────────────────────────────────────────────────
 async function generateReply(candidate, user, lastMessage) {
+  const type = user.userType || 'recruiter_company';
+  if (type === 'career_consultant') return _generateCareerConsultantReply(candidate, user, lastMessage);
+  return _generateRecruiterReply(candidate, user, lastMessage);
+}
+
+async function generateResumeFeedback(candidate, user) {
+  const type = user.userType || 'recruiter_company';
+  if (type === 'career_consultant') return _generateCareerConsultantResumeFeedback(candidate, user);
+  return _generateRecruiterResumeFeedback(candidate, user);
+}
+
+async function generateProposal(candidate, user) {
+  const candidateInfo  = formatCandidateContext(candidate);
+  const consultantName  = user.name || 'Career Consultant';
+  const consultantTitle = (user.title && user.title.trim()) || 'Career Strategist';
+  const practiseName    = (user.companyName || '').trim() || '';
+  const servicePitch    = (user.companyPitch || '').trim() ||
+    'I work with experienced professionals to reposition their career story so it reflects their actual value — better title, better company, better compensation.';
+  const firstName = (candidate.name || '').split(' ')[0];
+
+  const prompt = `You are ${consultantName}, a career consultant${practiseName ? ' at ' + practiseName : ''}. You have already:
+1. Reached out to ${firstName} with a personalised message
+2. Sent them your specific observations about their career positioning
+3. Reviewed their resume and sent them honest, detailed feedback
+
+${firstName} has responded positively and wants to understand what working together looks like.
+
+YOUR SERVICE:
+${servicePitch}
+
+CANDIDATE INFORMATION:
+${candidateInfo}
+
+Write a warm, professional proposal email that covers:
+
+PARAGRAPH 1 — Acknowledge their interest warmly and specifically (reference something from their background or what you found in the resume review).
+
+PARAGRAPH 2 — What working together looks like (the process):
+- Start with a discovery call to understand their target roles and timeline
+- Deep dive into their career story — extracting the full scope of what they've built
+- Rewrite/reposition their resume and LinkedIn to reflect executive-level impact
+- Ongoing support as they apply and interview
+
+PARAGRAPH 3 — What they can expect to gain:
+- Be specific to THIS candidate's background — what opportunities open up when their story is told properly?
+- Reference their actual companies, roles, and what a stronger positioning could unlock for them
+
+PARAGRAPH 4 — Clear next step (low friction):
+- "The best next step is a 30-minute call so I can understand your target direction and give you a clear sense of what we'd focus on. No commitment — just a conversation."
+- "Reply here with a couple of times that work for you and I'll send a calendar invite."
+
+SIGNATURE:
+${consultantName}
+${consultantTitle}${practiseName ? '\n' + practiseName : ''}
+
+RULES:
+- Sound warm and confident — not salesy
+- Reference their specific background throughout (companies, transitions, what makes them valuable)
+- Do NOT include pricing — that's a conversation for the call
+- Under 320 words
+- Output ONLY the email body starting with "Dear ${firstName},"
+
+Write the proposal email now:`;
+
+  const response = await client.messages.create({
+    model: MODEL, max_tokens: 900,
+    messages: [{ role: 'user', content: prompt }]
+  });
+  return { text: response.content[0].text.trim(), costCents: calcCostCents(response.usage) };
+}
+
+// ── Career Consultant Reply ───────────────────────────────────────────────────
+async function _generateCareerConsultantReply(candidate, user, lastMessage) {
+  const candidateInfo   = formatCandidateContext(candidate);
+  const consultantName  = user.name || 'Career Consultant';
+  const consultantTitle = (user.title && user.title.trim()) || 'Career Strategist';
+  const practiseName    = (user.companyName || '').trim() || '';
+  const servicePitch    = (user.companyPitch || '').trim() ||
+    'I work with experienced professionals to reposition their career story — so their background lands the way it should on paper.';
+  const firstName       = (candidate.name || '').split(' ')[0];
+
+  const threadContext = (candidate.thread || []).map(m => ({
+    direction: m.direction, subject: m.subject, body: m.body
+  }));
+  const lastMsg = lastMessage || (threadContext.length > 0 ? threadContext[threadContext.length - 1].body : '');
+  const steps   = candidate.stepsCompleted || {};
+
+  // stepsCompleted.roleJD is repurposed as "observationsSent" for career consultants
+  const observationsSent = steps.roleJD || false;
+
+  let nextStep;
+  if (!observationsSent) {
+    nextStep = `NEXT STEP — Deliver your specific observations:
+This is the moment you promised in the outreach. You said you had specific thoughts — now deliver them.
+Write 2-3 SHORT, punchy bullet points about what you actually see in their background that isn't landing on paper:
+- Reference their real companies, transitions, and roles
+- Name the gap plainly (e.g. "Your ownership of X is buried" or "Your pivot from A to B reads as a step sideways on paper — it wasn't")
+- Keep each bullet to 1 concise sentence
+After the observations, land softly: "This is the kind of thing that's worth a proper look. If you want to see what a repositioned version of your story could look like, I'd need to review your current CV/resume. Want to send it over?"
+Do NOT pitch your service explicitly yet. Let the observations do the work.`;
+  } else if (!steps.resumeRequested) {
+    nextStep = `NEXT STEP — Ask for their resume:
+They're engaged. Now ask for the resume so you can give them something concrete.
+Frame it as: you want to give them actual, useful observations — not generic advice — and for that you need to see their current resume.
+"To give you something concrete rather than general, I'd want to look at your actual resume. It doesn't have to be polished — I just need to see how your story is currently framed. Can you send it over?"
+Keep this paragraph short and casual. One ask, no pressure.`;
+  } else if (steps.resumeRequested && !steps.resumeReceived) {
+    nextStep = `NEXT STEP — Gentle follow-up on the resume:
+They haven't sent the resume yet. Follow up warmly — acknowledge they're probably busy.
+"I know these things get buried — no rush at all. Whenever you have a moment, just attach your current CV/resume and hit reply. Even a draft version is fine."`;
+  } else if (steps.resumeReceived && !steps.reviewSent) {
+    nextStep = `NEXT STEP — Acknowledge resume receipt and set expectations:
+Thank them for sending it. Let them know you're reviewing it carefully and will come back with your honest take.
+"Got it — thank you. I'm going to take a proper look and come back to you with my honest assessment. It usually takes me [1-2 days]. I'll flag what I see working and where I think the positioning needs work."`;
+  } else {
+    nextStep = `NEXT STEP — Keep the conversation warm and moving forward.
+Address what they said directly. If they're asking about next steps, point toward the Proposal — what working together would look like.`;
+  }
+
+  const prompt = `You are ${consultantName}, a career consultant${practiseName ? ' at ' + practiseName : ''}. You are in a real email conversation with ${candidate.name || 'this professional'}. You are NOT a recruiter. You do NOT represent a company hiring them. You are here to help THEM get to a better position.
+
+YOUR SERVICE:
+${servicePitch}
+
+CANDIDATE INFORMATION:
+${candidateInfo}
+
+FULL CONVERSATION (most recent last):
+${JSON.stringify(threadContext, null, 2)}
+
+THEIR LAST MESSAGE:
+${lastMsg}
+
+${nextStep}
+
+PIPELINE STATUS:
+- Outreach sent: ${steps.outreach ? 'Yes' : 'No'}
+- Observations delivered: ${observationsSent ? 'Yes' : 'No'}
+- Resume requested: ${steps.resumeRequested ? 'Yes' : 'No'}
+- Resume received: ${steps.resumeReceived ? 'Yes' : 'No'}
+- Feedback sent: ${steps.reviewSent ? 'Yes' : 'No'}
+
+HOW TO HANDLE COMMON RESPONSES:
+
+If they're skeptical or asking "how did you find me":
+→ Be direct and honest. "I came across your profile and something about your background stood out — specifically [X from their profile]. That's genuinely why I reached out."
+
+If they say they're happy where they are:
+→ "I hear that — and I'm not suggesting there's anything wrong with where you are. What I noticed is that your background is worth more than how it's currently positioned on paper. Whether you move in 6 months or 2 years, having that story properly told costs you nothing except a conversation."
+
+If they ask what you charge:
+→ Don't give numbers yet. "Let's figure out if there's actually something useful I can offer first. Once I've seen your resume and given you my honest take, you'll be in a much better position to decide whether it's worth investing in."
+
+If they're very interested and asking what's next:
+→ Guide them to send the resume if not done, or reference the feedback you'll be sending.
+
+CRITICAL RULES:
+- ALWAYS address their actual message FIRST before pivoting
+- Sound like a real person — specific, warm, direct
+- You are their advocate, not trying to hire them
+- Reference their actual background (companies, roles) throughout
+- Under 250 words
+- Signature: ${consultantName}\\n${consultantTitle}${practiseName ? '\\n' + practiseName : ''}
+- Output ONLY the email body starting with "Dear ${firstName},"
+
+Write the reply now:`;
+
+  const response = await client.messages.create({
+    model: MODEL, max_tokens: 900,
+    messages: [{ role: 'user', content: prompt }]
+  });
+  return { text: response.content[0].text.trim(), costCents: calcCostCents(response.usage) };
+}
+
+// ── Career Consultant Resume Feedback ────────────────────────────────────────
+async function _generateCareerConsultantResumeFeedback(candidate, user) {
+  const candidateInfo   = formatCandidateContext(candidate);
+  const consultantName  = user.name || 'Career Consultant';
+  const consultantTitle = (user.title && user.title.trim()) || 'Career Strategist';
+  const practiseName    = (user.companyName || '').trim() || '';
+  const servicePitch    = (user.companyPitch || '').trim() ||
+    'I work with experienced professionals to reposition their career story so it reflects their actual value.';
+  const firstName       = (candidate.name || '').split(' ')[0];
+
+  if (!candidate.resume?.text) throw new Error('No resume text available');
+
+  const prompt = `You are ${consultantName}, a career consultant${practiseName ? ' at ' + practiseName : ''}. ${firstName} sent you their resume after expressing interest in your help. You've now reviewed it carefully.
+
+YOUR SERVICE:
+${servicePitch}
+
+CANDIDATE INFORMATION:
+${candidateInfo}
+
+RESUME TEXT:
+${candidate.resume.text.substring(0, 3000)}
+
+Write a warm, honest, expert resume assessment email. Structure:
+
+PARAGRAPH 1 — Thank them for sending it. One genuine observation about what you noticed right away (positive — something that IS working or genuinely impressive in their background).
+
+PARAGRAPH 2 — What's working: 2 specific strengths you see. Reference their actual companies and roles. Be genuine — don't manufacture praise.
+
+PARAGRAPH 3 — The honest assessment: Name the gaps clearly but constructively. Use language like "What I notice is..." or "What isn't coming through yet is...". Be specific — which sections, which roles, which transitions are not landing the way they should. Reference real content from their resume.
+
+PARAGRAPH 4 — Why it matters: Explain what opportunities they're leaving on the table because of the current positioning. Make it feel real and specific to THEIR background — not generic.
+
+PARAGRAPH 5 — What you'd do together: Briefly explain your approach — not a pitch, just: "Here's how I typically approach this..." 1-3 sentences on your process.
+
+PARAGRAPH 6 — Low-friction close: "If you'd like to explore working together, the next step is a short call — 30 minutes — so I can understand your target direction and give you a proper plan. Want to set that up?"
+
+SIGNATURE:
+${consultantName}
+${consultantTitle}${practiseName ? '\n' + practiseName : ''}
+
+Also return a brief internal analysis. Output as valid JSON:
+{
+  "gaps": "2-3 sentence internal summary of the specific resume gaps (for your reference)",
+  "email": "The full email body"
+}
+
+Return ONLY the JSON. No markdown, no extra text.`;
+
+  const response = await client.messages.create({
+    model: MODEL, max_tokens: 2000,
+    messages: [{ role: 'user', content: prompt }]
+  });
+
+  const text = response.content[0].text.trim();
+  const costCents = calcCostCents(response.usage);
+  try {
+    const clean = text.replace(/^```json\s*/i, '').replace(/```\s*$/, '').trim();
+    return { ...JSON.parse(clean), costCents };
+  } catch {
+    const match = text.match(/\{[\s\S]*\}/);
+    if (match) return { ...JSON.parse(match[0]), costCents };
+    return { gaps: '', email: text, costCents };
+  }
+}
+
+// ── Recruiter Reply (original, renamed) ──────────────────────────────────────
+async function _generateRecruiterReply(candidate, user, lastMessage) {
   const candidateInfo = formatCandidateContext(candidate);
   const company = getCompanyContext(user);
   const recruiterTitle = (user.title && user.title.trim()) ? user.title.trim() : 'Senior Talent Acquisition Coordinator';
@@ -777,5 +1020,6 @@ module.exports = {
   generateVictoryEmail,
   generateReply,
   generateFollowUp,
+  generateProposal,
   scoreCandidate
 };

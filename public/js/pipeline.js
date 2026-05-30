@@ -57,7 +57,8 @@ const STAGE_COLORS = {
   'Closed': '#374151'
 };
 
-const TABS = [
+// Tabs vary by user type — career consultants skip Role & JD, rename Victory → Proposal
+const TABS_RECRUITER = [
   { key: 'profile',   label: 'Profile',    step: null },
   { key: 'outreach',  label: 'Outreach',   step: 'outreach' },
   { key: 'role-jd',   label: 'Role & JD',  step: 'roleJD' },
@@ -66,6 +67,22 @@ const TABS = [
   { key: 'victory',   label: 'Victory',     step: 'victorySent' },
   { key: 'thread',    label: 'Thread',      step: null }
 ];
+
+const TABS_CONSULTANT = [
+  { key: 'profile',   label: 'Profile',    step: null },
+  { key: 'outreach',  label: 'Outreach',   step: 'outreach' },
+  { key: 'resume',    label: 'Resume',      step: 'resumeReceived' },
+  { key: 'review',    label: 'Feedback',    step: 'reviewSent' },
+  { key: 'victory',   label: 'Proposal',    step: 'victorySent' },
+  { key: 'thread',    label: 'Thread',      step: null }
+];
+
+function getTabs(user) {
+  return (user && user.userType === 'career_consultant') ? TABS_CONSULTANT : TABS_RECRUITER;
+}
+
+// Keep a single TABS reference for backwards compat
+const TABS = TABS_RECRUITER;
 
 // ---- Utilities ----
 
@@ -362,11 +379,17 @@ function closeCandidateModal() {
 }
 
 function buildModalShell(candidate) {
-  const steps = candidate.stepsCompleted || {};
-  const tabsHtml = TABS.map(t => {
-    const done = t.step ? steps[t.step] : false;
-    const locked = t.key === 'victory' && !steps.interestChecked;
-    return `<button class="cmodal-tab${t.key === 'profile' ? ' active' : ''}${locked ? ' locked' : ''}" data-tab="${t.key}" ${locked ? 'title="Available after interest check is sent"' : ''}>
+  const steps   = candidate.stepsCompleted || {};
+  const isConsultant = _modalUser && _modalUser.userType === 'career_consultant';
+  const tabs    = getTabs(_modalUser);
+  const tabsHtml = tabs.map(t => {
+    const done   = t.step ? steps[t.step] : false;
+    // Proposal (victory tab) unlocks after review/feedback is sent
+    const locked = t.key === 'victory' && !steps.reviewSent;
+    const lockMsg = isConsultant
+      ? 'Send the Feedback email first — Proposal unlocks after that'
+      : 'Send the Review email first — Victory unlocks after that';
+    return `<button class="cmodal-tab${t.key === 'profile' ? ' active' : ''}${locked ? ' locked' : ''}" data-tab="${t.key}" ${locked ? `title="${lockMsg}"` : ''}>
       ${t.label}
       ${done ? '<span class="tab-check">✓</span>' : ''}
     </button>`;
@@ -396,8 +419,12 @@ function buildModalShell(candidate) {
 }
 
 function switchModalTab(tabKey) {
-  if (tabKey === 'victory' && !(_modalCandidate.stepsCompleted || {}).interestChecked) {
-    Toast.warning('Send the Review email first — this tab unlocks after the interest check.');
+  if (tabKey === 'victory' && !(_modalCandidate.stepsCompleted || {}).reviewSent) {
+    const isConsultant = _modalUser && _modalUser.userType === 'career_consultant';
+    Toast.warning(isConsultant
+      ? 'Send the Feedback email first — Proposal unlocks after that.'
+      : 'Send the Review email first — Victory unlocks after that.'
+    );
     return;
   }
   _activeTab = tabKey;
@@ -1004,6 +1031,7 @@ function renderResumeTab(body) {
 
 function renderReviewTab(body) {
   const c = _modalCandidate;
+  const isConsultant = _modalUser && _modalUser.userType === 'career_consultant';
   const hasResume = c.resume && c.resume.text;
   const done = (c.stepsCompleted||{}).reviewSent;
 
@@ -1021,26 +1049,37 @@ function renderReviewTab(body) {
     return;
   }
 
+  const tabTitle    = isConsultant ? 'Your Honest Assessment' : 'AI Resume Review';
+  const tabDesc     = isConsultant
+    ? `AI analyses ${escapeHtml(c.name||'their')} resume from your perspective as their coach — what's working, what's not landing on paper, and why it matters. Drafts a warm, expert feedback email that leads naturally into working together.`
+    : `AI identifies 3-4 specific, concrete gaps in ${escapeHtml(c.name||'the candidate')}'s resume (referencing actual content). Then drafts a warm email asking if they're open to professional support — <strong>does not mention Victory yet</strong>.`;
+  const draftLabel  = isConsultant ? 'Draft — Resume Feedback Email' : 'Draft — Interest Check Email';
+  const draftHint   = isConsultant ? 'Your expert assessment — edit before sending' : 'Edit before sending — does not mention Victory';
+  const doneBanner  = isConsultant
+    ? '✓ Feedback sent — Proposal tab now available'
+    : '✓ Resume review email sent — Victory tab now available';
+  const defaultSubj = isConsultant ? `My honest take on your background, ${c.name ? c.name.split(' ')[0] : ''}` : 'Quick thought on your background';
+
   body.innerHTML = `
     <div class="tab-scroll">
-      ${done ? `<div class="step-done-banner">✓ Resume review email sent — Victory tab now available</div>` : ''}
+      ${done ? `<div class="step-done-banner">${doneBanner}</div>` : ''}
       <div class="tab-section">
-        <h4>AI Resume Review</h4>
-        <p class="tab-desc">AI identifies 3-4 specific, concrete gaps in ${escapeHtml(c.name||'the candidate')}'s resume (referencing actual content). Then drafts a warm email asking if they're open to professional support — <strong>does not mention Victory yet</strong>.</p>
-        <button class="btn btn-secondary btn-sm" id="gen-review-btn">✦ ${done?'Regenerate Review':'Run Resume Review'}</button>
+        <h4>${tabTitle}</h4>
+        <p class="tab-desc">${tabDesc}</p>
+        <button class="btn btn-secondary btn-sm" id="gen-review-btn">✦ ${done ? 'Regenerate' : isConsultant ? 'Write Feedback Email' : 'Run Resume Review'}</button>
       </div>
 
       <div id="gaps-display" style="display:none" class="tab-section">
         <div class="gaps-box">
-          <h4>Identified Gaps</h4>
+          <h4>${isConsultant ? 'Internal Notes' : 'Identified Gaps'}</h4>
           <div id="gaps-text" class="gaps-content"></div>
         </div>
       </div>
 
       <div class="draft-area" id="review-draft-area" style="display:none">
         <div class="tab-section">
-          <div class="draft-label"><h4>Draft — Interest Check Email</h4><span class="text-xs text-muted">Edit before sending — does not mention Victory</span></div>
-          <div class="form-group"><label>Subject Line</label><input type="text" id="review-subject" value="Quick thought on your background" /></div>
+          <div class="draft-label"><h4>${draftLabel}</h4><span class="text-xs text-muted">${draftHint}</span></div>
+          <div class="form-group"><label>Subject Line</label><input type="text" id="review-subject" value="${escapeHtml(defaultSubj)}" /></div>
           <div class="form-group"><label>Message</label><textarea id="review-body" class="draft-textarea" style="min-height:220px"></textarea></div>
           <div class="draft-actions">
             <button class="btn btn-ghost btn-sm" id="review-regen">↺ Regenerate</button>
@@ -1071,7 +1110,10 @@ function renderReviewTab(body) {
         draftArea.style.display = '';
       }
     } catch (err) { Toast.error(err.message); }
-    finally { btn.disabled = false; btn.textContent = '✦ ' + (done?'Regenerate Review':'Run Resume Review'); }
+    finally {
+      const btnLabel = isConsultant ? (done ? 'Regenerate' : 'Write Feedback Email') : (done ? 'Regenerate Review' : 'Run Resume Review');
+      btn.disabled = false; btn.textContent = '✦ ' + btnLabel;
+    }
   });
 
   body.querySelector('#review-regen') && body.querySelector('#review-regen').addEventListener('click', () => {
@@ -1079,7 +1121,10 @@ function renderReviewTab(body) {
   });
 
   body.querySelector('#review-send') && body.querySelector('#review-send').addEventListener('click', async () => {
-    const subject = body.querySelector('#review-subject').value.trim() || 'Quick thought on your background';
+    const defaultSubj = isConsultant
+      ? `My honest take on your background, ${c.name ? c.name.split(' ')[0] : ''}`
+      : 'Quick thought on your background';
+    const subject = body.querySelector('#review-subject').value.trim() || defaultSubj;
     const msgBody = body.querySelector('#review-body').value.trim();
     if (!msgBody) { Toast.warning('Draft is empty'); return; }
     const btn = body.querySelector('#review-send');
@@ -1091,7 +1136,7 @@ function renderReviewTab(body) {
       Object.assign(_modalCandidate, result.candidate || {}, updated);
       _modalOnUpdate(_modalCandidate);
       refreshModal();
-      Toast.success('Review email sent — Victory tab is now unlocked');
+      Toast.success(isConsultant ? 'Feedback sent — Proposal tab is now unlocked' : 'Review email sent — Victory tab is now unlocked');
       renderReviewTab(body);
     } catch (err) { Toast.error(err.message); }
     finally { btn.disabled = false; btn.textContent = 'Approve & Send'; }
@@ -1104,8 +1149,54 @@ function renderReviewTab(body) {
 
 function renderVictoryTab(body) {
   const c = _modalCandidate;
+  const isConsultant = _modalUser && _modalUser.userType === 'career_consultant';
   const done = (c.stepsCompleted||{}).victorySent;
+  const firstName = c.name ? c.name.split(' ')[0] : 'them';
 
+  if (isConsultant) {
+    // ── Proposal tab for career consultants ──────────────────────────────────
+    body.innerHTML = `
+      <div class="tab-scroll">
+        ${done ? `<div class="step-done-banner">✓ Proposal sent</div>` : ''}
+        <div class="tab-section">
+          <h4>Your Proposal</h4>
+          <p class="tab-desc">
+            ${firstName} has seen your feedback and is interested in working together.
+            AI drafts a warm, personal proposal email that explains what working together looks like —
+            the process, what they'll gain specific to their background, and a clear next step (a 30-minute call).
+            No pricing in the email — that's a conversation for the call.
+          </p>
+          <button class="btn btn-secondary btn-sm" id="gen-victory-btn">✦ ${done ? 'Regenerate Proposal' : 'Generate Proposal'}</button>
+        </div>
+        <div class="draft-area" id="victory-draft-area" style="display:none">
+          <div class="tab-section">
+            <div class="draft-label"><h4>Draft — Proposal Email</h4><span class="text-xs text-muted">Edit before sending</span></div>
+            <div class="form-group"><label>Subject Line</label><input type="text" id="victory-subject" value="What working together would look like, ${escapeHtml(firstName)}" /></div>
+            <div class="form-group"><label>Message</label><textarea id="victory-body" class="draft-textarea" style="min-height:260px"></textarea></div>
+            <div class="draft-actions">
+              <button class="btn btn-ghost btn-sm" id="victory-regen">↺ Regenerate</button>
+              <button class="btn btn-primary" id="victory-send">Approve & Send</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+    wireAIDraft(body, {
+      genBtnId: 'gen-victory-btn',
+      draftAreaId: 'victory-draft-area',
+      subjectId: 'victory-subject',
+      bodyId: 'victory-body',
+      regenBtnId: 'victory-regen',
+      sendBtnId: 'victory-send',
+      defaultSubject: `What working together would look like, ${firstName}`,
+      stepKey: 'victorySent',
+      stageTo: null,
+      generate: () => API.ai.proposal(c.id)
+    });
+    return;
+  }
+
+  // ── Victory tab for recruiters ─────────────────────────────────────────────
   body.innerHTML = `
     <div class="tab-scroll">
       ${done ? `<div class="step-done-banner">✓ Victory introduction sent</div>` : ''}
@@ -1163,6 +1254,11 @@ function renderThreadTab(body) {
       </div>
     `).join('');
 
+  const isConsultantThread = _modalUser && _modalUser.userType === 'career_consultant';
+  const thirdAiBtn = isConsultantThread
+    ? `<button class="btn btn-ghost btn-sm" id="th-gen-followup">✦ Follow Up</button>`
+    : `<button class="btn btn-ghost btn-sm" id="th-gen-jd">✦ Role JD</button>`;
+
   body.innerHTML = `
     <div class="thread-container">
       <div class="thread-messages" id="thread-msgs">${threadHtml}</div>
@@ -1173,7 +1269,7 @@ function renderThreadTab(body) {
           <div class="compose-ai-btns">
             <button class="btn btn-ghost btn-sm" id="th-gen-reply">✦ Draft Reply</button>
             <button class="btn btn-ghost btn-sm" id="th-gen-outreach">✦ Outreach</button>
-            <button class="btn btn-ghost btn-sm" id="th-gen-jd">✦ Role JD</button>
+            ${thirdAiBtn}
             <button class="btn btn-ghost btn-sm" id="th-set-followup" title="Set follow-up reminder">⏰ Follow Up</button>
           </div>
         </div>
@@ -1207,11 +1303,16 @@ function renderThreadTab(body) {
         result = await API.ai.outreach(c.id);
       } else if (type === 'jd') {
         result = await API.ai.roleJD(c.id);
+      } else if (type === 'followup') {
+        result = await API.ai.followup(c.id);
       }
       if (result && result.draft) {
         body.querySelector('#th-body').value = result.draft;
         if (type === 'outreach' && !body.querySelector('#th-subject').value) {
-          body.querySelector('#th-subject').value = `Something Worth a Few Minutes of Your Time, ${c.name.split(' ')[0]}`;
+          const firstName = c.name ? c.name.split(' ')[0] : 'there';
+          body.querySelector('#th-subject').value = isConsultantThread
+            ? `A quick thought on your next move, ${firstName}`
+            : `Something Worth a Few Minutes of Your Time, ${firstName}`;
         }
         body.querySelector('#th-body').focus();
       }
@@ -1221,7 +1322,11 @@ function renderThreadTab(body) {
 
   body.querySelector('#th-gen-reply').addEventListener('click', () => aiGenerate('reply'));
   body.querySelector('#th-gen-outreach').addEventListener('click', () => aiGenerate('outreach'));
-  body.querySelector('#th-gen-jd').addEventListener('click', () => aiGenerate('jd'));
+  if (isConsultantThread) {
+    body.querySelector('#th-gen-followup').addEventListener('click', () => aiGenerate('followup'));
+  } else {
+    body.querySelector('#th-gen-jd').addEventListener('click', () => aiGenerate('jd'));
+  }
 
   // Follow Up — inline date picker injected below the button
   body.querySelector('#th-set-followup').addEventListener('click', function() {
