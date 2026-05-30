@@ -4,6 +4,7 @@ const bcrypt = require('bcrypt');
 const { v4: uuidv4 } = require('uuid');
 const storage = require('../services/storage');
 const requireAuth = require('../middleware/auth');
+const { ADMIN_EMAIL } = require('../config');
 
 // POST /api/auth/register
 router.post('/register', async (req, res) => {
@@ -114,6 +115,14 @@ router.get('/me', requireAuth, async (req, res) => {
     if (!user) {
       return res.status(404).json({ error: 'User not found' });
     }
+
+    // Auto-grant admin if ADMIN_EMAIL matches (self-healing — works on any request)
+    if (ADMIN_EMAIL && user.email.toLowerCase() === ADMIN_EMAIL && !user.isAdmin) {
+      user.isAdmin = true;
+      await storage.saveUser(user);
+      console.log(`Admin auto-granted to ${user.email} via /me`);
+    }
+
     return res.json({
       id: user.id,
       name: user.name,

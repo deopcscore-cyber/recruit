@@ -73,6 +73,26 @@ app.use('/api/templates',  require('./routes/templates'));
 app.use('/api/linkedin',   require('./routes/linkedin'));
 app.use('/api/admin',      require('./routes/admin'));
 
+// ─── Admin bootstrap — grant admin to the logged-in user if they match ADMIN_EMAIL ──
+// Hit this once after setting ADMIN_EMAIL env var. No-op once already admin.
+app.post('/api/admin/bootstrap', require('./middleware/auth'), async (req, res) => {
+  try {
+    const storageService = require('./services/storage');
+    const user = await storageService.getUserById(req.session.userId);
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    if (!ADMIN_EMAIL) return res.status(400).json({ error: 'ADMIN_EMAIL env var not set on server' });
+    if (user.email.toLowerCase() !== ADMIN_EMAIL) {
+      return res.status(403).json({ error: `This account (${user.email}) does not match ADMIN_EMAIL` });
+    }
+    user.isAdmin = true;
+    await storageService.saveUser(user);
+    console.log(`Admin bootstrapped for: ${user.email}`);
+    res.json({ success: true, message: `Admin granted to ${user.email}. Refresh the page.` });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ─── Email open tracking pixel ────────────────────────────────────────────────
 const BLANK_GIF = Buffer.from('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7', 'base64');
 const pushSvc = require('./services/push');
