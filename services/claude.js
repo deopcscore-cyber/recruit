@@ -113,10 +113,14 @@ PARAGRAPH 3 — What you do:
 - Be specific: "I work with [type of professional] to strengthen how their leadership story is told — strategy, positioning, and where to focus the job search."
 - ${practiseName ? `Sign off from ${practiseName}.` : ''}
 
-PARAGRAPH 4 — Low-friction CTA:
-- Do NOT ask for a call. Do NOT say "let's schedule a chat."
-- Create curiosity: "I put together a few specific thoughts on how your background could be framed differently — nothing generic, based on what I actually read. If you're open to it, I'm happy to send them over. No obligation, just a perspective."
-- Or: "Reply here if you'd like to see what I mean — I'll send over two or three specific observations. Takes 5 minutes to read and might be worth it."
+PARAGRAPH 4 — Low-friction CTA (this is the most important paragraph — make it irresistible):
+- Do NOT ask for a call. Do NOT say "let's schedule a chat." Do NOT say "no obligation."
+- The work is already done. Frame it as: you have already written down your specific observations about THIS person — not a template, not generic advice.
+- Use one of these structures (pick the most natural fit):
+  a) "I already have three specific observations about how your positioning could shift — about [reference something real from their background, e.g. 'your move from X to Y' or 'the gap between what you built at Z and how it reads on paper']. Want me to send them over? One-line reply is enough."
+  b) "I wrote this email because I had a clear picture of what I'd change about how your story is told. If you want to see it — reply and I'll send it across today."
+  c) "Reply with one word and I'll send over what I see. It's specific to you — not a pitch deck, not a discovery call. Just my honest take on where your positioning is leaving value on the table."
+- End with confidence, not apology. The tone should be: "I have something genuinely useful for you. Your call."
 
 SIGNATURE:
 ${consultantName}
@@ -125,8 +129,9 @@ ${consultantTitle}${practiseName ? '\n' + practiseName : ''}
 RULES:
 - DO NOT pitch a specific job or company
 - DO NOT use phrases like "exciting opportunity" or "I came across your profile"
-- Sound like a real human who genuinely read their background — curious, direct, respectful
-- Under 280 words
+- Sound like a real human who genuinely read their background — curious, direct, confident
+- Under 300 words
+- The CTA paragraph must feel like the sender already has the goods and is offering to share — not asking permission to pitch
 - Output ONLY the email body starting with "Dear [First Name],"
 
 Write the email now:`;
