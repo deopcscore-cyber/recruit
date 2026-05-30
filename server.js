@@ -243,7 +243,7 @@ function crc32 (buf) {
 const NO_CACHE = { 'Cache-Control': 'no-cache, no-store, must-revalidate', Pragma: 'no-cache', Expires: '0' };
 app.get('/dashboard',  (req, res) => { res.set(NO_CACHE); res.sendFile(path.join(__dirname, 'public', 'dashboard.html')); });
 app.get('/li-capture', (req, res) => { res.set(NO_CACHE); res.sendFile(path.join(__dirname, 'public', 'li-capture.html')); });
-app.get('/login',      (req, res) => { res.set(NO_CACHE); res.sendFile(path.join(__dirname, 'public', 'index.html')); });
+app.get('/login',      (req, res) => { res.set(NO_CACHE); res.sendFile(path.join(__dirname, 'public', 'login.html')); });
 app.get('/',           (req, res) => { res.set(NO_CACHE); res.sendFile(path.join(__dirname, 'public', 'landing.html')); });
 
 // ─── Health check (Railway uses this) ────────────────────────────────────────
