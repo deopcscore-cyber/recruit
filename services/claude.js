@@ -460,13 +460,17 @@ Return ONLY the JSON object, no markdown, no extra text.`;
 }
 
 async function generateVictoryEmail(candidate, user) {
-  const candidateInfo = formatCandidateContext(candidate);
-  const styleInfo = formatUserStyle(user);
-  const company = getCompanyContext(user);
-  const recruiterTitle = (user.title && user.title.trim()) ? user.title.trim() : 'Senior Talent Acquisition Coordinator';
-  const firstName = (candidate.name || '').split(' ')[0];
+  const candidateInfo   = formatCandidateContext(candidate);
+  const company         = getCompanyContext(user);
+  const recruiterTitle  = (user.title && user.title.trim()) ? user.title.trim() : 'Senior Talent Acquisition Coordinator';
+  const firstName       = (candidate.name || '').split(' ')[0];
 
-  const prompt = `You are ${user.name}, ${recruiterTitle} at ${company.name}. The candidate said yes to meeting Victory (the resume consultant). You are now writing the introduction email — addressed to the candidate but CC'ing Victory (victory@tobycareerconsults.com). This email must feel warm, specific, and urgent.
+  // Use the recruiter's configured resume consultant partner
+  const partnerName  = (user.resumeConsultantName  || '').trim() || 'our resume consultant';
+  const partnerEmail = (user.resumeConsultantEmail || '').trim();
+  const ccLine       = partnerEmail ? ` (CC: ${partnerEmail})` : '';
+
+  const prompt = `You are ${user.name}, ${recruiterTitle}${company.name ? ' at ' + company.name : ''}. The candidate agreed to be introduced to ${partnerName}, a resume consultant you work with. You are writing the introduction email — addressed to the candidate but CC'ing ${partnerName}${ccLine}. This email must feel warm, specific, and urgent.
 
 GOLD STANDARD EXAMPLE (follow this exact structure):
 ---
@@ -474,9 +478,9 @@ Dear Tomeka,
 
 Wonderful, I'm glad you're open to the introduction.
 
-I've CC'd Victory on this email. She is a trusted resume consultant I've worked with who has helped a number of candidates strengthen their positioning for high-level healthcare and senior living opportunities similar to this one.
+I've CC'd ${partnerName} on this email. ${partnerName} is a trusted resume consultant I work with who has helped a number of candidates strengthen their positioning for high-level opportunities similar to this one.
 
-Victory, I wanted to introduce you to Tomeka Wright.
+${partnerName}, I wanted to introduce you to Tomeka Wright.
 
 Tomeka brings a genuinely unique and compelling background across senior living ownership, assisted living operations, home care leadership, elder care advisory, health plan navigation, and caregiver safety instruction. She previously owned and operated Wright Manor Assisted Living and has built a career centered around person-centered care, operational leadership, and improving outcomes across the senior care continuum.
 
@@ -484,14 +488,14 @@ After reviewing her resume and background, I believe there is substantially more
 
 Tomeka is very thoughtful, mission-driven, and clearly passionate about this work, and I believe with the right presentation strategy her background could become significantly more competitive in executive review environments.
 
-Tomeka, I'll let you and Victory take it from here regarding timing, process, and next steps.
+Tomeka, I'll let you and ${partnerName} take it from here regarding timing, process, and next steps.
 
 I do encourage both of you to prioritize this conversation sooner rather than later, as the early stages of review on these opportunities can move quickly once candidate materials begin entering formal consideration.
 
 Looking forward to seeing this come together.
 
 ${user.name}
-${recruiterTitle} at ${company.name}
+${recruiterTitle}${company.name ? ' at ' + company.name : ''}
 ---
 
 CANDIDATE INFORMATION:
@@ -500,15 +504,15 @@ ${candidateInfo}
 INSTRUCTIONS — follow the gold standard structure exactly:
 1. "Dear [First Name],"
 2. "Wonderful, I'm glad you're open to the introduction."
-3. "I've CC'd Victory on this email. She is a trusted resume consultant I've worked with who has helped a number of candidates strengthen their positioning for high-level healthcare and senior living opportunities similar to this one."
-4. "Victory, I wanted to introduce you to [candidate full name]."
-5. Paragraph to Victory about the candidate: summarize their background genuinely — name their actual companies, roles, and career arc. What makes their profile unique and compelling.
+3. "I've CC'd ${partnerName} on this email. ${partnerName} is a trusted resume consultant I work with who has helped a number of candidates strengthen their positioning for high-level opportunities similar to this one."
+4. "${partnerName}, I wanted to introduce you to [candidate full name]."
+5. Paragraph to ${partnerName} about the candidate: summarize their background genuinely — name their actual companies, roles, and career arc. What makes their profile unique and compelling.
 6. Paragraph about resume gap: "After reviewing her/his resume and background, I believe there is substantially more executive-level operational value present than is currently being communicated on paper. In particular, I believe the strategic positioning, leadership narrative, operational scope, and portfolio-level impact need stronger framing..."
-7. Sentence about the candidate's character: "[Name] is very [specific quality observed from conversation], and I believe with the right presentation strategy their background could become significantly more competitive in executive review environments."
-8. "Tomeka, I'll let you and Victory take it from here regarding timing, process, and next steps."
+7. Sentence about the candidate's character: "[First Name] is very [specific quality observed from conversation], and I believe with the right presentation strategy their background could become significantly more competitive in executive review environments."
+8. "[First Name], I'll let you and ${partnerName} take it from here regarding timing, process, and next steps."
 9. URGENCY: "I do encourage both of you to prioritize this conversation sooner rather than later, as the early stages of review on these opportunities can move quickly once candidate materials begin entering formal consideration."
 10. "Looking forward to seeing this come together."
-11. Signature
+11. Signature: "${user.name} / ${recruiterTitle}${company.name ? ' at ' + company.name : ''}"
 
 Output ONLY the email body (starting with "Dear ${firstName},"). No subject line, no commentary.
 
@@ -563,18 +567,21 @@ Write a warm, professional proposal email that covers:
 PARAGRAPH 1 — Acknowledge their interest warmly and specifically (reference something from their background or what you found in the resume review).
 
 PARAGRAPH 2 — What working together looks like (the process):
-- Start with a discovery call to understand their target roles and timeline
-- Deep dive into their career story — extracting the full scope of what they've built
-- Rewrite/reposition their resume and LinkedIn to reflect executive-level impact
-- Ongoing support as they apply and interview
+- You start by doing a deep audit of their career story — extracting the full scope of what they've actually built
+- You rewrite and reposition their resume and LinkedIn to reflect executive-level impact, not just job history
+- You make sure the language, framing, and positioning match the calibre of roles they are targeting
+- You stay involved through the process — reviewing applications, advising on how to present specific experiences
 
 PARAGRAPH 3 — What they can expect to gain:
 - Be specific to THIS candidate's background — what opportunities open up when their story is told properly?
 - Reference their actual companies, roles, and what a stronger positioning could unlock for them
+- Make it feel concrete and personal, not generic
 
-PARAGRAPH 4 — Clear next step (low friction):
-- "The best next step is a 30-minute call so I can understand your target direction and give you a clear sense of what we'd focus on. No commitment — just a conversation."
-- "Reply here with a couple of times that work for you and I'll send a calendar invite."
+PARAGRAPH 4 — Low-friction next step (NO call, NO scheduling):
+- The next step is simply a reply to this email
+- Ask them one clear, easy question — something like: "What roles or level are you targeting right now?" or "What's one thing about your background you feel isn't coming through on paper?"
+- This opens the conversation without any commitment
+- Do NOT mention a call. Do NOT say "schedule time." Do NOT say "book a session."
 
 SIGNATURE:
 ${consultantName}
@@ -583,8 +590,9 @@ ${consultantTitle}${practiseName ? '\n' + practiseName : ''}
 RULES:
 - Sound warm and confident — not salesy
 - Reference their specific background throughout (companies, transitions, what makes them valuable)
-- Do NOT include pricing — that's a conversation for the call
-- Under 320 words
+- Do NOT include pricing
+- Do NOT mention a call, meeting, or scheduling of any kind
+- Under 300 words
 - Output ONLY the email body starting with "Dear ${firstName},"
 
 Write the proposal email now:`;
@@ -732,9 +740,12 @@ PARAGRAPH 3 — The honest assessment: Name the gaps clearly but constructively.
 
 PARAGRAPH 4 — Why it matters: Explain what opportunities they're leaving on the table because of the current positioning. Make it feel real and specific to THEIR background — not generic.
 
-PARAGRAPH 5 — What you'd do together: Briefly explain your approach — not a pitch, just: "Here's how I typically approach this..." 1-3 sentences on your process.
+PARAGRAPH 5 — What you'd do together: Briefly explain your approach — not a pitch, just 1-3 sentences on how you typically work. Keep it simple and specific.
 
-PARAGRAPH 6 — Low-friction close: "If you'd like to explore working together, the next step is a short call — 30 minutes — so I can understand your target direction and give you a proper plan. Want to set that up?"
+PARAGRAPH 6 — Low-friction close (NO call, NO scheduling):
+- If they're interested, the next step is to simply reply
+- Ask them one easy question — something like "What kind of roles are you targeting?" or "Is there a specific part of your background you feel isn't landing?"
+- Do NOT mention a call. Do NOT say "schedule time" or "book a session." Just invite a reply.
 
 SIGNATURE:
 ${consultantName}

@@ -1632,6 +1632,27 @@ function initSettingsPage() {
     finally { btn.disabled = false; btn.textContent = 'Save Profile'; }
   });
 
+  // Resume consultant partner form
+  const partnerFormEl = document.getElementById('partner-form');
+  if (partnerFormEl) {
+    partnerFormEl.addEventListener('submit', async e => {
+      e.preventDefault();
+      const btn = e.target.querySelector('[type=submit]');
+      btn.disabled = true; btn.textContent = 'Saving…';
+      try {
+        const pn = document.getElementById('partner-name').value.trim();
+        const pe = document.getElementById('partner-email').value.trim();
+        await API.settings.update({ resumeConsultantName: pn, resumeConsultantEmail: pe });
+        if (currentUser) {
+          currentUser.resumeConsultantName  = pn;
+          currentUser.resumeConsultantEmail = pe;
+        }
+        Toast.success('Partner saved');
+      } catch (err) { Toast.error(err.message); }
+      finally { btn.disabled = false; btn.textContent = 'Save Partner'; }
+    });
+  }
+
   document.getElementById('style-form').addEventListener('submit', async e => {
     e.preventDefault();
     const btn = e.target.querySelector('[type=submit]');
@@ -2147,6 +2168,19 @@ async function loadSettingsPage() {
     // Extension token
     const tokenEl = document.getElementById('extension-token-display');
     if (tokenEl && style.extensionToken) tokenEl.value = style.extensionToken;
+
+    // Resume consultant partner (recruiters only)
+    const partnerCard = document.getElementById('resume-partner-card');
+    if (partnerCard) {
+      const isRecruiter = (style.userType || currentUser.userType || '') !== 'career_consultant';
+      partnerCard.style.display = isRecruiter ? '' : 'none';
+      if (isRecruiter) {
+        const pName  = document.getElementById('partner-name');
+        const pEmail = document.getElementById('partner-email');
+        if (pName)  pName.value  = style.resumeConsultantName  || '';
+        if (pEmail) pEmail.value = style.resumeConsultantEmail || '';
+      }
+    }
 
     await updateGmailStatus();
     await updateZohoStatus();

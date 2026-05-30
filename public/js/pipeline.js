@@ -1161,10 +1161,9 @@ function renderVictoryTab(body) {
         <div class="tab-section">
           <h4>Your Proposal</h4>
           <p class="tab-desc">
-            ${firstName} has seen your feedback and is interested in working together.
-            AI drafts a warm, personal proposal email that explains what working together looks like —
-            the process, what they'll gain specific to their background, and a clear next step (a 30-minute call).
-            No pricing in the email — that's a conversation for the call.
+            ${escapeHtml(firstName)} has seen your feedback and is interested in working together.
+            AI drafts a warm, personal proposal email explaining your process, what they'll gain specific
+            to their background, and a low-friction next step — just a reply, no call required.
           </p>
           <button class="btn btn-secondary btn-sm" id="gen-victory-btn">✦ ${done ? 'Regenerate Proposal' : 'Generate Proposal'}</button>
         </div>
@@ -1196,20 +1195,36 @@ function renderVictoryTab(body) {
     return;
   }
 
-  // ── Victory tab for recruiters ─────────────────────────────────────────────
+  // ── Victory / Introduction tab for recruiters ─────────────────────────────
+  const partnerName  = (_modalUser && _modalUser.resumeConsultantName)  || '';
+  const partnerEmail = (_modalUser && _modalUser.resumeConsultantEmail) || '';
+  const hasPartner   = partnerName.length > 0;
+
+  const partnerBanner = !hasPartner
+    ? `<div style="background:#fef3c7;border:1px solid #fcd34d;border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:0.82rem;color:#92400e">
+        <strong>No resume consultant configured.</strong>
+        Add your partner's name and email in <strong>Settings → Account → Resume Consultant Partner</strong>
+        so the introduction email uses the right name and CC address.
+       </div>`
+    : `<div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:8px 14px;margin-bottom:14px;font-size:0.82rem;color:#14532d">
+        Introducing to <strong>${escapeHtml(partnerName)}</strong>${partnerEmail ? ` · CC: ${escapeHtml(partnerEmail)}` : ''}
+       </div>`;
+
   body.innerHTML = `
     <div class="tab-scroll">
-      ${done ? `<div class="step-done-banner">✓ Victory introduction sent</div>` : ''}
+      ${done ? `<div class="step-done-banner">✓ Introduction sent to ${escapeHtml(partnerName || 'your consultant')}</div>` : ''}
       <div class="tab-section">
-        <h4>Victory at Toby Career Consults</h4>
-        <p class="tab-desc">AI drafts a warm, personal introduction to Victory (victory@tobycareerconsults.com) who specializes in executive resume writing. Feels like a genuine recommendation, not a sales pitch.</p>
-        <button class="btn btn-secondary btn-sm" id="gen-victory-btn">✦ ${done?'Regenerate Victory Email':'Generate Victory Email'}</button>
+        <h4>Resume Consultant Introduction</h4>
+        ${partnerBanner}
+        <p class="tab-desc">AI drafts a warm introduction email addressed to ${escapeHtml(firstName)} and CC'd to your resume consultant. The email summarises the candidate's background, highlights why their resume needs stronger positioning, and hands them off — feels like a genuine recommendation, not a sales pitch.</p>
+        <button class="btn btn-secondary btn-sm" id="gen-victory-btn">✦ ${done ? 'Regenerate Introduction' : 'Generate Introduction Email'}</button>
       </div>
       <div class="draft-area" id="victory-draft-area" style="display:none">
         <div class="tab-section">
-          <div class="draft-label"><h4>Draft — Victory Introduction</h4><span class="text-xs text-muted">Edit before sending</span></div>
-          <div class="form-group"><label>Subject Line</label><input type="text" id="victory-subject" value="Someone I think you should connect with" /></div>
-          <div class="form-group"><label>Message</label><textarea id="victory-body" class="draft-textarea" style="min-height:240px"></textarea></div>
+          <div class="draft-label"><h4>Draft — Introduction Email</h4><span class="text-xs text-muted">Edit before sending</span></div>
+          ${partnerEmail ? `<p style="font-size:0.78rem;color:var(--text-muted);margin:0 0 10px">Remember to CC <strong>${escapeHtml(partnerEmail)}</strong> when you send this.</p>` : ''}
+          <div class="form-group"><label>Subject Line</label><input type="text" id="victory-subject" value="Someone I think you should connect with, ${escapeHtml(firstName)}" /></div>
+          <div class="form-group"><label>Message</label><textarea id="victory-body" class="draft-textarea" style="min-height:260px"></textarea></div>
           <div class="draft-actions">
             <button class="btn btn-ghost btn-sm" id="victory-regen">↺ Regenerate</button>
             <button class="btn btn-primary" id="victory-send">Approve & Send</button>
@@ -1226,7 +1241,7 @@ function renderVictoryTab(body) {
     bodyId: 'victory-body',
     regenBtnId: 'victory-regen',
     sendBtnId: 'victory-send',
-    defaultSubject: 'Someone I think you should connect with',
+    defaultSubject: `Someone I think you should connect with, ${firstName}`,
     stepKey: 'victorySent',
     stageTo: null,
     generate: () => API.ai.victory(c.id)
