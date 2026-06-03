@@ -88,70 +88,75 @@ async function generateOutreach(candidate, user) {
 // ── Career Consultant outreach ────────────────────────────────────────────────
 // "I see your potential — let me help you get to a better position."
 async function _generateCareerConsultantOutreach(candidate, user) {
-  const candidateInfo = formatCandidateContext(candidate);
-  const styleInfo = formatUserStyle(user);
+  const candidateInfo   = formatCandidateContext(candidate);
   const consultantName  = user.name || 'Your Consultant';
   const consultantTitle = (user.title && user.title.trim()) || 'Career Strategist';
-  const servicePitch    = (user.companyPitch || '').trim() ||
-    'I specialize in helping experienced professionals reposition themselves for roles that match their actual value — better title, better company, better compensation.';
   const practiseName    = (user.companyName || '').trim() || '';
+  // Extract first name correctly — handle multi-word names
+  const firstName = (candidate.name || '').trim().split(/\s+/)[0];
 
-  const prompt = `You are ${consultantName}, a career consultant. You are writing a cold outreach email to a professional whose LinkedIn profile you found. Your goal is to open a conversation about helping them advance their career — NOT to hire them for a company. You believe their background is strong but their career positioning and resume may not be reflecting their full value.
+  const prompt = `You are ${consultantName}${practiseName ? ' at ' + practiseName : ''}. You are writing a cold outreach email to a professional whose LinkedIn profile you came across. You noticed something specific about their career story that most people would miss.
 
-YOUR SERVICE:
-${servicePitch}
+IMPORTANT CONTEXT: This is a FIRST email. You are NOT pitching a service in this email. You are NOT mentioning career coaching, resume writing, or anything you sell. You are simply a person who read their profile carefully and noticed something worth sharing. The goal of this email is ONE thing: get a reply.
 
 CANDIDATE INFORMATION:
 ${candidateInfo}
 
-STYLE GUIDANCE:
-${styleInfo}
+Write a 3-paragraph email. Follow this structure EXACTLY:
 
-Write a 4-paragraph outreach email. Follow this structure EXACTLY:
+PARAGRAPH 1 — Open with the specific thing you noticed (2-3 sentences):
+- Address them as "Dear ${firstName},"
+- Name one sharp, specific observation about their career arc — something that shows you actually studied their background. Reference real companies, real roles, real transitions by name.
+- NOT generic praise. NOT "I was impressed by your career." Something specific that only someone who read their profile would say.
+- Example tone: "What caught my attention was the move you made from [X] to [Y] — that's not a typical path, and it tells a different story than most profiles at your level."
 
-PARAGRAPH 1 — I see YOU (specific, not flattering):
-- "Dear [First Name],"
-- One sharp, specific observation about something rare or genuinely impressive in their career — not generic praise. Reference real companies, real roles, real transitions.
-- Show you actually read their background in detail.
+PARAGRAPH 2 — The one thing they may not realise (2-3 sentences):
+- Share ONE concrete, specific insight about how their story reads from the outside versus what it actually represents.
+- Be direct and honest — not critical, not flattering. Like a smart colleague giving an unfiltered observation.
+- Focus on a specific transition, gap, or positioning issue that is unique to THEIR background. Name it plainly.
+- Do NOT say "your resume is weak" or anything negative. Say what you see — the contrast between what they built and how it currently reads.
+- Example: "The compliance move at Elevance reads as a lateral on paper — but based on what you were doing in operations before it, that's actually a significant scope expansion that most job descriptions wouldn't surface."
 
-PARAGRAPH 2 — The gap you see:
-- Diplomatically name the gap between their actual value and how they are currently positioned.
-- Do NOT say their resume is bad. Say something like: "What I notice is that someone with [their actual experience] is often underrepresented on paper — the full scope of what they've built and led rarely comes through in a standard format."
-- Make them feel seen, not criticised.
-
-PARAGRAPH 3 — What you do:
-- Briefly explain your service: you help professionals like them reposition for better roles — better title, better company, better compensation.
-- Be specific: "I work with [type of professional] to strengthen how their leadership story is told — strategy, positioning, and where to focus the job search."
-- ${practiseName ? `Sign off from ${practiseName}.` : ''}
-
-PARAGRAPH 4 — Low-friction CTA (this is the most important paragraph — make it irresistible):
-- Do NOT ask for a call. Do NOT say "let's schedule a chat." Do NOT say "no obligation."
-- The work is already done. Frame it as: you have already written down your specific observations about THIS person — not a template, not generic advice.
-- Use one of these structures (pick the most natural fit):
-  a) "I already have three specific observations about how your positioning could shift — about [reference something real from their background, e.g. 'your move from X to Y' or 'the gap between what you built at Z and how it reads on paper']. Want me to send them over? One-line reply is enough."
-  b) "I wrote this email because I had a clear picture of what I'd change about how your story is told. If you want to see it — reply and I'll send it across today."
-  c) "Reply with one word and I'll send over what I see. It's specific to you — not a pitch deck, not a discovery call. Just my honest take on where your positioning is leaving value on the table."
-- End with confidence, not apology. The tone should be: "I have something genuinely useful for you. Your call."
+PARAGRAPH 3 — Short, confident close (2 sentences max):
+- Do NOT mention career coaching, resume services, or anything you sell.
+- Do NOT ask for a call, meeting, or to "connect."
+- Simply offer to share what you wrote down — frame it as: you already have a few specific thoughts on this and you're happy to share them if they want to see it.
+- One clean sentence: "I wrote down a few specific thoughts on this — reply if you want me to send them over."
+- Optional: add a second sentence that reinforces it's specific to them: "Nothing generic — just what I actually see when I look at your background."
 
 SIGNATURE:
 ${consultantName}
 ${consultantTitle}${practiseName ? '\n' + practiseName : ''}
 
 RULES:
-- DO NOT pitch a specific job or company
-- DO NOT use phrases like "exciting opportunity" or "I came across your profile"
-- Sound like a real human who genuinely read their background — curious, direct, confident
-- Under 300 words
-- The CTA paragraph must feel like the sender already has the goods and is offering to share — not asking permission to pitch
-- Output ONLY the email body starting with "Dear [First Name],"
+- Under 220 words total — short emails get read, long emails get deleted
+- Do NOT mention career coaching, consulting, resume writing, or any service you offer
+- Do NOT use numbers like "helped 2,000 professionals" — that's marketing copy, not a human
+- Do NOT use phrases like "exciting opportunity", "I came across your profile", "no obligation", "quick call"
+- Sound like a real person who genuinely read their background — direct, curious, warm but not salesy
+- The email should feel like it was written specifically for this one person, not templated
+- Output as JSON with two fields: { "subject": "...", "body": "..." }
+- subject: a short, specific subject line (under 9 words) that references something real about their background — NOT generic. Examples: "Your path from X to Y", "A thought on your compliance transition", "Something I noticed about your background at [Company]"
+- body: the full email body starting with "Dear ${firstName},"
+
+Output ONLY valid JSON. No markdown, no extra text.
 
 Write the email now:`;
 
   const response = await client.messages.create({
-    model: MODEL, max_tokens: 800,
+    model: MODEL, max_tokens: 900,
     messages: [{ role: 'user', content: prompt }]
   });
-  return { text: response.content[0].text.trim(), costCents: calcCostCents(response.usage) };
+  const raw = response.content[0].text.trim();
+  const costCents = calcCostCents(response.usage);
+  try {
+    const clean = raw.replace(/^```json\s*/i, '').replace(/```\s*$/, '').trim();
+    const parsed = JSON.parse(clean);
+    return { text: parsed.body || parsed.text || raw, subject: parsed.subject || '', costCents };
+  } catch {
+    // Fallback: treat whole response as body text
+    return { text: raw, subject: '', costCents };
+  }
 }
 
 // ── Independent Recruiter outreach ────────────────────────────────────────────

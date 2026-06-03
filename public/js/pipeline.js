@@ -792,7 +792,9 @@ function renderOutreachTab(body) {
     bodyId: 'outreach-body',
     regenBtnId: 'outreach-regen',
     sendBtnId: 'outreach-send',
-    defaultSubject: `Something Worth a Few Minutes of Your Time, ${c.name.split(' ')[0]}`,
+    defaultSubject: (_modalUser && _modalUser.userType === 'career_consultant')
+      ? `A thought on your background, ${c.name ? c.name.trim().split(/\s+/)[0] : ''}`
+      : `Something Worth a Few Minutes of Your Time, ${c.name ? c.name.trim().split(/\s+/)[0] : ''}`,
     stepKey: 'outreach',
     stageTo: 'Outreach Sent',
     generate: () => API.ai.outreach(c.id)
@@ -1427,11 +1429,14 @@ function wireAIDraft(body, { genBtnId, draftAreaId, subjectId, bodyId, regenBtnI
     genBtn.disabled = true; genBtn.textContent = '✦ Generating…';
     try {
       const result = await generate();
-      const draft = result.draft || result;
+      const draft = result.draft || result.text || result;
       const subjectEl = body.querySelector('#' + subjectId);
       const bodyEl = body.querySelector('#' + bodyId);
-      if (bodyEl) bodyEl.value = draft;
-      if (subjectEl && !subjectEl.value) subjectEl.value = defaultSubject;
+      if (bodyEl) bodyEl.value = typeof draft === 'string' ? draft : JSON.stringify(draft);
+      if (subjectEl) {
+        // Use AI-generated subject if provided, otherwise fall back to default
+        subjectEl.value = (result.subject && result.subject.trim()) || subjectEl.value || defaultSubject;
+      }
       draftArea.style.display = '';
       bodyEl && bodyEl.focus();
     } catch (err) { Toast.error(err.message); }
