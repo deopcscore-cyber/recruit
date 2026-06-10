@@ -106,9 +106,13 @@ Write a 3-paragraph email. Follow this structure EXACTLY:
 
 PARAGRAPH 1 — Open with the specific thing you noticed (2-3 sentences):
 - Address them as "Dear ${firstName},"
-- Name one sharp, specific observation about their career arc — something that shows you actually studied their background. Reference real companies, real roles, real transitions by name.
-- NOT generic praise. NOT "I was impressed by your career." Something specific that only someone who read their profile would say.
-- Example tone: "What caught my attention was the move you made from [X] to [Y] — that's not a typical path, and it tells a different story than most profiles at your level."
+- Dive straight into the observation itself — talk about THEIR career, not about you noticing it.
+- BANNED OPENERS (these scream "AI template"): "What caught my attention...", "What stood out to me...", "I noticed that...", "I was impressed by...", "Your background caught my eye...". Never open by describing your own act of noticing.
+- Instead, open with the fact itself. Examples of natural openers:
+  - "Thirteen years inside one ecosystem — Amerigroup to Elevance — and somehow you've held six genuinely different jobs in that time."
+  - "Most people who start in payroll stay in payroll. You ended up running comp, benefits, and HRIS for an entire company."
+  - "Going from [X] to [Y] without leaving [Company] is a harder move than it looks from the outside."
+- Reference real companies, real roles, real transitions by name. Vary the structure — a short punchy first sentence works well.
 
 PARAGRAPH 2 — The one thing they may not realise (2-3 sentences):
 - Share ONE concrete, specific insight about how their story reads from the outside versus what it actually represents.
@@ -124,11 +128,8 @@ PARAGRAPH 3 — Short, confident close (2 sentences max):
 - One clean sentence: "I wrote down a few specific thoughts on this — reply if you want me to send them over."
 - Optional: add a second sentence that reinforces it's specific to them: "Nothing generic — just what I actually see when I look at your background."
 
-SIGNATURE:
-${consultantName}
-${consultantTitle}${practiseName ? '\n' + practiseName : ''}
-
 RULES:
+- Do NOT add a signature, sign-off name, title, or company at the end — the sender's email signature is appended automatically. End the email after the final sentence of paragraph 3.
 - Under 220 words total — short emails get read, long emails get deleted
 - Do NOT mention career coaching, consulting, resume writing, or any service you offer
 - Do NOT use numbers like "helped 2,000 professionals" — that's marketing copy, not a human
@@ -588,15 +589,12 @@ PARAGRAPH 4 — Low-friction next step (NO call, NO scheduling):
 - This opens the conversation without any commitment
 - Do NOT mention a call. Do NOT say "schedule time." Do NOT say "book a session."
 
-SIGNATURE:
-${consultantName}
-${consultantTitle}${practiseName ? '\n' + practiseName : ''}
-
 RULES:
 - Sound warm and confident — not salesy
 - Reference their specific background throughout (companies, transitions, what makes them valuable)
 - Do NOT include pricing
 - Do NOT mention a call, meeting, or scheduling of any kind
+- Do NOT add a signature, sign-off name, title, or company at the end — the sender's email signature is appended automatically
 - Under 300 words
 - Output ONLY the email body starting with "Dear ${firstName},"
 
@@ -700,7 +698,7 @@ CRITICAL RULES:
 - You are their advocate, not trying to hire them
 - Reference their actual background (companies, roles) throughout
 - Under 250 words
-- Signature: ${consultantName}\\n${consultantTitle}${practiseName ? '\\n' + practiseName : ''}
+- Do NOT add a signature, sign-off name, title, or company at the end — the sender's email signature is appended automatically
 - Output ONLY the email body starting with "Dear ${firstName},"
 
 Write the reply now:`;
@@ -752,9 +750,7 @@ PARAGRAPH 6 — Low-friction close (NO call, NO scheduling):
 - Ask them one easy question — something like "What kind of roles are you targeting?" or "Is there a specific part of your background you feel isn't landing?"
 - Do NOT mention a call. Do NOT say "schedule time" or "book a session." Just invite a reply.
 
-SIGNATURE:
-${consultantName}
-${consultantTitle}${practiseName ? '\n' + practiseName : ''}
+Do NOT add a signature, sign-off name, title, or company at the end of the email — the sender's email signature is appended automatically. End after the final sentence of paragraph 6.
 
 Also return a brief internal analysis. Output as valid JSON:
 {

@@ -57,14 +57,14 @@ const STAGE_COLORS = {
   'Closed': '#374151'
 };
 
-// Tabs vary by user type — career consultants skip Role & JD, rename Victory → Proposal
+// Tabs vary by user type — career consultants skip Role & JD, rename Intro → Proposal
 const TABS_RECRUITER = [
   { key: 'profile',   label: 'Profile',    step: null },
   { key: 'outreach',  label: 'Outreach',   step: 'outreach' },
   { key: 'role-jd',   label: 'Role & JD',  step: 'roleJD' },
   { key: 'resume',    label: 'Resume',      step: 'resumeReceived' },
   { key: 'review',    label: 'Review',      step: 'reviewSent' },
-  { key: 'victory',   label: 'Victory',     step: 'victorySent' },
+  { key: 'victory',   label: 'Intro',       step: 'victorySent' },
   { key: 'thread',    label: 'Thread',      step: null }
 ];
 
@@ -388,7 +388,7 @@ function buildModalShell(candidate) {
     const locked = t.key === 'victory' && !steps.reviewSent;
     const lockMsg = isConsultant
       ? 'Send the Feedback email first — Proposal unlocks after that'
-      : 'Send the Review email first — Victory unlocks after that';
+      : 'Send the Review email first — the Intro unlocks after that';
     return `<button class="cmodal-tab${t.key === 'profile' ? ' active' : ''}${locked ? ' locked' : ''}" data-tab="${t.key}" ${locked ? `title="${lockMsg}"` : ''}>
       ${t.label}
       ${done ? '<span class="tab-check">✓</span>' : ''}
@@ -423,7 +423,7 @@ function switchModalTab(tabKey) {
     const isConsultant = _modalUser && _modalUser.userType === 'career_consultant';
     Toast.warning(isConsultant
       ? 'Send the Feedback email first — Proposal unlocks after that.'
-      : 'Send the Review email first — Victory unlocks after that.'
+      : 'Send the Review email first — the Intro unlocks after that.'
     );
     return;
   }
@@ -1054,12 +1054,12 @@ function renderReviewTab(body) {
   const tabTitle    = isConsultant ? 'Your Honest Assessment' : 'AI Resume Review';
   const tabDesc     = isConsultant
     ? `AI analyses ${escapeHtml(c.name||'their')} resume from your perspective as their coach — what's working, what's not landing on paper, and why it matters. Drafts a warm, expert feedback email that leads naturally into working together.`
-    : `AI identifies 3-4 specific, concrete gaps in ${escapeHtml(c.name||'the candidate')}'s resume (referencing actual content). Then drafts a warm email asking if they're open to professional support — <strong>does not mention Victory yet</strong>.`;
+    : `AI identifies 3-4 specific, concrete gaps in ${escapeHtml(c.name||'the candidate')}'s resume (referencing actual content). Then drafts a warm email asking if they're open to professional support — <strong>does not mention your resume consultant yet</strong>.`;
   const draftLabel  = isConsultant ? 'Draft — Resume Feedback Email' : 'Draft — Interest Check Email';
-  const draftHint   = isConsultant ? 'Your expert assessment — edit before sending' : 'Edit before sending — does not mention Victory';
+  const draftHint   = isConsultant ? 'Your expert assessment — edit before sending' : 'Edit before sending — does not mention your consultant';
   const doneBanner  = isConsultant
     ? '✓ Feedback sent — Proposal tab now available'
-    : '✓ Resume review email sent — Victory tab now available';
+    : '✓ Resume review email sent — Intro tab now available';
   const defaultSubj = isConsultant ? `My honest take on your background, ${c.name ? c.name.split(' ')[0] : ''}` : 'Quick thought on your background';
 
   body.innerHTML = `
@@ -1138,7 +1138,7 @@ function renderReviewTab(body) {
       Object.assign(_modalCandidate, result.candidate || {}, updated);
       _modalOnUpdate(_modalCandidate);
       refreshModal();
-      Toast.success(isConsultant ? 'Feedback sent — Proposal tab is now unlocked' : 'Review email sent — Victory tab is now unlocked');
+      Toast.success(isConsultant ? 'Feedback sent — Proposal tab is now unlocked' : 'Review email sent — Intro tab is now unlocked');
       renderReviewTab(body);
     } catch (err) { Toast.error(err.message); }
     finally { btn.disabled = false; btn.textContent = 'Approve & Send'; }
