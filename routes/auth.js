@@ -4,10 +4,19 @@ const bcrypt = require('bcrypt');
 const { v4: uuidv4 } = require('uuid');
 const storage = require('../services/storage');
 const requireAuth = require('../middleware/auth');
+const rateLimit = require('../middleware/rateLimit');
 const { ADMIN_EMAIL } = require('../config');
 
+// Brute-force protection on credential endpoints
+const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 20, message: 'Too many attempts — try again in a few minutes.' });
+
+// Never send OAuth tokens to the browser — only connection status
+function safeGmail(user) {
+  return { connected: !!(user.gmail && user.gmail.connected), address: (user.gmail && user.gmail.address) || '' };
+}
+
 // POST /api/auth/register
-router.post('/register', async (req, res) => {
+router.post('/register', authLimiter, async (req, res) => {
   try {
     const { name, email, password, userType } = req.body;
 
@@ -49,7 +58,7 @@ router.post('/register', async (req, res) => {
       id: user.id,
       name: user.name,
       email: user.email,
-      gmail: user.gmail,
+      gmail: safeGmail(user),
       style: user.style
     });
   } catch (err) {
@@ -59,7 +68,7 @@ router.post('/register', async (req, res) => {
 });
 
 // POST /api/auth/login
-router.post('/login', async (req, res) => {
+router.post('/login', authLimiter, async (req, res) => {
   try {
     const { email, password } = req.body;
 
@@ -84,7 +93,7 @@ router.post('/login', async (req, res) => {
       id: user.id,
       name: user.name,
       email: user.email,
-      gmail: user.gmail,
+      gmail: safeGmail(user),
       style: user.style,
       userType: user.userType || 'recruiter_company',
       companyName: user.companyName || '',
@@ -127,7 +136,7 @@ router.get('/me', requireAuth, async (req, res) => {
       id: user.id,
       name: user.name,
       email: user.email,
-      gmail: user.gmail,
+      gmail: safeGmail(user),
       style: user.style,
       userType:    user.userType    || 'recruiter_company',
       companyName: user.companyName || '',

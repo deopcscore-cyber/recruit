@@ -13,7 +13,9 @@ const TOKEN_URL = 'https://accounts.zoho.com/oauth/v2/token';
 const API_BASE  = 'https://mail.zoho.com/api';
 
 // ── OAuth2 helpers ────────────────────────────────────────────────────────────
-function getAuthUrl(userId) {
+// `state` is an opaque CSRF nonce verified against the session on callback —
+// never a user ID (that allowed account takeover).
+function getAuthUrl(state) {
   if (!ZOHO_CLIENT_ID) throw new Error('ZOHO_CLIENT_ID not configured');
   const params = new URLSearchParams({
     scope:         'ZohoMail.messages.CREATE,ZohoMail.accounts.READ,ZohoMail.messages.READ,ZohoMail.messages.UPDATE,ZohoMail.folders.READ',
@@ -21,7 +23,7 @@ function getAuthUrl(userId) {
     response_type: 'code',
     access_type:   'offline',
     redirect_uri:  `${BASE_URL}/auth/zoho/callback`,
-    state:         userId
+    state
   });
   return `https://accounts.zoho.com/oauth/v2/auth?${params}`;
 }

@@ -84,7 +84,7 @@ router.put('/users/:id', async (req, res) => {
   }
 });
 
-// DELETE /api/admin/users/:id
+// DELETE /api/admin/users/:id — also removes the user's candidates and resume files
 router.delete('/users/:id', async (req, res) => {
   try {
     if (req.params.id === req.session.userId) {
@@ -93,8 +93,26 @@ router.delete('/users/:id', async (req, res) => {
     const users = await storage.getAllUsers();
     const filtered = users.filter(u => u.id !== req.params.id);
     if (filtered.length === users.length) return res.status(404).json({ error: 'User not found' });
+
+    // Cascade: remove their candidates and any resume files on disk
+    const fs   = require('fs');
+    const path = require('path');
+    const allCandidates = await storage.getAllCandidates();
+    const theirs = allCandidates.filter(c => c.userId === req.params.id);
+    for (const c of theirs) {
+      try {
+        if (c.resume && c.resume.path && fs.existsSync(c.resume.path)) fs.unlinkSync(c.resume.path);
+        ['pdf', 'docx'].forEach(ext => {
+          const p = path.join(storage.DATA_DIR, 'resumes', `${c.id}.${ext}`);
+          if (fs.existsSync(p)) { try { fs.unlinkSync(p); } catch (e) {} }
+        });
+      } catch (e) { /* best-effort cleanup */ }
+    }
+    const remaining = allCandidates.filter(c => c.userId !== req.params.id);
+    await storage.saveAllCandidates(remaining);
     await storage.saveAllUsers(filtered);
-    res.json({ success: true });
+
+    res.json({ success: true, candidatesRemoved: theirs.length });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

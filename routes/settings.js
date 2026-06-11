@@ -209,9 +209,13 @@ router.get('/zoho-status', async (req, res) => {
 });
 
 // GET /api/settings/zoho-connect — start OAuth2 flow
+// state is a session-bound CSRF nonce; the callback verifies it and uses the
+// session for identity (state must never carry a user ID).
 router.get('/zoho-connect', async (req, res) => {
   try {
-    const url = zohoService.getAuthUrl(req.session.userId);
+    const state = crypto.randomBytes(24).toString('hex');
+    req.session.oauthState = state;
+    const url = zohoService.getAuthUrl(state);
     return res.json({ url });
   } catch (err) {
     return res.status(500).json({ error: err.message });
@@ -249,7 +253,9 @@ router.get('/outlook-status', async (req, res) => {
 // GET /api/settings/outlook-connect — start OAuth2 flow
 router.get('/outlook-connect', async (req, res) => {
   try {
-    const url = outlookService.getAuthUrl(req.session.userId);
+    const state = crypto.randomBytes(24).toString('hex');
+    req.session.oauthState = state;
+    const url = outlookService.getAuthUrl(state);
     return res.json({ url });
   } catch (err) {
     return res.status(500).json({ error: err.message });

@@ -114,9 +114,11 @@ async function parseFromText(rawText, url = '') {
 async function findViaContactOut(linkedinUrl, apiKey) {
   if (!apiKey || !linkedinUrl) return { email: '', phone: '', source: '' };
   try {
+    // Pass the key in the `token` header, not the query string, so it never
+    // lands in proxy/access logs.
     const res = await fetch(
-      `https://api.contactout.com/v1/people/email?linkedin=${encodeURIComponent(linkedinUrl)}&token=${apiKey}`,
-      { headers: { 'Accept': 'application/json' } }
+      `https://api.contactout.com/v1/people/email?linkedin=${encodeURIComponent(linkedinUrl)}`,
+      { headers: { 'Accept': 'application/json', 'token': apiKey } }
     );
     if (!res.ok) return { email: '', phone: '', source: '' };
     const data = await res.json();

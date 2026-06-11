@@ -442,15 +442,22 @@ router.get('/:id/resume/download', async (req, res) => {
       return res.status(404).json({ error: 'No resume on file' });
     }
 
-    const ext = path.extname(candidate.resume.filename).toLowerCase();
-    const filePath = path.join(RESUMES_DIR, `${req.params.id}${ext}`);
+    // Email-fetched resumes store an absolute `path`; uploaded ones live at {id}.ext
+    let filePath = candidate.resume.path;
+    if (!filePath || !fs.existsSync(filePath)) {
+      const ext = path.extname(candidate.resume.filename).toLowerCase();
+      filePath = path.join(RESUMES_DIR, `${req.params.id}${ext}`);
+    }
 
     if (!fs.existsSync(filePath)) {
       return res.status(404).json({ error: 'Resume file not found on disk' });
     }
 
-    res.setHeader('Content-Disposition', `attachment; filename="${candidate.resume.filename}"`);
-    res.sendFile(filePath);
+    // Sanitize the download filename to prevent header injection
+    const safeName = (candidate.resume.originalName || candidate.resume.filename)
+      .replace(/[\r\n"]/g, '').replace(/[^a-zA-Z0-9._ -]/g, '_');
+    res.setHeader('Content-Disposition', `attachment; filename="${safeName}"`);
+    res.sendFile(path.resolve(filePath));
   } catch (err) {
     console.error('Resume download error:', err);
     return res.status(500).json({ error: 'Download failed' });

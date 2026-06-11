@@ -67,8 +67,8 @@
     // ── Step 2: receive profile data from bookmarklet and POST to API ─────────
     // NOTE: the bookmarklet runs on linkedin.com, so evt.origin will be
     // https://www.linkedin.com — we cannot restrict by our own origin here.
-    // Security: the /api/linkedin/bookmarklet endpoint requires no session
-    // and only parses text; no sensitive data is exposed.
+    // This popup runs on OUR origin, so the fetch below is same-origin and
+    // carries the session cookie — the API now requires you to be logged in.
     window.addEventListener('message', function(evt) {
       var data = evt.data;
       if (!data || !data.text) return;
@@ -77,10 +77,12 @@
 
       fetch('/api/linkedin/bookmarklet', {
         method: 'POST',
+        credentials: 'same-origin',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ url: data.url || '', text: data.text })
       })
       .then(function(r) {
+        if (r.status === 401) throw new Error('You are signed out — log in to Recruit Pro first, then try the bookmark again.');
         if (!r.ok) return r.json().then(function(e) { throw new Error(e.error || 'Server error ' + r.status); });
         return r.json();
       })

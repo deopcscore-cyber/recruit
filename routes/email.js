@@ -27,9 +27,14 @@ const requireAuth = require('../middleware/auth');
 const { DATA_DIR } = require('../config');
 
 // GET /api/email/connect — generate OAuth URL
+// state is a random nonce bound to this session; the callback verifies it and
+// takes the user identity from the session, never from the state parameter.
 router.get('/connect', requireAuth, async (req, res) => {
   try {
-    const url = gmailService.getAuthUrl(req.session.userId);
+    const crypto = require('crypto');
+    const state = crypto.randomBytes(24).toString('hex');
+    req.session.oauthState = state;
+    const url = gmailService.getAuthUrl(state);
     return res.json({ url });
   } catch (err) {
     console.error('Gmail connect error:', err);
@@ -51,18 +56,17 @@ const gmailCallback = async (req, res) => {
       return res.redirect('/dashboard?gmail=error&reason=no_code');
     }
 
-    // state contains userId
-    const userId = state || (req.session && req.session.userId);
+    // Identity comes from the session; state must match the nonce we issued
+    const userId = req.session && req.session.userId;
     if (!userId) {
-      return res.redirect('/dashboard?gmail=error&reason=no_user');
+      return res.redirect('/login?gmail=error&reason=session_expired');
     }
+    if (!state || state !== req.session.oauthState) {
+      return res.redirect('/dashboard?gmail=error&reason=state_mismatch');
+    }
+    delete req.session.oauthState;
 
     await gmailService.exchangeCode(userId, code);
-
-    // If this is a different user than logged in session, set session
-    if (req.session && !req.session.userId) {
-      req.session.userId = userId;
-    }
 
     return res.redirect('/dashboard?gmail=connected');
   } catch (err) {

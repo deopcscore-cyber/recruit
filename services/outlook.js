@@ -17,14 +17,16 @@ const REDIRECT_URI = `${BASE_URL}/auth/outlook/callback`;
 
 // ── OAuth2 ────────────────────────────────────────────────────────────────────
 
-function getAuthUrl(userId) {
+// `state` is an opaque CSRF nonce verified against the session on callback —
+// never a user ID (that allowed account takeover).
+function getAuthUrl(state) {
   if (!MICROSOFT_CLIENT_ID) throw new Error('MICROSOFT_CLIENT_ID not configured');
   const params = new URLSearchParams({
     client_id:     MICROSOFT_CLIENT_ID,
     response_type: 'code',
     redirect_uri:  REDIRECT_URI,
     scope:         SCOPES,
-    state:         userId,
+    state,
     response_mode: 'query'
   });
   return `${AUTH_BASE}/authorize?${params}`;

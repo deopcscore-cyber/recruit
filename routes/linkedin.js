@@ -20,20 +20,14 @@ function cleanExpired() {
   for (const [k, v] of pendingImports) if (v.expires < now) pendingImports.delete(k);
 }
 
-// ── CORS preflight for bookmarklet (called from linkedin.com) ─────────────
-router.options('/bookmarklet', (req, res) => {
-  res.header('Access-Control-Allow-Origin', '*');
-  res.header('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Content-Type');
-  res.sendStatus(204);
-});
+const rateLimit = require('../middleware/rateLimit');
+const bookmarkletLimiter = rateLimit({ windowMs: 60 * 1000, max: 10, message: 'Too many imports — wait a minute and try again.' });
 
-// POST /api/linkedin/bookmarklet  — called by the browser bookmarklet
-// No session auth — the request comes from linkedin.com
-router.post('/bookmarklet', async (req, res) => {
-  res.header('Access-Control-Allow-Origin', '*');
-  res.header('Access-Control-Allow-Headers', 'Content-Type');
-
+// POST /api/linkedin/bookmarklet — called by the li-capture popup on OUR origin
+// (the bookmarklet on linkedin.com relays page text to the popup via postMessage),
+// so the session cookie is present. Auth required — this endpoint runs a Claude
+// parse on the server's API key and was previously an open cost-abuse vector.
+router.post('/bookmarklet', requireAuth, bookmarkletLimiter, async (req, res) => {
   // coEmails: optional array of emails already harvested by the Chrome extension
   // (e.g. read from ContactOut's injected DOM on the same page)
   const { url, text, coEmails } = req.body;
@@ -76,8 +70,8 @@ router.post('/bookmarklet', async (req, res) => {
 });
 
 // GET /api/linkedin/bookmarklet/:token  — dashboard retrieves the parsed profile
-// No session auth — one-time token is the secret; expires in 10 min
-router.get('/bookmarklet/:token', (req, res) => {
+// One-time token + session auth (dashboard is always logged in); expires in 10 min
+router.get('/bookmarklet/:token', requireAuth, (req, res) => {
   cleanExpired();
   const entry = pendingImports.get(req.params.token);
   if (!entry) return res.status(404).json({ error: 'Import token not found or expired. Please run the bookmarklet again.' });

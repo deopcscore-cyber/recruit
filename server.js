@@ -47,8 +47,18 @@ app.use(session({
   }
 }));
 
-app.use(express.json({ limit: '50mb' }));
-app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+// Baseline security headers (CSP omitted — the dashboard relies on inline scripts/styles)
+app.use((req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  next();
+});
+
+// 2mb is plenty for JSON payloads (LinkedIn profile text, threads); uploads go
+// through multer on their own routes with their own limits.
+app.use(express.json({ limit: '2mb' }));
+app.use(express.urlencoded({ extended: true, limit: '2mb' }));
 app.use(express.static(path.join(__dirname, 'public'), {
   setHeaders(res, filePath) {
     // Never let browsers cache JS/CSS — stale assets cause silent UI bugs after deploys
@@ -94,9 +104,10 @@ app.post('/api/admin/bootstrap', require('./middleware/auth'), async (req, res) 
 });
 
 // ─── Email open tracking pixel ────────────────────────────────────────────────
+const rateLimit = require('./middleware/rateLimit');
 const BLANK_GIF = Buffer.from('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7', 'base64');
 const pushSvc = require('./services/push');
-app.get('/track/:trackingId', async (req, res) => {
+app.get('/track/:trackingId', rateLimit({ windowMs: 60 * 1000, max: 120 }), async (req, res) => {
   res.set({ 'Content-Type': 'image/gif', 'Cache-Control': 'no-store' });
   try {
     const storage = require('./services/storage');
@@ -125,12 +136,18 @@ const emailRoutes = require('./routes/email');
 app.get('/auth/gmail/callback', emailRoutes.gmailCallback);
 
 // ─── Zoho OAuth callback ──────────────────────────────────────────────────────
+// Identity comes from the session; `state` must match the nonce issued at the
+// start of the flow. Never derive the user from the state parameter.
 const zohoService = require('./services/zoho');
 app.get('/auth/zoho/callback', async (req, res) => {
   const { code, state, error } = req.query;
   if (error || !code) return res.redirect('/dashboard?zoho=error&reason=' + encodeURIComponent(error || 'no_code'));
-  const userId = state || (req.session && req.session.userId);
-  if (!userId) return res.redirect('/dashboard?zoho=error&reason=no_user');
+  const userId = req.session && req.session.userId;
+  if (!userId) return res.redirect('/login?zoho=error&reason=session_expired');
+  if (!state || state !== req.session.oauthState) {
+    return res.redirect('/dashboard?zoho=error&reason=state_mismatch');
+  }
+  delete req.session.oauthState;
   try {
     await zohoService.exchangeCode(userId, code);
     return res.redirect('/dashboard?zoho=connected');
@@ -145,8 +162,12 @@ const outlookService = require('./services/outlook');
 app.get('/auth/outlook/callback', async (req, res) => {
   const { code, state, error } = req.query;
   if (error || !code) return res.redirect('/dashboard?outlook=error&reason=' + encodeURIComponent(error || 'no_code'));
-  const userId = state || (req.session && req.session.userId);
-  if (!userId) return res.redirect('/dashboard?outlook=error&reason=no_user');
+  const userId = req.session && req.session.userId;
+  if (!userId) return res.redirect('/login?outlook=error&reason=session_expired');
+  if (!state || state !== req.session.oauthState) {
+    return res.redirect('/dashboard?outlook=error&reason=state_mismatch');
+  }
+  delete req.session.oauthState;
   try {
     await outlookService.exchangeCode(userId, code);
     return res.redirect('/dashboard?outlook=connected');
@@ -371,6 +392,7 @@ async function processQueueJob() {
 
     if (!user || !candidate) throw new Error('User or candidate not found');
     if (!_isEmailConnected(user)) throw new Error('No email provider connected');
+    if ((user.credits || 0) <= 0) throw new Error('Insufficient credits');
 
     // Generate personalised outreach (deduct credits)
     const outreachResult = await claudeSvc.generateOutreach(candidate, user);
@@ -580,6 +602,10 @@ async function sendWeeklyDigest() {
     const now = new Date();
     if (now.getDay() !== 1 || now.getHours() < 8 || now.getHours() >= 10) return;
 
+    // Claim this week's run up-front. If a send throws partway through the loop,
+    // the next hourly tick won't restart the whole digest from the top.
+    fs2.writeFileSync(digestFile, now.toISOString(), 'utf8');
+
     const users = await storageService.getAllUsers();
     for (const user of users) {
       const userEmail = _getUserEmailAddress(user);
@@ -615,7 +641,6 @@ async function sendWeeklyDigest() {
           body
         });
 
-        fs2.writeFileSync(digestFile, now.toISOString(), 'utf8');
         console.log(`Weekly digest sent to ${userEmail}`);
       } catch (uErr) {
         console.error(`Digest error for ${user.id}:`, uErr.message);

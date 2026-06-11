@@ -29,6 +29,17 @@ async function writeJSON(filename, data) {
   fs.renameSync(tmpPath, filePath);
 }
 
+// Serialize read-modify-write cycles. The queue processor, auto-fetch loop and
+// HTTP requests all mutate the same JSON files concurrently — without this,
+// two overlapping saves silently drop one of the writes (last write wins on
+// the whole file). Single-process only, which matches the deployment.
+let _writeLock = Promise.resolve();
+function withLock(fn) {
+  const run = _writeLock.then(fn, fn);
+  _writeLock = run.catch(() => {});
+  return run;
+}
+
 async function getAllUsers() {
   const result = await readJSON('users.json');
   return Array.isArray(result) ? result : [];
@@ -49,14 +60,16 @@ async function getUserByEmail(email) {
 }
 
 async function saveUser(user) {
-  const users = await getAllUsers();
-  const idx = users.findIndex(u => u.id === user.id);
-  if (idx >= 0) {
-    users[idx] = user;
-  } else {
-    users.push(user);
-  }
-  await saveAllUsers(users);
+  return withLock(async () => {
+    const users = await getAllUsers();
+    const idx = users.findIndex(u => u.id === user.id);
+    if (idx >= 0) {
+      users[idx] = user;
+    } else {
+      users.push(user);
+    }
+    await saveAllUsers(users);
+  });
 }
 
 async function getAllCandidates() {
@@ -79,15 +92,17 @@ async function getCandidateById(id) {
 }
 
 async function saveCandidate(candidate) {
-  const candidates = await getAllCandidates();
-  candidate.updatedAt = new Date().toISOString();
-  const idx = candidates.findIndex(c => c.id === candidate.id);
-  if (idx >= 0) {
-    candidates[idx] = candidate;
-  } else {
-    candidates.push(candidate);
-  }
-  await saveAllCandidates(candidates);
+  return withLock(async () => {
+    const candidates = await getAllCandidates();
+    candidate.updatedAt = new Date().toISOString();
+    const idx = candidates.findIndex(c => c.id === candidate.id);
+    if (idx >= 0) {
+      candidates[idx] = candidate;
+    } else {
+      candidates.push(candidate);
+    }
+    await saveAllCandidates(candidates);
+  });
 }
 
 module.exports = {

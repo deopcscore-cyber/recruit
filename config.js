@@ -16,9 +16,17 @@ const path = require('path');
 
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
 const BASE_URL = process.env.BASE_URL || 'http://localhost:3000';
-const SESSION_SECRET = process.env.SESSION_SECRET || 'dev-secret-change-me';
 const PORT = parseInt(process.env.PORT || '3000', 10);
 const IS_PRODUCTION = process.env.NODE_ENV === 'production' || !!process.env.RAILWAY_ENVIRONMENT;
+
+// In production a forgeable session secret means full account takeover —
+// refuse to boot rather than run with the dev fallback.
+const SESSION_SECRET = process.env.SESSION_SECRET || (IS_PRODUCTION ? null : 'dev-secret-change-me');
+if (!SESSION_SECRET) {
+  console.error('FATAL: SESSION_SECRET env var must be set in production. Generate one with:');
+  console.error('  node -e "console.log(require(\'crypto\').randomBytes(32).toString(\'hex\'))"');
+  process.exit(1);
+}
 
 const ZOHO_CLIENT_ID     = process.env.ZOHO_CLIENT_ID     || '';
 const ZOHO_CLIENT_SECRET = process.env.ZOHO_CLIENT_SECRET || '';
