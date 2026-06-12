@@ -42,6 +42,16 @@ router.get('/', async (req, res) => {
     // Unread
     const unreadCount = candidates.filter(c => c.unread).length;
 
+    // Reply sentiment breakdown (auto-classified inbox triage)
+    const sentimentCounts = { interested: 0, question: 0, not_now: 0, not_interested: 0 };
+    candidates.forEach(c => {
+      if (c.replySentiment && sentimentCounts[c.replySentiment] !== undefined) sentimentCounts[c.replySentiment]++;
+    });
+
+    // Pending automated follow-ups queued for this user
+    let pendingFollowUps = 0;
+    try { pendingFollowUps = require('../services/queue').pendingFollowUpCount(req.session.userId); } catch (e) {}
+
     // Avg days active (from first outbound to now, for active candidates)
     const activeTimes = candidates
       .filter(c => c.thread && c.thread.length > 0 && !['Closed'].includes(c.stage))
@@ -75,11 +85,47 @@ router.get('/', async (req, res) => {
       followUpCandidates: followUpsDue.map(c => ({ id: c.id, name: c.name, followUpDate: c.followUpDate, stage: c.stage })),
       unreadCount,
       avgDays,
-      funnel
+      funnel,
+      sentimentCounts,
+      pendingFollowUps
     });
   } catch (err) {
     console.error('Analytics error:', err);
     return res.status(500).json({ error: 'Failed to get analytics' });
+  }
+});
+
+// GET /api/analytics/subjects — open-rate leaderboard by outreach subject line.
+// Helps users learn which subject styles get opened (lightweight A/B insight,
+// computed from data already tracked — works retroactively).
+router.get('/subjects', async (req, res) => {
+  try {
+    const candidates = await storage.getUserCandidates(req.session.userId);
+    const bySubject = new Map(); // normalized subject → { subject, sent, opened }
+
+    for (const c of candidates) {
+      // The first outbound message's subject is the one that drove the open
+      const firstOut = (c.thread || []).find(m => m.direction === 'outbound');
+      if (!firstOut || !firstOut.subject) continue;
+      // Normalize: strip leading Re:, trailing first-name personalization noise
+      const key = firstOut.subject.replace(/^re:\s*/i, '').trim().toLowerCase();
+      if (!key) continue;
+      const rec = bySubject.get(key) || { subject: firstOut.subject.replace(/^re:\s*/i, '').trim(), sent: 0, opened: 0 };
+      rec.sent++;
+      if (c.opened) rec.opened++;
+      bySubject.set(key, rec);
+    }
+
+    const rows = [...bySubject.values()]
+      .map(r => ({ ...r, openRate: r.sent ? Math.round((r.opened / r.sent) * 100) : 0 }))
+      .filter(r => r.sent >= 1)
+      .sort((a, b) => b.openRate - a.openRate || b.sent - a.sent)
+      .slice(0, 25);
+
+    return res.json({ subjects: rows });
+  } catch (err) {
+    console.error('Subject analytics error:', err);
+    return res.status(500).json({ error: 'Failed to get subject analytics' });
   }
 });
 

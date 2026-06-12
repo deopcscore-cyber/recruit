@@ -39,17 +39,36 @@ function getJobsForUser(userId) {
   return read().filter(j => j.userId === userId);
 }
 
-// Cancel all pending jobs for a user
-function cancelPendingForUser(userId) {
+// Cancel all pending jobs for a user.
+// Optionally restrict to a single type ('outreach' | 'followup').
+function cancelPendingForUser(userId, type = null) {
   const queue = read();
   let changed = false;
   queue.forEach(j => {
-    if (j.userId === userId && j.status === 'pending') {
+    if (j.userId === userId && j.status === 'pending' && (!type || (j.type || 'outreach') === type)) {
       j.status = 'cancelled';
       changed = true;
     }
   });
   if (changed) write(queue);
+}
+
+// Cancel pending jobs for one candidate (used when they reply — stops follow-ups).
+function cancelPendingForCandidate(candidateId, type = null) {
+  const queue = read();
+  let changed = false;
+  queue.forEach(j => {
+    if (j.candidateId === candidateId && j.status === 'pending' && (!type || (j.type || 'outreach') === type)) {
+      j.status = 'cancelled';
+      changed = true;
+    }
+  });
+  if (changed) write(queue);
+}
+
+// Count pending follow-up jobs for a user (dashboard indicator).
+function pendingFollowUpCount(userId) {
+  return read().filter(j => j.userId === userId && j.status === 'pending' && (j.type || 'outreach') === 'followup').length;
 }
 
 // Next job that is pending AND whose scheduled time has passed
@@ -75,4 +94,7 @@ function pruneOld() {
   write(queue);
 }
 
-module.exports = { addJobs, getJobsForUser, cancelPendingForUser, getNextDueJob, updateJob, pruneOld };
+module.exports = {
+  addJobs, getJobsForUser, cancelPendingForUser, cancelPendingForCandidate,
+  pendingFollowUpCount, getNextDueJob, updateJob, pruneOld
+};

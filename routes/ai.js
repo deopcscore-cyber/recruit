@@ -184,4 +184,37 @@ router.post('/reply', async (req, res) => {
   }
 });
 
+// POST /api/ai/rewrite-resume  (career consultant deliverable — before/after)
+router.post('/rewrite-resume', async (req, res) => {
+  try {
+    const ctx = await getContext(req, res);
+    if (!ctx) return;
+    if (!await checkCredits(ctx.user, res)) return;
+    if (!ctx.candidate.resume?.text) {
+      return res.status(400).json({ error: 'No resume on file for this candidate' });
+    }
+
+    const result = await claude.rewriteResume(ctx.candidate, ctx.user);
+    await deductCredits(ctx.user, result.costCents);
+
+    // Persist so it can be re-opened without paying to regenerate
+    ctx.candidate.resumeRewrite = {
+      rewritten: result.rewritten,
+      summary:   result.summary,
+      generatedAt: new Date().toISOString()
+    };
+    await storage.saveCandidate(ctx.candidate);
+
+    return res.json({
+      original: result.original,
+      rewritten: result.rewritten,
+      summary: result.summary,
+      creditsRemaining: ctx.user.credits
+    });
+  } catch (err) {
+    console.error('AI rewrite-resume error:', err);
+    return res.status(500).json({ error: 'Failed to rewrite resume: ' + err.message });
+  }
+});
+
 module.exports = router;

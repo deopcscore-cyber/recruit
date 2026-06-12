@@ -27,7 +27,27 @@
       "Bash(node --check /Users/marketingdeo/recruit/routes/push.js)",
       "Bash(node --check /Users/marketingdeo/recruit/routes/templates.js)",
       "Bash(node --check /Users/marketingdeo/recruit/routes/linkedin.js)",
-      "Bash(node --check /Users/marketingdeo/recruit/routes/settings.js)"
+      "Bash(node --check /Users/marketingdeo/recruit/routes/settings.js)",
+      "Bash(node -e \"require\\('./server.js'\\)\")",
+      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\(d.get\\('lockfileVersion'\\)\\); print\\(list\\(d.get\\('packages',{}\\).keys\\(\\)\\)[:5]\\)\")",
+      "Bash(zip -r public/recruit-pro-extension.zip extension/)",
+      "Bash(npm uninstall *)",
+      "Bash(git rm *)",
+      "Bash(node -e ' *)",
+      "Bash(node --check server.js)",
+      "Bash(node --check services/claude.js)",
+      "Bash(node --check routes/auth.js)",
+      "Bash(node --check /Users/marketingdeo/recruit/server.js)",
+      "Bash(node --check /Users/marketingdeo/recruit/services/claude.js)",
+      "Bash(node --check services/outlook.js)",
+      "Bash(node --check routes/ai.js)",
+      "Bash(node --check routes/admin.js)",
+      "Bash(node --check routes/settings.js)",
+      "Bash(node --check routes/email.js)",
+      "Bash(node --check /Users/marketingdeo/recruit/routes/ai.js)",
+      "Bash(node --check /Users/marketingdeo/recruit/public/js/api.js)",
+      "Bash(node --check /Users/marketingdeo/recruit/public/js/pipeline.js)",
+      "Bash(node --check /Users/marketingdeo/recruit/routes/auth.js)"
     ]
   }
 }

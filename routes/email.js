@@ -185,6 +185,19 @@ router.post('/send', requireAuth, async (req, res) => {
 
     await storage.saveCandidate(candidate);
 
+    // Automated follow-up sequence: schedule on a fresh outreach, cancel when
+    // this send is a manual reply (the conversation is already moving).
+    try {
+      const followups = require('../services/followups');
+      if (isReply) {
+        followups.cancelSequence(candidate.id);
+      } else {
+        followups.scheduleSequence(user, candidate);
+      }
+    } catch (fuErr) {
+      console.error('Follow-up scheduling error:', fuErr.message);
+    }
+
     return res.json({ success: true, gmailMessageId, gmailThreadId, candidate });
   } catch (err) {
     console.error('Send email error:', err);
@@ -323,6 +336,28 @@ router.post('/fetch', requireAuth, async (req, res) => {
       // Clear the follow-up reminder since they replied
       candidate.followUpDate = null;
 
+      // They replied — stop the automated follow-up sequence
+      try { require('../services/followups').cancelSequence(candidate.id); } catch (e) {}
+
+      // Classify reply sentiment for inbox triage
+      try {
+        const claude = require('../services/claude');
+        const sent = await claude.classifyReply(candidate, reply.body, user);
+        if (sent && sent.label) {
+          candidate.replySentiment = sent.label;
+          candidate.replySentimentAt = new Date().toISOString();
+          if (sent.costCents) {
+            user.credits    = Math.max(0, (user.credits    || 0) - sent.costCents);
+            user.totalSpent = (user.totalSpent || 0) + sent.costCents;
+            await storage.saveUser(user);
+          }
+          if (sent.label === 'not_interested') {
+            candidate.stage = 'Closed';
+            candidate.closedReason = 'Declined (auto-detected)';
+          }
+        }
+      } catch (clsErr) { console.error('Reply classify error:', clsErr.message); }
+
       // Update thread ID if not set
       if (!candidate.gmailThreadId && reply.gmailThreadId) {
         candidate.gmailThreadId = reply.gmailThreadId;
@@ -342,6 +377,56 @@ router.post('/fetch', requireAuth, async (req, res) => {
   } catch (err) {
     console.error('Fetch email error:', err);
     return res.status(500).json({ error: 'Failed to fetch emails: ' + err.message });
+  }
+});
+
+// POST /api/email/analyze-draft — instant, no-cost spam/deliverability lint of a draft
+// Returns { score: 0-100, grade, issues: [...] }. Pure heuristics, no API call.
+router.post('/analyze-draft', requireAuth, (req, res) => {
+  try {
+    const { subject = '', body = '' } = req.body || {};
+    const issues = [];
+    let score = 100;
+
+    const text = `${subject}\n${body}`;
+    const words = body.trim().split(/\s+/).filter(Boolean);
+
+    // Spam-trigger phrases common in cold email filters
+    const SPAM_WORDS = ['free', 'guarantee', 'guaranteed', 'act now', 'limited time', 'urgent', 'cash', 'winner', 'click here', 'buy now', 'risk-free', '100%', 'congratulations', 'no obligation', 'amazing', 'incredible offer', 'cheap', 'discount', 'earn money', 'income', 'investment', 'opportunity of a lifetime'];
+    const found = SPAM_WORDS.filter(w => new RegExp(`\\b${w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i').test(text));
+    if (found.length) { score -= Math.min(30, found.length * 8); issues.push({ level: 'warn', msg: `Spam-trigger word(s): ${found.slice(0,4).join(', ')}${found.length>4?'…':''}` }); }
+
+    // Links — cold outreach with links hits spam more often
+    const linkCount = (body.match(/https?:\/\/|www\./gi) || []).length;
+    if (linkCount > 2) { score -= 15; issues.push({ level: 'warn', msg: `${linkCount} links — cut to 0–1 for cold outreach` }); }
+    else if (linkCount > 0) { score -= 5; issues.push({ level: 'info', msg: `${linkCount} link — fine, but 0 is safest cold` }); }
+
+    // Length
+    if (words.length > 220) { score -= 12; issues.push({ level: 'warn', msg: `${words.length} words — long; aim under 180 for replies` }); }
+    if (words.length < 30 && words.length > 0) { issues.push({ level: 'info', msg: `Very short (${words.length} words)` }); }
+
+    // ALL CAPS words
+    const capsWords = words.filter(w => w.length >= 4 && w === w.toUpperCase() && /[A-Z]/.test(w));
+    if (capsWords.length >= 2) { score -= 10; issues.push({ level: 'warn', msg: `${capsWords.length} ALL-CAPS words read as shouting` }); }
+
+    // Excessive punctuation
+    if (/[!?]{2,}/.test(text) || (text.match(/!/g) || []).length > 2) { score -= 8; issues.push({ level: 'warn', msg: 'Too many exclamation marks' }); }
+
+    // Subject checks
+    if (!subject.trim()) { score -= 15; issues.push({ level: 'warn', msg: 'No subject line' }); }
+    else if (subject.length > 60) { score -= 6; issues.push({ level: 'info', msg: `Subject ${subject.length} chars — trim under 50 for mobile` }); }
+    if (/^(re:|fwd:)/i.test(subject) && !body) { /* fine */ }
+
+    // Spammy subject patterns
+    if (/\$|💰|free|!!/i.test(subject)) { score -= 10; issues.push({ level: 'warn', msg: 'Subject has spammy symbols/words' }); }
+
+    score = Math.max(0, Math.min(100, score));
+    const grade = score >= 85 ? 'Excellent' : score >= 70 ? 'Good' : score >= 50 ? 'Needs work' : 'High spam risk';
+    if (!issues.length) issues.push({ level: 'ok', msg: 'Clean — no deliverability red flags' });
+
+    return res.json({ score, grade, issues, words: words.length, links: linkCount });
+  } catch (err) {
+    return res.status(500).json({ error: 'Analysis failed' });
   }
 });
 

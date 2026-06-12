@@ -89,6 +89,36 @@ router.get('/', async (req, res) => {
   }
 });
 
+// POST /api/candidates/team-duplicate-check
+// Body: { emails: [...] }  → which of these are already in ANOTHER teammate's
+// pipeline. Prevents two recruiters from cold-contacting the same person.
+// Returns minimal info (teammate name + stage), never their full record.
+router.post('/team-duplicate-check', async (req, res) => {
+  try {
+    const { emails } = req.body;
+    if (!Array.isArray(emails) || !emails.length) return res.json({ matches: {} });
+
+    const wanted = new Set(emails.map(e => String(e || '').toLowerCase().trim()).filter(Boolean));
+    const [allCandidates, allUsers] = await Promise.all([
+      storage.getAllCandidates(), storage.getAllUsers()
+    ]);
+    const userNames = new Map(allUsers.map(u => [u.id, u.name || u.email || 'A teammate']));
+
+    const matches = {};
+    for (const c of allCandidates) {
+      if (c.userId === req.session.userId) continue;       // only OTHER users
+      const email = (c.email || '').toLowerCase().trim();
+      if (email && wanted.has(email)) {
+        matches[email] = { owner: userNames.get(c.userId) || 'A teammate', stage: c.stage || 'Imported' };
+      }
+    }
+    return res.json({ matches });
+  } catch (err) {
+    console.error('Team duplicate check error:', err);
+    return res.status(500).json({ error: 'Check failed' });
+  }
+});
+
 // POST /api/candidates
 router.post('/', async (req, res) => {
   try {

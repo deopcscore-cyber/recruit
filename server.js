@@ -375,6 +375,7 @@ function _getUserEmailAddress(user) {
   return (user.gmail && user.gmail.address) || null;
 }
 
+const followupsSvc = require('./services/followups');
 let queueBusy = false;
 
 async function processQueueJob() {
@@ -386,75 +387,147 @@ async function processQueueJob() {
   queueSvc.updateJob(job.id, { status: 'sending' });
 
   try {
-    const storageSvc = require('./services/storage');
-    const user      = await storageSvc.getUserById(job.userId);
-    const candidate = await storageSvc.getCandidateById(job.candidateId);
-
-    if (!user || !candidate) throw new Error('User or candidate not found');
-    if (!_isEmailConnected(user)) throw new Error('No email provider connected');
-    if ((user.credits || 0) <= 0) throw new Error('Insufficient credits');
-
-    // Generate personalised outreach (deduct credits)
-    const outreachResult = await claudeSvc.generateOutreach(candidate, user);
-    const draft = outreachResult.text;
-    if (outreachResult.costCents) {
-      user.credits    = Math.max(0, (user.credits    || 0) - outreachResult.costCents);
-      user.totalSpent = (user.totalSpent || 0) + outreachResult.costCents;
-      await storageSvc.saveUser(user);
+    if ((job.type || 'outreach') === 'followup') {
+      await _processFollowUpJob(job);
+    } else {
+      await _processOutreachJob(job);
     }
-
-    // Fresh tracking pixel — resets opened badge for this new email
-    const { v4: queueUuidV4 } = require('uuid');
-    candidate.trackingId = queueUuidV4();
-    candidate.opened     = false;
-    candidate.openedAt   = null;
-
-    // Send via whichever provider the user has connected
-    const emailSvc = _getEmailService(user);
-    const { gmailMessageId, gmailThreadId, smtpMessageId } =
-      await emailSvc.sendEmail(job.userId, {
-        to:      candidate.email,
-        subject: job.subject,
-        body:    draft,
-        trackingId: candidate.trackingId
-      });
-
-    // Update candidate (mirrors email send route logic)
-    const msg = {
-      id: queueUuid(), direction: 'outbound',
-      subject: job.subject, body: draft,
-      timestamp: new Date().toISOString(),
-      gmailMessageId, gmailThreadId, smtpMessageId, read: true
-    };
-    if (!candidate.thread) candidate.thread = [];
-    candidate.thread.push(msg);
-    candidate.lastGmailMessageId = gmailMessageId;
-    candidate.lastSmtpMessageId  = smtpMessageId;
-    candidate.lastSubject        = job.subject;
-    candidate.stepsCompleted     = { ...(candidate.stepsCompleted || {}), outreach: true };
-    candidate.stage              = 'Outreach Sent';
-    if (!candidate.gmailThreadId)  candidate.gmailThreadId  = gmailThreadId;
-    if (!candidate.originalSubject) candidate.originalSubject = job.subject;
-    if (!candidate.followUpDate) {
-      const fu = new Date(); fu.setDate(fu.getDate() + 5);
-      candidate.followUpDate = fu.toISOString();
-    }
-    if (smtpMessageId) {
-      const newRef = `<${smtpMessageId.replace(/^<|>$/g, '')}>`;
-      candidate.gmailReferences = candidate.gmailReferences
-        ? `${candidate.gmailReferences} ${newRef}` : newRef;
-      candidate.lastSmtpMessageId = smtpMessageId;
-    }
-    await storageSvc.saveCandidate(candidate);
-
-    queueSvc.updateJob(job.id, { status: 'sent', sentAt: new Date().toISOString() });
-    console.log(`Queue: outreach sent → ${candidate.name} <${candidate.email}>`);
   } catch (err) {
     console.error(`Queue job ${job.id} failed: ${err.message}`);
     queueSvc.updateJob(job.id, { status: 'failed', error: err.message });
   } finally {
     queueBusy = false;
   }
+}
+
+async function _processOutreachJob(job) {
+  const storageSvc = require('./services/storage');
+  const user      = await storageSvc.getUserById(job.userId);
+  const candidate = await storageSvc.getCandidateById(job.candidateId);
+
+  if (!user || !candidate) throw new Error('User or candidate not found');
+  if (!_isEmailConnected(user)) throw new Error('No email provider connected');
+  if ((user.credits || 0) <= 0) throw new Error('Insufficient credits');
+
+  // Generate personalised outreach (deduct credits)
+  const outreachResult = await claudeSvc.generateOutreach(candidate, user);
+  const draft = outreachResult.text;
+  // Consultant outreach returns its own subject; otherwise use the queued
+  // subject, then a sensible personalised default.
+  const firstName = (candidate.name || '').trim().split(/\s+/)[0] || 'there';
+  const subject = outreachResult.subject || job.subject ||
+    `A quick note for you, ${firstName}`;
+  if (outreachResult.costCents) {
+    user.credits    = Math.max(0, (user.credits    || 0) - outreachResult.costCents);
+    user.totalSpent = (user.totalSpent || 0) + outreachResult.costCents;
+    await storageSvc.saveUser(user);
+  }
+
+  // Fresh tracking pixel — resets opened badge for this new email
+  const { v4: queueUuidV4 } = require('uuid');
+  candidate.trackingId = queueUuidV4();
+  candidate.opened     = false;
+  candidate.openedAt   = null;
+
+  const emailSvc = _getEmailService(user);
+  const { gmailMessageId, gmailThreadId, smtpMessageId } =
+    await emailSvc.sendEmail(job.userId, {
+      to:      candidate.email,
+      subject,
+      body:    draft,
+      trackingId: candidate.trackingId
+    });
+
+  const msg = {
+    id: queueUuid(), direction: 'outbound',
+    subject, body: draft,
+    timestamp: new Date().toISOString(),
+    gmailMessageId, gmailThreadId, smtpMessageId, read: true
+  };
+  if (!candidate.thread) candidate.thread = [];
+  candidate.thread.push(msg);
+  candidate.lastGmailMessageId = gmailMessageId;
+  candidate.lastSmtpMessageId  = smtpMessageId;
+  candidate.lastSubject        = subject;
+  candidate.stepsCompleted     = { ...(candidate.stepsCompleted || {}), outreach: true };
+  candidate.stage              = 'Outreach Sent';
+  if (!candidate.gmailThreadId)  candidate.gmailThreadId  = gmailThreadId;
+  if (!candidate.originalSubject) candidate.originalSubject = subject;
+  if (smtpMessageId) {
+    const newRef = `<${smtpMessageId.replace(/^<|>$/g, '')}>`;
+    candidate.gmailReferences = candidate.gmailReferences
+      ? `${candidate.gmailReferences} ${newRef}` : newRef;
+    candidate.lastSmtpMessageId = smtpMessageId;
+  }
+  await storageSvc.saveCandidate(candidate);
+
+  // Kick off the automated follow-up sequence for this candidate
+  try { followupsSvc.scheduleSequence(user, candidate); } catch (e) { console.error('Follow-up schedule error:', e.message); }
+
+  queueSvc.updateJob(job.id, { status: 'sent', sentAt: new Date().toISOString() });
+  console.log(`Queue: outreach sent → ${candidate.name} <${candidate.email}>`);
+}
+
+async function _processFollowUpJob(job) {
+  const storageSvc = require('./services/storage');
+  const user      = await storageSvc.getUserById(job.userId);
+  const candidate = await storageSvc.getCandidateById(job.candidateId);
+
+  if (!user || !candidate) { queueSvc.updateJob(job.id, { status: 'cancelled', reason: 'missing' }); return; }
+
+  // Skip if the candidate has replied or moved past the waiting stage — the
+  // sequence exists only to nudge non-responders.
+  const hasReplied = (candidate.thread || []).some(m => m.direction === 'inbound');
+  const movedOn = !['Outreach Sent'].includes(candidate.stage || '');
+  if (hasReplied || movedOn) {
+    queueSvc.updateJob(job.id, { status: 'cancelled', reason: 'candidate_responded' });
+    console.log(`Queue: follow-up skipped (candidate responded) → ${candidate.name}`);
+    return;
+  }
+  if (!_isEmailConnected(user)) throw new Error('No email provider connected');
+  if ((user.credits || 0) <= 0) throw new Error('Insufficient credits');
+
+  const result = await claudeSvc.generateFollowUp(candidate, user);
+  const draft = result.text;
+  if (result.costCents) {
+    user.credits    = Math.max(0, (user.credits    || 0) - result.costCents);
+    user.totalSpent = (user.totalSpent || 0) + result.costCents;
+    await storageSvc.saveUser(user);
+  }
+
+  // Send as a reply in the existing thread so it lands in the same conversation
+  const subject = candidate.originalSubject
+    ? 'Re: ' + candidate.originalSubject.replace(/^re:\s*/i, '')
+    : (candidate.lastSubject || 'Following up');
+  const sendParams = {
+    to: candidate.email, subject, body: draft, trackingId: candidate.trackingId
+  };
+  if (candidate.gmailThreadId)     sendParams.threadId  = candidate.gmailThreadId;
+  if (candidate.lastSmtpMessageId) {
+    sendParams.inReplyTo  = candidate.lastSmtpMessageId.replace(/^<|>$/g, '');
+    sendParams.references = candidate.gmailReferences || '';
+  }
+
+  const emailSvc = _getEmailService(user);
+  const { gmailMessageId, gmailThreadId, smtpMessageId } = await emailSvc.sendEmail(job.userId, sendParams);
+
+  candidate.thread = candidate.thread || [];
+  candidate.thread.push({
+    id: queueUuid(), direction: 'outbound', subject, body: draft,
+    timestamp: new Date().toISOString(), gmailMessageId, gmailThreadId, smtpMessageId,
+    read: true, isFollowUp: true, followUpIndex: job.followUpIndex
+  });
+  candidate.lastGmailMessageId = gmailMessageId;
+  if (smtpMessageId) {
+    candidate.lastSmtpMessageId = smtpMessageId;
+    const newRef = `<${smtpMessageId.replace(/^<|>$/g, '')}>`;
+    candidate.gmailReferences = candidate.gmailReferences
+      ? `${candidate.gmailReferences} ${newRef}` : newRef;
+  }
+  await storageSvc.saveCandidate(candidate);
+
+  queueSvc.updateJob(job.id, { status: 'sent', sentAt: new Date().toISOString() });
+  console.log(`Queue: follow-up #${(job.followUpIndex || 0) + 1} sent → ${candidate.name}`);
 }
 
 // Check for due jobs every 30 seconds
@@ -555,6 +628,28 @@ async function runAutoFetch() {
           if (ci < ri) candidate.stage = 'Replied';
           candidate.followUpDate = null;
           if (!candidate.gmailThreadId && reply.gmailThreadId) candidate.gmailThreadId = reply.gmailThreadId;
+
+          // They replied — stop the automated follow-up sequence
+          followupsSvc.cancelSequence(candidate.id);
+
+          // Classify reply sentiment so the inbox can triage automatically
+          try {
+            const sent = await claudeSvc.classifyReply(candidate, reply.body, user);
+            if (sent && sent.label) {
+              candidate.replySentiment = sent.label;
+              candidate.replySentimentAt = new Date().toISOString();
+              if (sent.costCents) {
+                user.credits    = Math.max(0, (user.credits    || 0) - sent.costCents);
+                user.totalSpent = (user.totalSpent || 0) + sent.costCents;
+                await storageService.saveUser(user);
+              }
+              // Auto-close the clearly-uninterested so they leave the active pipeline
+              if (sent.label === 'not_interested') {
+                candidate.stage = 'Closed';
+                candidate.closedReason = 'Declined (auto-detected)';
+              }
+            }
+          } catch (clsErr) { console.error('Reply classify error:', clsErr.message); }
 
           await storageService.saveCandidate(candidate);
           // Push notification for new reply

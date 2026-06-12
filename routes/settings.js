@@ -36,7 +36,8 @@ router.get('/', async (req, res) => {
       extensionToken:           user.extensionToken           || '',
       userType:                 user.userType                 || 'recruiter_company',
       resumeConsultantName:     user.resumeConsultantName     || '',
-      resumeConsultantEmail:    user.resumeConsultantEmail    || ''
+      resumeConsultantEmail:    user.resumeConsultantEmail    || '',
+      followUpConfig:           user.followUpConfig           || { enabled: true, steps: [{ days: 3 }, { days: 7 }] }
     });
   } catch (err) {
     console.error('Get settings error:', err);
@@ -76,6 +77,21 @@ router.put('/', async (req, res) => {
     if (resumeConsultantName  !== undefined) user.resumeConsultantName  = resumeConsultantName.trim();
     if (resumeConsultantEmail !== undefined) user.resumeConsultantEmail = resumeConsultantEmail.trim();
 
+    // Automated follow-up sequence config
+    if (req.body.followUpConfig && typeof req.body.followUpConfig === 'object') {
+      const fc = req.body.followUpConfig;
+      const steps = Array.isArray(fc.steps)
+        ? fc.steps
+            .map(s => ({ days: parseInt(s.days, 10) }))
+            .filter(s => Number.isFinite(s.days) && s.days >= 1 && s.days <= 90)
+            .slice(0, 5)
+        : [];
+      user.followUpConfig = {
+        enabled: !!fc.enabled,
+        steps: steps.length ? steps : [{ days: 3 }, { days: 7 }]
+      };
+    }
+
     // Signature fields
     if (signature !== undefined) {
       user.signature = user.signature || {};
@@ -97,7 +113,8 @@ router.put('/', async (req, res) => {
       secondaryTestEmail:       user.secondaryTestEmail       || '',
       userType:                 user.userType                 || 'recruiter_company',
       resumeConsultantName:     user.resumeConsultantName     || '',
-      resumeConsultantEmail:    user.resumeConsultantEmail    || ''
+      resumeConsultantEmail:    user.resumeConsultantEmail    || '',
+      followUpConfig:           user.followUpConfig           || { enabled: true, steps: [{ days: 3 }, { days: 7 }] }
     });
   } catch (err) {
     console.error('Update settings error:', err);

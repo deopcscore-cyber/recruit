@@ -1025,6 +1025,85 @@ Return ONLY the JSON.`;
   }
 }
 
+// ── Reply sentiment classification (inbox triage) ─────────────────────────────
+// Cheap single-call classifier. Returns { label, reason, costCents }.
+// label ∈ interested | question | not_now | not_interested
+async function classifyReply(candidate, replyText, user) {
+  const firstName = (candidate.name || 'the candidate').split(' ')[0];
+  const prompt = `Classify the intent of this reply from ${firstName} to a recruiting/career-outreach email. Choose exactly ONE label:
+
+- "interested": positive, wants to learn more, engaged, asks to proceed, shares availability
+- "question": neutral — asking a clarifying question before deciding (how did you find me, what's this about, what company)
+- "not_now": open but not right now — timing, busy, "reach out later", "not currently looking but maybe"
+- "not_interested": clear no — not interested, unsubscribe, stop contacting, wrong person
+
+REPLY:
+"""
+${(replyText || '').substring(0, 1500)}
+"""
+
+Return ONLY valid JSON: {"label":"<one of the four>","reason":"<5-10 word justification>"}`;
+
+  const response = await client.messages.create({
+    model: MODEL, max_tokens: 120,
+    messages: [{ role: 'user', content: prompt }]
+  });
+  const text = response.content[0].text.trim();
+  const costCents = calcCostCents(response.usage);
+  const VALID = ['interested', 'question', 'not_now', 'not_interested'];
+  try {
+    const clean = text.replace(/^```json\s*/i, '').replace(/```\s*$/, '').trim();
+    const parsed = JSON.parse(clean.match(/\{[\s\S]*\}/)[0]);
+    if (!VALID.includes(parsed.label)) parsed.label = 'question';
+    return { ...parsed, costCents };
+  } catch {
+    return { label: 'question', reason: 'unparseable', costCents };
+  }
+}
+
+// ── Resume rewrite / repositioning (career consultant deliverable) ────────────
+// Returns { original, rewritten, summary, costCents } for a before/after view.
+async function rewriteResume(candidate, user) {
+  if (!candidate.resume || !candidate.resume.text) throw new Error('No resume text available');
+  const consultantName = user.name || 'Career Consultant';
+  const original = candidate.resume.text.substring(0, 6000);
+
+  const prompt = `You are ${consultantName}, an expert resume strategist. Reposition this professional's resume so their actual seniority, scope, and impact land properly on paper — without inventing anything. Keep every real fact; change how it's framed.
+
+ORIGINAL RESUME:
+"""
+${original}
+"""
+
+Produce a repositioned version. Rules:
+- Keep it truthful — do not fabricate titles, dates, employers, or metrics
+- Strengthen weak bullet points into impact statements (action + scope + outcome)
+- Surface buried leadership, ownership, and strategic scope
+- Use clean, ATS-friendly plain text with clear section headers (no markdown symbols)
+- Open with a sharp professional summary that frames their level correctly
+
+Return ONLY valid JSON:
+{
+  "summary": "2-3 sentences on the key repositioning moves you made and why",
+  "rewritten": "the full repositioned resume as plain text"
+}`;
+
+  const response = await client.messages.create({
+    model: MODEL, max_tokens: 4000,
+    messages: [{ role: 'user', content: prompt }]
+  });
+  const text = response.content[0].text.trim();
+  const costCents = calcCostCents(response.usage);
+  try {
+    const clean = text.replace(/^```json\s*/i, '').replace(/```\s*$/, '').trim();
+    const parsed = JSON.parse(clean.match(/\{[\s\S]*\}/)[0]);
+    return { original, rewritten: parsed.rewritten || '', summary: parsed.summary || '', costCents };
+  } catch {
+    // If JSON parsing fails, treat the whole response as the rewrite
+    return { original, rewritten: text, summary: '', costCents };
+  }
+}
+
 module.exports = {
   generateOutreach,
   generateRoleJD,
@@ -1033,5 +1112,7 @@ module.exports = {
   generateReply,
   generateFollowUp,
   generateProposal,
-  scoreCandidate
+  scoreCandidate,
+  classifyReply,
+  rewriteResume
 };
