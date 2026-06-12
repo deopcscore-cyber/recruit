@@ -535,6 +535,44 @@ setInterval(processQueueJob, 30 * 1000);
 // Prune old completed jobs every 6 hours
 setInterval(() => queueSvc.pruneOld(), 6 * 60 * 60 * 1000);
 
+// ─── Daily auto-outreach (Autopilot) ─────────────────────────────────────────
+// Every 15 min, for each user with autopilot on, schedule today's drip batch
+// once (the planner self-guards to once-per-day inside the send window).
+const autopilotSvc = require('./services/autopilot');
+async function runAutopilot() {
+  try {
+    const storageSvc = require('./services/storage');
+    const users = await storageSvc.getAllUsers();
+    for (const user of users) {
+      try {
+        if (!user.autopilot || !user.autopilot.enabled) continue;
+        if (!_isEmailConnected(user)) continue;
+        if ((user.credits || 0) <= 0) continue;
+
+        const candidates = await storageSvc.getUserCandidates(user.id);
+        const plan = autopilotSvc.planDailyRun(user, candidates, new Date());
+        if (!plan.ran) continue;
+
+        if (plan.jobs && plan.jobs.length) queueSvc.addJobs(plan.jobs);
+
+        // Persist the once-per-day marker so we don't re-run today
+        user.autopilot = { ...user.autopilot, lastRunDate: plan.lastRunDate };
+        await storageSvc.saveUser(user);
+
+        if (plan.count > 0) {
+          console.log(`Autopilot: queued ${plan.count} outreach for ${user.email} (cap ${plan.effectiveCap}, ${plan.eligibleTotal} eligible)`);
+        }
+      } catch (uErr) {
+        console.error(`Autopilot error for user ${user.id}:`, uErr.message);
+      }
+    }
+  } catch (err) {
+    console.error('Autopilot global error:', err.message);
+  }
+}
+// First pass 90s after boot, then every 15 minutes
+setTimeout(() => { runAutopilot(); setInterval(runAutopilot, 15 * 60 * 1000); }, 90 * 1000);
+
 // ─── Auto-fetch emails every 10 minutes ──────────────────────────────────────
 const AUTO_FETCH_MS = 10 * 60 * 1000;
 

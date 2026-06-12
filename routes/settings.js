@@ -37,7 +37,8 @@ router.get('/', async (req, res) => {
       userType:                 user.userType                 || 'recruiter_company',
       resumeConsultantName:     user.resumeConsultantName     || '',
       resumeConsultantEmail:    user.resumeConsultantEmail    || '',
-      followUpConfig:           user.followUpConfig           || { enabled: true, steps: [{ days: 3 }, { days: 7 }] }
+      followUpConfig:           user.followUpConfig           || { enabled: true, steps: [{ days: 3 }, { days: 7 }] },
+      autopilot:                Object.assign({ enabled:false, dailyCap:30, windowStart:'09:00', windowEnd:'17:00', weekdaysOnly:true, minSpacingMin:20, maxSpacingMin:60, warmup:true }, user.autopilot || {})
     });
   } catch (err) {
     console.error('Get settings error:', err);
@@ -77,6 +78,35 @@ router.put('/', async (req, res) => {
     if (resumeConsultantName  !== undefined) user.resumeConsultantName  = resumeConsultantName.trim();
     if (resumeConsultantEmail !== undefined) user.resumeConsultantEmail = resumeConsultantEmail.trim();
 
+    // Daily auto-outreach (autopilot) config
+    if (req.body.autopilot && typeof req.body.autopilot === 'object') {
+      const ap = req.body.autopilot;
+      const prev = user.autopilot || {};
+      const clampInt = (v, lo, hi, dflt) => {
+        const n = parseInt(v, 10);
+        return Number.isFinite(n) ? Math.min(hi, Math.max(lo, n)) : dflt;
+      };
+      const hm = (v, dflt) => /^\d{1,2}:\d{2}$/.test(String(v || '')) ? v : dflt;
+      const enabled = !!ap.enabled;
+      user.autopilot = {
+        ...prev,
+        enabled,
+        dailyCap:      clampInt(ap.dailyCap, 1, 200, prev.dailyCap || 30),
+        windowStart:   hm(ap.windowStart, prev.windowStart || '09:00'),
+        windowEnd:     hm(ap.windowEnd,   prev.windowEnd   || '17:00'),
+        weekdaysOnly:  ap.weekdaysOnly !== undefined ? !!ap.weekdaysOnly : (prev.weekdaysOnly !== false),
+        minSpacingMin: clampInt(ap.minSpacingMin, 1, 240, prev.minSpacingMin || 20),
+        maxSpacingMin: clampInt(ap.maxSpacingMin, 1, 480, prev.maxSpacingMin || 60),
+        warmup:        ap.warmup !== undefined ? !!ap.warmup : (prev.warmup !== false)
+      };
+      // Stamp the warm-up start the first time it's switched on
+      if (enabled && !prev.enabled) user.autopilot.startedAt = new Date().toISOString();
+      // Ensure min ≤ max
+      if (user.autopilot.minSpacingMin > user.autopilot.maxSpacingMin) {
+        user.autopilot.maxSpacingMin = user.autopilot.minSpacingMin;
+      }
+    }
+
     // Automated follow-up sequence config
     if (req.body.followUpConfig && typeof req.body.followUpConfig === 'object') {
       const fc = req.body.followUpConfig;
@@ -114,7 +144,8 @@ router.put('/', async (req, res) => {
       userType:                 user.userType                 || 'recruiter_company',
       resumeConsultantName:     user.resumeConsultantName     || '',
       resumeConsultantEmail:    user.resumeConsultantEmail    || '',
-      followUpConfig:           user.followUpConfig           || { enabled: true, steps: [{ days: 3 }, { days: 7 }] }
+      followUpConfig:           user.followUpConfig           || { enabled: true, steps: [{ days: 3 }, { days: 7 }] },
+      autopilot:                Object.assign({ enabled:false, dailyCap:30, windowStart:'09:00', windowEnd:'17:00', weekdaysOnly:true, minSpacingMin:20, maxSpacingMin:60, warmup:true }, user.autopilot || {})
     });
   } catch (err) {
     console.error('Update settings error:', err);
@@ -289,6 +320,43 @@ router.delete('/outlook', async (req, res) => {
     return res.json({ success: true });
   } catch (err) {
     return res.status(500).json({ error: 'Failed to disconnect Outlook' });
+  }
+});
+
+// GET /api/settings/autopilot-status — live autopilot summary for the dashboard
+router.get('/autopilot-status', async (req, res) => {
+  try {
+    const autopilot  = require('../services/autopilot');
+    const queueSvc   = require('../services/queue');
+    const user = await storage.getUserById(req.session.userId);
+    if (!user) return res.status(404).json({ error: 'User not found' });
+
+    const cfg = autopilot.getConfig(user);
+    const candidates = await storage.getUserCandidates(req.session.userId);
+    const eligible = candidates.filter(c => c.email
+      && (c.stage || 'Imported') === 'Imported'
+      && !(c.stepsCompleted || {}).outreach
+      && !(c.thread || []).some(m => m.direction === 'outbound')).length;
+
+    const jobs = queueSvc.getJobsForUser(req.session.userId)
+      .filter(j => j.source === 'autopilot');
+    const pending = jobs.filter(j => j.status === 'pending');
+    const today = new Date().toISOString().slice(0, 10);
+    const sentToday = jobs.filter(j => j.status === 'sent' && (j.sentAt || '').slice(0, 10) === today).length;
+    const nextAt = pending.map(j => j.scheduledAt).sort()[0] || null;
+
+    return res.json({
+      enabled: cfg.enabled,
+      todaysCap: autopilot.effectiveCap(cfg, new Date()),
+      dailyCap: cfg.dailyCap,
+      warmup: cfg.warmup,
+      eligibleRemaining: eligible,
+      pendingToday: pending.length,
+      sentToday,
+      nextAt
+    });
+  } catch (err) {
+    return res.status(500).json({ error: 'Failed to get autopilot status' });
   }
 });
 

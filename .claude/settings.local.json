@@ -61,7 +61,13 @@
       "Bash(pkill -f \"PORT=3995\")",
       "Bash(pkill -f \"PORT=3996\")",
       "Bash(rm -rf /tmp/rt /tmp/rt2 /tmp/*.jar /tmp/rt.log /tmp/rt2.log)",
-      "Bash(git commit -q -m ' *)"
+      "Bash(git commit -q -m ' *)",
+      "Bash(rm -rf /tmp/rt3)",
+      "Bash(mkdir -p /tmp/rt3)",
+      "Bash(SESSION_SECRET=t DATA_DIR=/tmp/rt3 PORT=3993 node server.js)",
+      "Bash(pkill -f \"PORT=3993\")",
+      "Bash(pkill -f \"PORT=3994\")",
+      "Bash(rm -rf /tmp/rt /tmp/rt3 /tmp/*.jar /tmp/rt.log /tmp/rt3.log)"
     ]
   }
 }

@@ -107,7 +107,8 @@ const API = {
     getOutlookConnectUrl() { return API.get('/api/settings/outlook-connect'); },
     disconnectOutlook() { return API.delete('/api/settings/outlook'); },
     outlookStatus() { return API.get('/api/settings/outlook-status'); },
-    credits() { return API.get('/api/settings/credits'); }
+    credits() { return API.get('/api/settings/credits'); },
+    autopilotStatus() { return API.get('/api/settings/autopilot-status'); }
   },
 
   // Admin

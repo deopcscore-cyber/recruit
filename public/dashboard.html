@@ -564,6 +564,55 @@
         <!-- ═══ AI & STYLE TAB ═══════════════════════════════════════════════ -->
         <div class="settings-tab-panel" data-panel="ai">
 
+          <!-- Daily auto-outreach (Autopilot) -->
+          <div class="settings-card" style="border:1px solid #c7d2fe">
+            <div class="settings-card-header">
+              <h3>🚀 Daily Auto-Outreach</h3>
+              <span class="settings-card-hint">Automatically email new candidates every day — drip-spaced, hands-free</span>
+            </div>
+            <div class="settings-card-body">
+              <label style="display:flex;align-items:center;gap:8px;font-size:0.9rem;cursor:pointer;margin-bottom:14px">
+                <input type="checkbox" id="ap-enabled" />
+                <strong>Enable daily auto-outreach</strong>
+              </label>
+
+              <div id="ap-status" style="display:none;background:#eef2ff;border:1px solid #c7d2fe;border-radius:8px;padding:10px 12px;font-size:0.82rem;color:#3730a3;margin-bottom:14px"></div>
+
+              <div class="form-row">
+                <div class="form-group">
+                  <label>Daily limit <span class="text-muted text-xs">(emails/day)</span></label>
+                  <input type="number" id="ap-daily-cap" min="1" max="200" value="30" />
+                </div>
+                <div class="form-group">
+                  <label>Spacing between sends <span class="text-muted text-xs">(minutes)</span></label>
+                  <div style="display:flex;align-items:center;gap:6px">
+                    <input type="number" id="ap-min-spacing" min="1" max="240" value="20" style="width:70px" />
+                    <span style="color:var(--text-muted)">to</span>
+                    <input type="number" id="ap-max-spacing" min="1" max="480" value="60" style="width:70px" />
+                  </div>
+                </div>
+              </div>
+              <div class="form-row">
+                <div class="form-group">
+                  <label>Send window <span class="text-muted text-xs">(your local business hours)</span></label>
+                  <div style="display:flex;align-items:center;gap:6px">
+                    <input type="time" id="ap-window-start" value="09:00" style="width:110px" />
+                    <span style="color:var(--text-muted)">to</span>
+                    <input type="time" id="ap-window-end" value="17:00" style="width:110px" />
+                  </div>
+                </div>
+              </div>
+              <label style="display:flex;align-items:center;gap:6px;font-size:0.85rem;cursor:pointer;margin-bottom:8px">
+                <input type="checkbox" id="ap-weekdays" checked /> Weekdays only
+              </label>
+              <label style="display:flex;align-items:center;gap:6px;font-size:0.85rem;cursor:pointer;margin-bottom:14px">
+                <input type="checkbox" id="ap-warmup" checked /> Warm-up ramp <span class="text-muted text-xs">(start ~10/day, climb to the limit over ~2 weeks — safest for your sender reputation)</span>
+              </label>
+              <p style="font-size:0.78rem;color:var(--text-muted);margin:0 0 12px;line-height:1.5">Each email is freshly AI-personalized and counts against your credits. Sends only to <strong>Imported, never-contacted</strong> candidates (oldest first). Follow-ups and reply detection still apply. 30/day is a safe cold-email ceiling for Gmail.</p>
+              <button type="button" class="btn btn-primary btn-sm" id="ap-save">Save Auto-Outreach Settings</button>
+            </div>
+          </div>
+
           <!-- Automated follow-up sequence -->
           <div class="settings-card">
             <div class="settings-card-header">

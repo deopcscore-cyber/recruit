@@ -2286,6 +2286,9 @@ async function loadSettingsPage() {
     // Automated follow-up config
     renderFollowUpConfig(style.followUpConfig || { enabled: true, steps: [{ days: 3 }, { days: 7 }] });
 
+    // Daily auto-outreach (autopilot) config
+    renderAutopilotConfig(style.autopilot || {});
+
     await updateGmailStatus();
     await updateZohoStatus();
     await updateOutlookStatus();
@@ -2352,6 +2355,66 @@ function collectFollowUpSteps() {
   return [...document.querySelectorAll('#followup-steps .fu-days')]
     .map(inp => ({ days: parseInt(inp.value, 10) }))
     .filter(s => Number.isFinite(s.days) && s.days >= 1 && s.days <= 90);
+}
+
+// ---- Daily auto-outreach (autopilot) settings ----
+function renderAutopilotConfig(cfg) {
+  const $ = id => document.getElementById(id);
+  if (!$('ap-enabled')) return;
+  $('ap-enabled').checked      = !!cfg.enabled;
+  $('ap-daily-cap').value      = cfg.dailyCap      ?? 30;
+  $('ap-min-spacing').value    = cfg.minSpacingMin ?? 20;
+  $('ap-max-spacing').value    = cfg.maxSpacingMin ?? 60;
+  $('ap-window-start').value   = cfg.windowStart   || '09:00';
+  $('ap-window-end').value     = cfg.windowEnd     || '17:00';
+  $('ap-weekdays').checked     = cfg.weekdaysOnly !== false;
+  $('ap-warmup').checked       = cfg.warmup !== false;
+
+  refreshAutopilotStatus();
+
+  const saveBtn = $('ap-save');
+  if (saveBtn && !saveBtn._wired) {
+    saveBtn._wired = true;
+    saveBtn.addEventListener('click', async () => {
+      saveBtn.disabled = true; saveBtn.textContent = 'Saving…';
+      try {
+        const min = parseInt($('ap-min-spacing').value, 10) || 20;
+        let max = parseInt($('ap-max-spacing').value, 10) || 60;
+        if (max < min) max = min;
+        await API.settings.update({
+          autopilot: {
+            enabled:       $('ap-enabled').checked,
+            dailyCap:      parseInt($('ap-daily-cap').value, 10) || 30,
+            minSpacingMin: min,
+            maxSpacingMin: max,
+            windowStart:   $('ap-window-start').value || '09:00',
+            windowEnd:     $('ap-window-end').value   || '17:00',
+            weekdaysOnly:  $('ap-weekdays').checked,
+            warmup:        $('ap-warmup').checked
+          }
+        });
+        Toast.success($('ap-enabled').checked ? 'Auto-outreach is on' : 'Auto-outreach settings saved');
+        refreshAutopilotStatus();
+      } catch (err) { Toast.error(err.message); }
+      finally { saveBtn.disabled = false; saveBtn.textContent = 'Save Auto-Outreach Settings'; }
+    });
+  }
+}
+
+async function refreshAutopilotStatus() {
+  const box = document.getElementById('ap-status');
+  if (!box) return;
+  try {
+    const s = await API.settings.autopilotStatus();
+    if (!s.enabled) { box.style.display = 'none'; return; }
+    const next = s.nextAt ? new Date(s.nextAt).toLocaleString([], { weekday:'short', hour:'2-digit', minute:'2-digit' }) : '—';
+    box.style.display = 'block';
+    box.innerHTML = `
+      <strong>Active.</strong> Sent <strong>${s.sentToday}</strong> today ·
+      ${s.pendingToday} queued · next at <strong>${next}</strong><br>
+      Today's limit: ${s.todaysCap}${s.warmup && s.todaysCap < s.dailyCap ? ` <span style="opacity:.7">(warming up → ${s.dailyCap})</span>` : ''} ·
+      <strong>${s.eligibleRemaining}</strong> candidates remaining in pipeline`;
+  } catch { box.style.display = 'none'; }
 }
 
 async function updateGmailStatus() {
