@@ -61,6 +61,8 @@ const API = {
     fetch() { return API.post('/api/email/fetch'); },
     test() { return API.post('/api/email/test'); },
     checkPriorContact(emails) { return API.post('/api/email/check-prior-contact', { emails }); },
+    teamDuplicateCheck(emails) { return API.post('/api/candidates/team-duplicate-check', { emails }); },
+    analyzeDraft(subject, body) { return API.post('/api/email/analyze-draft', { subject, body }); },
     deliverabilityTest(opts) { return API.post('/api/email/deliverability-test', opts || {}); },
     deliverabilityResult(threadId) { return API.get(`/api/email/deliverability-result/${threadId}`); }
   },
@@ -74,19 +76,22 @@ const API = {
     reply(candidateId, lastMessage) { return API.post('/api/ai/reply', { candidateId, lastMessage }); },
     followup(candidateId) { return API.post('/api/ai/followup', { candidateId }); },
     score(candidateId)    { return API.post('/api/ai/score',    { candidateId }); },
-    proposal(candidateId) { return API.post('/api/ai/proposal', { candidateId }); }
+    proposal(candidateId) { return API.post('/api/ai/proposal', { candidateId }); },
+    rewriteResume(candidateId) { return API.post('/api/ai/rewrite-resume', { candidateId }); }
   },
 
   // Bulk outreach queue (server-side)
   queue: {
     create(jobs) { return API.post('/api/queue/outreach', { jobs }); },
+    bulkOutreach(candidateIds, mode) { return API.post('/api/queue/bulk-outreach', { candidateIds, mode }); },
     status()     { return API.get('/api/queue/outreach'); },
     cancel()     { return API.delete('/api/queue/outreach'); }
   },
 
   // Analytics
   analytics: {
-    get() { return API.get('/api/analytics'); }
+    get() { return API.get('/api/analytics'); },
+    subjects() { return API.get('/api/analytics/subjects'); }
   },
 
   // Settings

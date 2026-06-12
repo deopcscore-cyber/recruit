@@ -564,6 +564,27 @@
         <!-- ═══ AI & STYLE TAB ═══════════════════════════════════════════════ -->
         <div class="settings-tab-panel" data-panel="ai">
 
+          <!-- Automated follow-up sequence -->
+          <div class="settings-card">
+            <div class="settings-card-header">
+              <h3>Automated Follow-Ups</h3>
+              <span class="settings-card-hint">Auto-send spaced follow-ups to candidates who don't reply — stops the moment they respond</span>
+            </div>
+            <div class="settings-card-body">
+              <label style="display:flex;align-items:center;gap:8px;font-size:0.9rem;cursor:pointer;margin-bottom:14px">
+                <input type="checkbox" id="followup-enabled" />
+                <strong>Enable automated follow-up sequence</strong>
+              </label>
+              <div id="followup-steps-wrap" style="margin-bottom:12px">
+                <label style="display:block;font-size:0.8rem;color:var(--text-muted);margin-bottom:6px">Send a follow-up this many days after the previous email:</label>
+                <div id="followup-steps" style="display:flex;flex-direction:column;gap:8px"></div>
+                <button type="button" class="btn btn-secondary btn-xs" id="followup-add-step" style="margin-top:8px">+ Add follow-up</button>
+              </div>
+              <p style="font-size:0.78rem;color:var(--text-muted);margin:0 0 12px">Each follow-up is freshly AI-written based on where the conversation stands, sent in the same thread. Replies cancel all remaining follow-ups automatically.</p>
+              <button type="button" class="btn btn-primary btn-sm" id="followup-save">Save Follow-Up Settings</button>
+            </div>
+          </div>
+
           <div class="settings-card">
             <div class="settings-card-header">
               <h3>AI Writing Style</h3>
@@ -846,8 +867,19 @@
         <input type="text" id="bulk-subject" placeholder="Personalized per candidate" style="flex:1" />
         <span style="font-size:0.75rem;color:#94a3b8;white-space:nowrap">Leave blank to auto-personalize</span>
       </div>
-      <!-- Time window scheduling -->
+      <!-- Smart send-time (per-recipient timezone) -->
       <div style="margin-top:12px;border-top:1px solid var(--border);padding-top:12px">
+        <label style="display:flex;align-items:flex-start;gap:8px;font-size:0.85rem;cursor:pointer">
+          <input type="checkbox" id="bulk-smart-time" style="margin-top:2px" />
+          <span>
+            <strong>Smart send-time</strong> — deliver each email Tue–Thu ~9am in the <em>recipient's</em> timezone for higher open rates.
+            <span style="display:block;color:var(--text-muted);font-size:0.78rem;margin-top:2px">Overrides the manual send window below. Timezone is inferred from each candidate's location.</span>
+          </span>
+        </label>
+      </div>
+
+      <!-- Time window scheduling -->
+      <div id="bulk-manual-window" style="margin-top:12px;border-top:1px solid var(--border);padding-top:12px">
         <div style="font-size:0.78rem;font-weight:600;color:#475569;margin-bottom:8px;text-transform:uppercase;letter-spacing:.05em">Send Window <span style="font-weight:400;text-transform:none;color:var(--text-muted)">(optional — schedule within business hours)</span></div>
         <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
           <label style="display:flex;align-items:center;gap:6px;font-size:0.82rem;cursor:pointer">

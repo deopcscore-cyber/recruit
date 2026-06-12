@@ -66,14 +66,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   document.getElementById('sidebar-user-email').textContent = currentUser.email;
 
   // Credits display
-  const creditsEl = document.getElementById('sidebar-credits');
-  const creditsVal = document.getElementById('sidebar-credits-val');
-  if (creditsEl && creditsVal) {
-    creditsEl.style.display = 'block';
-    const bal = (currentUser.credits || 0) / 100;
-    creditsVal.textContent = `$${bal.toFixed(2)}`;
-    creditsVal.style.color = bal <= 0 ? '#f87171' : bal < 0.50 ? '#fbbf24' : '#86efac';
-  }
+  updateCreditsDisplay(currentUser.credits);
 
   // Admin link
   if (currentUser.isAdmin) {
@@ -218,6 +211,19 @@ document.addEventListener('DOMContentLoaded', async () => {
     } catch { /* silent */ }
   }, 2 * 60 * 1000);
 });
+
+// Refresh the sidebar credit balance. Accepts cents; falls back to currentUser.
+function updateCreditsDisplay(cents) {
+  if (cents !== undefined && cents !== null && currentUser) currentUser.credits = cents;
+  const creditsEl  = document.getElementById('sidebar-credits');
+  const creditsVal = document.getElementById('sidebar-credits-val');
+  if (creditsEl && creditsVal) {
+    creditsEl.style.display = 'block';
+    const bal = ((currentUser && currentUser.credits) || 0) / 100;
+    creditsVal.textContent = `$${bal.toFixed(2)}`;
+    creditsVal.style.color = bal <= 0 ? '#f87171' : bal < 0.50 ? '#fbbf24' : '#86efac';
+  }
+}
 
 // ---- Theme ----
 function applyTheme(theme) {
@@ -777,6 +783,20 @@ function openBulkOutreachModal() {
     });
   }
 
+  // Smart send-time toggle — when on, hide the manual window (server decides timing)
+  const smartCb = document.getElementById('bulk-smart-time');
+  const manualWindow = document.getElementById('bulk-manual-window');
+  if (smartCb) {
+    smartCb.checked = false;
+    const freshSmart = smartCb.cloneNode(true);
+    smartCb.parentNode.replaceChild(freshSmart, smartCb);
+    freshSmart.addEventListener('change', () => {
+      if (manualWindow) manualWindow.style.display = freshSmart.checked ? 'none' : '';
+      const preview = document.getElementById('bulk-schedule-preview');
+      if (preview) preview.style.display = freshSmart.checked ? 'none' : (window._scheduledTimes ? 'block' : 'none');
+    });
+  }
+
   new Modal('bulk-outreach-modal').open();
 
   // If there's already an active server queue, show its status
@@ -863,9 +883,28 @@ async function handleBulkOutreach() {
   const checked = [...document.querySelectorAll('.bulk-cb:checked')];
   if (checked.length === 0) { Toast.warning('Select at least one candidate'); return; }
 
-  const subjectTpl = document.getElementById('bulk-subject').value.trim();
   const startBtn   = document.getElementById('bulk-outreach-start-btn');
   const progressEl = document.getElementById('bulk-progress');
+
+  // Smart send-time path: let the server compute each recipient's optimal window
+  // (Tue–Thu 9am in their timezone). Subject is AI-generated per candidate.
+  if (document.getElementById('bulk-smart-time')?.checked) {
+    startBtn.disabled = true; startBtn.textContent = 'Queuing…';
+    try {
+      const ids = checked.map(cb => cb.dataset.id);
+      const result = await API.queue.bulkOutreach(ids, 'optimal');
+      Toast.success(`${result.queued} email${result.queued !== 1 ? 's' : ''} queued at smart send-times${result.skipped ? ` (${result.skipped} skipped)` : ''}`);
+      startBtn.textContent = 'Queued ✓';
+      progressEl.textContent = `${result.queued} emails scheduled for each recipient's timezone`;
+      startQueuePolling();
+    } catch (err) {
+      Toast.error(err.message);
+      startBtn.disabled = false; startBtn.textContent = 'Generate & Queue';
+    }
+    return;
+  }
+
+  const subjectTpl = document.getElementById('bulk-subject').value.trim();
 
   // Use pre-computed schedule times (respects time windows) or fall back to live calc
   const delays = window._bulkDelays || checked.map((_, i) => i === 0 ? 0 : randDelayMs());
@@ -1210,6 +1249,27 @@ async function loadAnalyticsPage() {
         </div>`).join('')
       : `<p style="color:var(--text-muted);font-size:0.875rem">No follow-ups overdue 🎉</p>`;
 
+    // Reply sentiment breakdown
+    const sc = d.sentimentCounts || {};
+    const SENT_ROWS = [
+      { k:'interested',     label:'🔥 Interested', col:'#16a34a' },
+      { k:'question',       label:'❔ Question',    col:'#2563eb' },
+      { k:'not_now',        label:'🕒 Not now',     col:'#d97706' },
+      { k:'not_interested', label:'✕ Declined',    col:'#ef4444' }
+    ];
+    const sentTotal = SENT_ROWS.reduce((a, r) => a + (sc[r.k] || 0), 0);
+    const sentimentHtml = sentTotal === 0
+      ? `<p style="color:var(--text-muted);font-size:0.85rem">No replies classified yet.</p>`
+      : SENT_ROWS.map(r => {
+          const n = sc[r.k] || 0;
+          const pct = sentTotal ? Math.round((n / sentTotal) * 100) : 0;
+          return `<div style="display:flex;align-items:center;gap:10px;padding:6px 0">
+            <span style="width:110px;font-size:0.82rem">${r.label}</span>
+            <div style="flex:1;background:var(--border);border-radius:4px;height:8px"><div style="width:${pct}%;background:${r.col};height:8px;border-radius:4px"></div></div>
+            <span style="width:28px;text-align:right;font-weight:600;color:${r.col}">${n}</span>
+          </div>`;
+        }).join('');
+
     el.innerHTML = `
       <!-- KPI strip -->
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:16px;margin-bottom:24px">
@@ -1219,7 +1279,8 @@ async function loadAnalyticsPage() {
           { label:'Email Open Rate',  value: d.openRate+'%', color:'#0891b2' },
           { label:'Avg Days Active',  value: d.avgDays+'d', color:'#d97706' },
           { label:'Unread Replies',   value: d.unreadCount, color: d.unreadCount>0?'#ef4444':'#16a34a' },
-          { label:'Follow-Ups Due',   value: d.followUpsDue, color: d.followUpsDue>0?'#f97316':'#16a34a' }
+          { label:'Follow-Ups Due',   value: d.followUpsDue, color: d.followUpsDue>0?'#f97316':'#16a34a' },
+          { label:'Auto Follow-Ups Queued', value: d.pendingFollowUps||0, color:'#6366f1' }
         ].map(k => `
           <div class="settings-card" style="margin:0">
             <div class="settings-card-body" style="text-align:center;padding:16px 12px">
@@ -1235,6 +1296,18 @@ async function loadAnalyticsPage() {
         <div class="settings-card-body">${stageRows}</div>
       </div>
 
+      <!-- Reply sentiment + subject performance -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+        <div class="settings-card" style="margin:0">
+          <div class="settings-card-header"><h3>Reply Sentiment</h3><span class="settings-card-hint">Auto-classified inbound replies</span></div>
+          <div class="settings-card-body">${sentimentHtml}</div>
+        </div>
+        <div class="settings-card" style="margin:0">
+          <div class="settings-card-header"><h3>Subject Lines by Open Rate</h3><span class="settings-card-hint">Which subjects get opened</span></div>
+          <div class="settings-card-body" id="subject-leaderboard"><p style="color:var(--text-muted);font-size:0.85rem">Loading…</p></div>
+        </div>
+      </div>
+
       <!-- Follow-ups due -->
       <div class="settings-card">
         <div class="settings-card-header">
@@ -1243,6 +1316,21 @@ async function loadAnalyticsPage() {
         <div class="settings-card-body">${followUpHtml}</div>
       </div>
     `;
+
+    // Subject leaderboard (separate call — works retroactively on existing sends)
+    API.analytics.subjects().then(({ subjects }) => {
+      const lb = document.getElementById('subject-leaderboard');
+      if (!lb) return;
+      if (!subjects || !subjects.length) { lb.innerHTML = `<p style="color:var(--text-muted);font-size:0.85rem">No outreach sent yet.</p>`; return; }
+      lb.innerHTML = subjects.map(s => {
+        const col = s.openRate >= 50 ? '#16a34a' : s.openRate >= 25 ? '#d97706' : '#ef4444';
+        return `<div style="display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid var(--border)">
+          <span style="flex:1;font-size:0.82rem;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escapeHtml(s.subject)}">${escapeHtml(s.subject)}</span>
+          <span style="font-size:0.74rem;color:var(--text-muted);white-space:nowrap">${s.opened}/${s.sent}</span>
+          <span style="font-weight:700;color:${col};min-width:42px;text-align:right">${s.openRate}%</span>
+        </div>`;
+      }).join('');
+    }).catch(() => {});
   } catch (err) {
     el.innerHTML = `<div style="padding:40px;text-align:center;color:#ef4444">Failed to load analytics: ${err.message}</div>`;
   }
@@ -2011,6 +2099,19 @@ function showLinkedInPreview(p) {
   const emailField = document.getElementById('li-email-override');
   if (emailField) emailField.value = p.personalEmail || p.email || '';
 
+  // Team duplicate check — warn if a teammate already has this person
+  const bestEmail = p.personalEmail || p.workEmail || p.email || '';
+  if (bestEmail) {
+    API.email.teamDuplicateCheck([bestEmail]).then(({ matches }) => {
+      const m = matches && matches[bestEmail.toLowerCase()];
+      if (!m) return;
+      const banner = document.createElement('div');
+      banner.style.cssText = 'margin-top:8px;padding:8px 12px;background:#fffbeb;border:1px solid #fcd34d;border-radius:8px;font-size:0.8rem;color:#92400e';
+      banner.innerHTML = `⚠ <strong>${escapeHtml(m.owner)}</strong> already has this person in their pipeline (${escapeHtml(m.stage)}). Importing may double-contact them.`;
+      content.appendChild(banner);
+    }).catch(() => {});
+  }
+
   document.getElementById('li-import-btn').style.display = 'none';
   document.getElementById('li-confirm-btn').style.display = 'inline-flex';
   const statusEl = document.getElementById('li-status');
@@ -2182,12 +2283,75 @@ async function loadSettingsPage() {
       }
     }
 
+    // Automated follow-up config
+    renderFollowUpConfig(style.followUpConfig || { enabled: true, steps: [{ days: 3 }, { days: 7 }] });
+
     await updateGmailStatus();
     await updateZohoStatus();
     await updateOutlookStatus();
   } catch (err) {
     Toast.error('Failed to load settings');
   }
+}
+
+// ---- Automated follow-up sequence settings ----
+function renderFollowUpConfig(cfg) {
+  const enabledEl = document.getElementById('followup-enabled');
+  const stepsEl   = document.getElementById('followup-steps');
+  if (!enabledEl || !stepsEl) return;
+  enabledEl.checked = !!cfg.enabled;
+
+  const drawSteps = (steps) => {
+    stepsEl.innerHTML = steps.map((s, i) => `
+      <div style="display:flex;align-items:center;gap:8px" data-step="${i}">
+        <span style="font-size:0.82rem;color:var(--text-muted);min-width:78px">Follow-up ${i + 1}</span>
+        <input type="number" class="fu-days" min="1" max="90" value="${s.days}" style="width:70px;padding:4px 6px;font-size:0.85rem" />
+        <span style="font-size:0.82rem;color:var(--text-muted)">days after previous</span>
+        <button type="button" class="btn btn-ghost btn-xs fu-remove" data-i="${i}" style="color:#ef4444">Remove</button>
+      </div>
+    `).join('');
+    stepsEl.querySelectorAll('.fu-remove').forEach(b => b.addEventListener('click', () => {
+      const cur = collectFollowUpSteps();
+      cur.splice(parseInt(b.dataset.i, 10), 1);
+      drawSteps(cur.length ? cur : [{ days: 3 }]);
+    }));
+  };
+  drawSteps(cfg.steps && cfg.steps.length ? cfg.steps : [{ days: 3 }, { days: 7 }]);
+
+  const addBtn = document.getElementById('followup-add-step');
+  if (addBtn && !addBtn._wired) {
+    addBtn._wired = true;
+    addBtn.addEventListener('click', () => {
+      const cur = collectFollowUpSteps();
+      if (cur.length >= 5) { Toast.warning('Maximum 5 follow-ups'); return; }
+      const last = cur.length ? cur[cur.length - 1].days : 3;
+      cur.push({ days: last + 4 });
+      drawSteps(cur);
+    });
+  }
+  const saveBtn = document.getElementById('followup-save');
+  if (saveBtn && !saveBtn._wired) {
+    saveBtn._wired = true;
+    saveBtn.addEventListener('click', async () => {
+      saveBtn.disabled = true; saveBtn.textContent = 'Saving…';
+      try {
+        await API.settings.update({
+          followUpConfig: {
+            enabled: document.getElementById('followup-enabled').checked,
+            steps: collectFollowUpSteps()
+          }
+        });
+        Toast.success('Follow-up settings saved');
+      } catch (err) { Toast.error(err.message); }
+      finally { saveBtn.disabled = false; saveBtn.textContent = 'Save Follow-Up Settings'; }
+    });
+  }
+}
+
+function collectFollowUpSteps() {
+  return [...document.querySelectorAll('#followup-steps .fu-days')]
+    .map(inp => ({ days: parseInt(inp.value, 10) }))
+    .filter(s => Number.isFinite(s.days) && s.days >= 1 && s.days <= 90);
 }
 
 async function updateGmailStatus() {

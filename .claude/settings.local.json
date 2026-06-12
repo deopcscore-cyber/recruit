@@ -47,7 +47,21 @@
       "Bash(node --check /Users/marketingdeo/recruit/routes/ai.js)",
       "Bash(node --check /Users/marketingdeo/recruit/public/js/api.js)",
       "Bash(node --check /Users/marketingdeo/recruit/public/js/pipeline.js)",
-      "Bash(node --check /Users/marketingdeo/recruit/routes/auth.js)"
+      "Bash(node --check /Users/marketingdeo/recruit/routes/auth.js)",
+      "Bash(node --check public/js/app.js)",
+      "Bash(node --check public/js/api.js)",
+      "Bash(node --check public/js/pipeline.js)",
+      "Bash(sed -n '55,65p' public/js/app.js)",
+      "Bash(awk 'NR>=40 && NR<=64 && /function|async function/' public/js/app.js)",
+      "Bash(awk 'NR<=64 && \\(/^async function/ || /^function/ || /^window.addEventListener/ || /DOMContentLoaded/\\)' public/js/app.js)",
+      "Bash(rm -rf /tmp/rt2)",
+      "Bash(mkdir -p /tmp/rt2)",
+      "Bash(SESSION_SECRET=t DATA_DIR=/tmp/rt2 PORT=3995 ANTHROPIC_API_KEY=dummy node server.js)",
+      "mcp__Claude_Preview__preview_start",
+      "Bash(pkill -f \"PORT=3995\")",
+      "Bash(pkill -f \"PORT=3996\")",
+      "Bash(rm -rf /tmp/rt /tmp/rt2 /tmp/*.jar /tmp/rt.log /tmp/rt2.log)",
+      "Bash(git commit -q -m ' *)"
     ]
   }
 }

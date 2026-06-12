@@ -145,6 +145,19 @@ function stageBadge(stage) {
   return `<span class="stage-badge" style="background:${color}20;color:${color};border-color:${color}40">${stage || 'Imported'}</span>`;
 }
 
+// Auto-classified reply sentiment → coloured chip on candidate cards
+const SENTIMENT_META = {
+  interested:     { label: '🔥 Interested', bg: '#dcfce7', fg: '#15803d' },
+  question:       { label: '❔ Question',    bg: '#dbeafe', fg: '#1d4ed8' },
+  not_now:        { label: '🕒 Not now',     bg: '#fef9c3', fg: '#a16207' },
+  not_interested: { label: '✕ Declined',    bg: '#fee2e2', fg: '#b91c1c' }
+};
+function sentimentBadge(s) {
+  const m = SENTIMENT_META[s];
+  if (!m) return '';
+  return `<span title="Auto-detected reply sentiment" style="font-size:0.68rem;font-weight:600;background:${m.bg};color:${m.fg};border-radius:10px;padding:1px 7px">${m.label}</span>`;
+}
+
 function escapeHtml(str) {
   if (!str) return '';
   return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
@@ -240,6 +253,7 @@ function createCandidateCard(candidate) {
         <div class="card-badges">
           ${candidate.unread ? '<span class="badge-new">New</span>' : ''}
           ${candidate.opened ? '<span class="badge-opened" title="Email opened">Opened</span>' : ''}
+          ${sentimentBadge(candidate.replySentiment)}
         </div>
       </div>
       <div class="card-meta">${escapeHtml(candidate.title || '')}${candidate.title && candidate.company ? ' · ' : ''}${escapeHtml(candidate.company || '')}</div>
@@ -926,6 +940,15 @@ function renderResumeTab(body) {
         ` : `<div class="text-muted text-sm">No resume uploaded yet.</div>`}
       </div>
 
+      ${(hasResume && _modalUser && _modalUser.userType === 'career_consultant') ? `
+      <div class="tab-section" style="border:1px solid #c7d2fe;background:#f5f3ff;border-radius:10px;padding:14px">
+        <h4 style="margin-top:0">✦ Reposition This Resume</h4>
+        <p class="tab-desc">Generate a repositioned version that surfaces their real seniority and impact — your core deliverable. Shows a before/after you can share with the client.</p>
+        <button class="btn btn-primary btn-sm" id="rewrite-resume-btn">${c.resumeRewrite ? '↺ Regenerate Repositioned Resume' : '✦ Generate Repositioned Resume'}</button>
+        ${c.resumeRewrite ? `<button class="btn btn-secondary btn-sm" id="view-rewrite-btn" style="margin-left:8px">View Before / After</button>` : ''}
+        <div id="rewrite-result" style="display:none;margin-top:14px"></div>
+      </div>` : ''}
+
       <div class="tab-section">
         <h4>Upload Resume (PDF or DOCX)</h4>
         <div style="display:flex;flex-direction:column;gap:8px">
@@ -969,6 +992,52 @@ function renderResumeTab(body) {
   // Download
   if (hasResume) {
     body.querySelector('#download-resume-btn').addEventListener('click', () => API.candidates.downloadResume(c.id));
+  }
+
+  // Resume reposition (consultant) — before/after rewrite
+  const rewriteBtn = body.querySelector('#rewrite-resume-btn');
+  if (rewriteBtn) {
+    const resultEl = body.querySelector('#rewrite-result');
+    const renderRewrite = (data) => {
+      resultEl.style.display = 'block';
+      resultEl.innerHTML = `
+        ${data.summary ? `<div style="background:#eef2ff;border-left:3px solid #6366f1;padding:8px 12px;border-radius:6px;font-size:0.85rem;margin-bottom:10px"><strong>What changed:</strong> ${escapeHtml(data.summary)}</div>` : ''}
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+          <div>
+            <div style="font-size:0.75rem;font-weight:700;color:#64748b;text-transform:uppercase;margin-bottom:4px">Before</div>
+            <div style="white-space:pre-wrap;font-size:0.78rem;line-height:1.5;background:#fff;border:1px solid #e2e8f0;border-radius:6px;padding:10px;max-height:340px;overflow:auto;color:#475569">${escapeHtml(data.original || (c.resume && c.resume.text) || '')}</div>
+          </div>
+          <div>
+            <div style="font-size:0.75rem;font-weight:700;color:#4338ca;text-transform:uppercase;margin-bottom:4px">After (repositioned)</div>
+            <div style="white-space:pre-wrap;font-size:0.78rem;line-height:1.5;background:#fff;border:1px solid #c7d2fe;border-radius:6px;padding:10px;max-height:340px;overflow:auto">${escapeHtml(data.rewritten || '')}</div>
+          </div>
+        </div>
+        <button class="btn btn-secondary btn-xs" id="copy-rewrite-btn" style="margin-top:8px">Copy repositioned text</button>`;
+      const copyBtn = resultEl.querySelector('#copy-rewrite-btn');
+      if (copyBtn) copyBtn.addEventListener('click', () => {
+        navigator.clipboard.writeText(data.rewritten || '').then(() => Toast.success('Copied'));
+      });
+    };
+
+    rewriteBtn.addEventListener('click', async () => {
+      rewriteBtn.disabled = true; rewriteBtn.textContent = '✦ Repositioning…';
+      try {
+        const data = await API.ai.rewriteResume(c.id);
+        _modalCandidate.resumeRewrite = { rewritten: data.rewritten, summary: data.summary };
+        renderRewrite(data);
+        if (typeof updateCreditsDisplay === 'function') updateCreditsDisplay(data.creditsRemaining);
+      } catch (err) { Toast.error(err.message); }
+      finally { rewriteBtn.disabled = false; rewriteBtn.textContent = '↺ Regenerate Repositioned Resume'; }
+    });
+
+    const viewBtn = body.querySelector('#view-rewrite-btn');
+    if (viewBtn) viewBtn.addEventListener('click', () => {
+      renderRewrite({
+        original: c.resume && c.resume.text,
+        rewritten: c.resumeRewrite.rewritten,
+        summary: c.resumeRewrite.summary
+      });
+    });
   }
 
   // Upload
@@ -1294,8 +1363,10 @@ function renderThreadTab(body) {
           <input type="text" id="th-subject" placeholder="Subject line…" value="${escapeHtml(c.lastSubject ? 'Re: ' + c.lastSubject.replace(/^Re:\s*/i,'') : '')}" />
         </div>
         <textarea id="th-body" class="compose-textarea" placeholder="Type your message…"></textarea>
+        <div id="th-deliverability" style="display:none;margin:8px 0;font-size:0.8rem"></div>
         <div class="compose-footer">
           <span class="text-xs text-muted">All sends require your approval above</span>
+          <button class="btn btn-ghost btn-sm" id="th-check-deliver" title="Check spam/deliverability risk">🛡 Check deliverability</button>
           <button class="btn btn-primary" id="th-send">Send Email</button>
         </div>
       </div>
@@ -1387,6 +1458,30 @@ function renderThreadTab(body) {
         picker.remove();
       } catch (err) { Toast.error(err.message); }
     });
+  });
+
+  // Deliverability lint (instant, no API cost)
+  body.querySelector('#th-check-deliver').addEventListener('click', async () => {
+    const subject = body.querySelector('#th-subject').value.trim();
+    const msgBody = body.querySelector('#th-body').value.trim();
+    const out = body.querySelector('#th-deliverability');
+    if (!msgBody) { Toast.warning('Write a message first'); return; }
+    out.style.display = 'block';
+    out.innerHTML = 'Checking…';
+    try {
+      const r = await API.email.analyzeDraft(subject, msgBody);
+      const col = r.score >= 85 ? '#16a34a' : r.score >= 70 ? '#d97706' : '#ef4444';
+      const iconFor = lv => lv === 'ok' ? '✓' : lv === 'info' ? 'ℹ' : '⚠';
+      out.innerHTML = `
+        <div style="border:1px solid ${col}40;background:${col}10;border-radius:8px;padding:10px 12px">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+            <span style="font-weight:700;color:${col};font-size:1.1rem">${r.score}/100</span>
+            <span style="font-weight:600;color:${col}">${r.grade}</span>
+            <span style="color:var(--text-muted);font-size:0.75rem;margin-left:auto">${r.words} words · ${r.links} link(s)</span>
+          </div>
+          ${r.issues.map(i => `<div style="font-size:0.78rem;color:${i.level==='warn'?'#b45309':i.level==='ok'?'#15803d':'#64748b'};padding:1px 0">${iconFor(i.level)} ${escapeHtml(i.msg)}</div>`).join('')}
+        </div>`;
+    } catch (err) { out.innerHTML = `<span style="color:#ef4444">${escapeHtml(err.message)}</span>`; }
   });
 
   // Send
