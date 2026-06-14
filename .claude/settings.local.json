@@ -69,7 +69,9 @@
       "Bash(pkill -f \"PORT=3994\")",
       "Bash(rm -rf /tmp/rt /tmp/rt3 /tmp/*.jar /tmp/rt.log /tmp/rt3.log)",
       "Bash(sed -n '/^function stripQuotedText/,/^}/p' public/js/pipeline.js)",
-      "Bash(grep -n \"class=\\\\\"pipeline-card\\\\|onCardClick\\\\|card.*addEventListener\\\\|<div class=\\\\\"\\\\${\\\\|kanban-card\\\\|pcard\\\\|data-cid\" public/js/pipeline.js)"
+      "Bash(grep -n \"class=\\\\\"pipeline-card\\\\|onCardClick\\\\|card.*addEventListener\\\\|<div class=\\\\\"\\\\${\\\\|kanban-card\\\\|pcard\\\\|data-cid\" public/js/pipeline.js)",
+      "Bash(sed -n '670,685p' server.js)",
+      "Bash(sed -n '44,60p' routes/analytics.js)"
     ]
   }
 }

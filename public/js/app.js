@@ -182,6 +182,10 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Analytics refresh button
   document.getElementById('refresh-analytics-btn').addEventListener('click', loadAnalyticsPage);
 
+  // Today refresh button
+  const todayRefresh = document.getElementById('today-refresh-btn');
+  if (todayRefresh) todayRefresh.addEventListener('click', loadTodayPage);
+
   // Follow-up filter option (injected dynamically)
   const stageFilter = document.getElementById('stage-filter');
   const fuOpt = document.createElement('option');
@@ -198,7 +202,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     navigateTo('candidates');
     handleBookmarkletImport(liToken);
   } else {
-    navigateTo('candidates');
+    navigateTo('today');
   }
 
   // Generate the bookmarklet href using this app's origin
@@ -250,6 +254,7 @@ function applyTheme(theme) {
 function navigateTo(page) {
   document.querySelectorAll('.nav-item').forEach(i => i.classList.toggle('active', i.dataset.page === page));
   document.querySelectorAll('.page').forEach(p => p.classList.toggle('active', p.id === `page-${page}`));
+  if (page === 'today')     loadTodayPage();
   if (page === 'settings')  loadSettingsPage();
   if (page === 'followups') loadFollowUpPage();
   if (page === 'hotleads')  loadHotLeadsPage();
@@ -415,6 +420,132 @@ function updateHotLeadsBadge() {
 }
 
 // ---- Hot Leads Page ----
+// ---- Today (home) command center ----
+async function loadTodayPage() {
+  const el = document.getElementById('today-body');
+  if (!el) return;
+
+  // Greeting
+  const hr = new Date().getHours();
+  const part = hr < 12 ? 'Good morning' : hr < 18 ? 'Good afternoon' : 'Good evening';
+  const first = (currentUser && currentUser.name ? currentUser.name.split(/\s+/)[0] : '') || '';
+  const dateStr = new Date().toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' });
+  const greet = document.getElementById('today-greeting');
+  if (greet) greet.innerHTML = `${part}${first ? ', ' + escapeHtml(first) : ''} <span style="font-size:0.8rem;font-weight:400;color:var(--text-muted);margin-left:8px">${dateStr}</span>`;
+
+  // Buckets from the already-loaded candidate list
+  const active = c => !['Closed'].includes(c.stage || '');
+  const replies  = allCandidates.filter(c => c.unread);
+  const interested = allCandidates.filter(c => c.replySentiment === 'interested' && active(c) && !c.unread);
+  const now = new Date();
+  const ACT = ['Outreach Sent', 'Replied', 'Resume Requested', 'Resume Received', 'Interviewing'];
+  // Dedupe by priority: a candidate shows under replies > interested > follow-ups, once
+  const claimed = new Set([...replies, ...interested].map(c => c.id));
+  const followups = allCandidates.filter(c => {
+    if (claimed.has(c.id)) return false;
+    const stage = c.stage || 'Imported';
+    if (stage === 'Closed' || stage === 'Imported') return false;
+    if (c.followUpDate && new Date(c.followUpDate) <= now) return true;
+    if (ACT.includes(stage) && !c.followUpDate) return true;
+    return false;
+  });
+  const hotOpened = allCandidates.filter(c => c.opened && !(c.thread || []).some(m => m.direction === 'inbound'));
+
+  // Async extras (best-effort)
+  let analytics = null, ap = null;
+  try { [analytics, ap] = await Promise.all([API.analytics.get().catch(() => null), API.settings.autopilotStatus().catch(() => null)]); } catch {}
+
+  const row = (c, meta) => `
+    <div class="today-row" data-id="${c.id}" style="display:flex;align-items:center;gap:12px;padding:11px 14px;border:1px solid var(--border);border-radius:9px;background:var(--bg-card);cursor:pointer;transition:border-color .12s">
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:600;color:var(--text);font-size:0.9rem">${escapeHtml(c.name || 'Unknown')}</div>
+        <div style="font-size:0.78rem;color:var(--text-muted);margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(c.title || '')}${c.company ? ' · ' + escapeHtml(c.company) : ''}</div>
+      </div>
+      <div style="font-size:0.76rem;color:var(--text-faint);flex-shrink:0;text-align:right">${meta || ''}</div>
+    </div>`;
+
+  const section = (icon, title, items, color, renderMeta, emptyHint) => {
+    if (items.length === 0) return '';
+    return `
+      <div style="margin-bottom:22px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+          <span style="font-size:1.1rem">${icon}</span>
+          <h3 style="margin:0;font-size:0.95rem;color:var(--text)">${title}</h3>
+          <span style="background:${color}1f;color:${color};font-size:0.74rem;font-weight:700;border-radius:10px;padding:1px 9px">${items.length}</span>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:8px">
+          ${items.slice(0, 8).map(c => row(c, renderMeta ? renderMeta(c) : '')).join('')}
+          ${items.length > 8 ? `<div style="font-size:0.78rem;color:var(--text-muted);padding:4px 2px">+ ${items.length - 8} more</div>` : ''}
+        </div>
+      </div>`;
+  };
+
+  const allClear = replies.length + interested.length + followups.length === 0;
+
+  // Autopilot strip
+  let apHtml = '';
+  if (ap && ap.enabled) {
+    const next = ap.nextAt ? new Date(ap.nextAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—';
+    apHtml = `<div style="display:flex;align-items:center;gap:10px;padding:11px 14px;background:#eef2ff;border:1px solid #c7d2fe;border-radius:9px;font-size:0.82rem;color:#3730a3;margin-bottom:22px">
+      <span style="font-size:1rem">🚀</span>
+      <span><strong>Autopilot</strong> · sent ${ap.sentToday} today · ${ap.pendingToday} queued · next ${next} · ${ap.eligibleRemaining} left in pipeline</span>
+    </div>`;
+  }
+
+  // Week stats strip
+  let statsHtml = '';
+  if (analytics) {
+    const stat = (label, val, color) => `<div style="flex:1;text-align:center;padding:12px 8px"><div style="font-size:1.4rem;font-weight:700;color:${color||'var(--text)'}">${val}</div><div style="font-size:0.72rem;color:var(--text-muted);margin-top:2px">${label}</div></div>`;
+    statsHtml = `
+      <div style="margin-top:10px">
+        <h3 style="font-size:0.95rem;color:var(--text);margin:0 0 10px">📊 Your pipeline</h3>
+        <div style="display:flex;border:1px solid var(--border);border-radius:10px;background:var(--bg-card);divide-x">
+          ${stat('Total', analytics.total, '#6366f1')}
+          ${stat('Contacted', analytics.contacted, '#2563eb')}
+          ${stat('Open rate', analytics.openRate + '%', '#0891b2')}
+          ${stat('Reply rate', analytics.responseRate + '%', '#16a34a')}
+        </div>
+      </div>`;
+  }
+
+  el.innerHTML = `
+    ${apHtml}
+    ${allClear ? `
+      <div style="text-align:center;padding:40px 20px;border:1px dashed var(--border);border-radius:12px;margin-bottom:22px">
+        <div style="font-size:2.2rem;margin-bottom:8px">✅</div>
+        <h3 style="color:var(--text);margin:0 0 4px">You're all caught up</h3>
+        <p style="color:var(--text-muted);font-size:0.88rem;margin:0">No replies, hot leads, or follow-ups need you right now. Nice.</p>
+      </div>` : ''}
+    ${section('💬', 'Replies need you', replies, '#7c3aed', c => {
+      const last = [...(c.thread || [])].reverse().find(m => m.direction === 'inbound');
+      return last ? formatRelativeHL(last.timestamp) : 'New';
+    })}
+    ${section('🔥', 'Interested — move these forward', interested, '#ef4444', c => 'Interested')}
+    ${section('⏰', 'Follow-ups due', followups, '#d97706', c => c.followUpDate ? formatRelativeHL(c.followUpDate) : 'No reply yet')}
+    ${hotOpened.length ? `<div style="margin-bottom:22px"><a id="today-hotleads-link" style="font-size:0.84rem;color:var(--blue);cursor:pointer">⚡ ${hotOpened.length} opened your email but haven't replied →</a></div>` : ''}
+    ${statsHtml}
+  `;
+
+  // Row clicks → open candidate, refresh Today on close
+  el.querySelectorAll('.today-row').forEach(r => {
+    r.addEventListener('mouseenter', () => { r.style.borderColor = 'var(--blue)'; });
+    r.addEventListener('mouseleave', () => { r.style.borderColor = 'var(--border)'; });
+    r.addEventListener('click', () => {
+      const c = allCandidates.find(x => x.id === r.dataset.id);
+      if (!c) return;
+      if (c.unread) {
+        API.candidates.update(c.id, { unread: false }).then(u => { Object.assign(c, u); updateUnreadBadge(); }).catch(() => {});
+      }
+      openCandidateModal(c, currentUser,
+        updated => { const i = allCandidates.findIndex(x => x.id === updated.id); if (i >= 0) allCandidates[i] = updated; loadTodayPage(); },
+        id => { allCandidates = allCandidates.filter(x => x.id !== id); loadTodayPage(); }
+      );
+    });
+  });
+  const hl = el.querySelector('#today-hotleads-link');
+  if (hl) hl.addEventListener('click', () => navigateTo('hotleads'));
+}
+
 function loadHotLeadsPage() {
   const el = document.getElementById('hotleads-content');
   if (!el) return;
