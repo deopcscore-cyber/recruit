@@ -67,7 +67,9 @@
       "Bash(SESSION_SECRET=t DATA_DIR=/tmp/rt3 PORT=3993 node server.js)",
       "Bash(pkill -f \"PORT=3993\")",
       "Bash(pkill -f \"PORT=3994\")",
-      "Bash(rm -rf /tmp/rt /tmp/rt3 /tmp/*.jar /tmp/rt.log /tmp/rt3.log)"
+      "Bash(rm -rf /tmp/rt /tmp/rt3 /tmp/*.jar /tmp/rt.log /tmp/rt3.log)",
+      "Bash(sed -n '/^function stripQuotedText/,/^}/p' public/js/pipeline.js)",
+      "Bash(grep -n \"class=\\\\\"pipeline-card\\\\|onCardClick\\\\|card.*addEventListener\\\\|<div class=\\\\\"\\\\${\\\\|kanban-card\\\\|pcard\\\\|data-cid\" public/js/pipeline.js)"
     ]
   }
 }

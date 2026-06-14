@@ -136,8 +136,37 @@ function stripHtml(html) {
 
 function preview55(text) {
   if (!text) return '';
-  const clean = stripHtml(text).replace(/\s+/g, ' ').trim();
+  const clean = stripHtml(stripQuotedText(text)).replace(/\s+/g, ' ').trim();
   return clean.length > 55 ? clean.substring(0, 55) + '…' : clean;
+}
+
+// Strip the quoted original / reply history that mail clients append to replies
+// (Gmail "On … wrote:", Outlook "From:/Sent:/-----Original Message-----",
+// ">" quote markers, divider rules). Returns just the new content. Falls back
+// to the full text if stripping would leave nothing.
+function stripQuotedText(text) {
+  if (!text) return '';
+  const lines = String(text).replace(/\r\n/g, '\n').split('\n');
+  let cut = -1;
+
+  for (let i = 0; i < lines.length; i++) {
+    const l = lines[i].trim();
+    // Gmail / Apple Mail attribution line ("On <date>… wrote:")
+    if (/^On\b.*\bwrote:?\s*$/i.test(l)) { cut = i; break; }
+    // Attribution that wraps: starts with "On " here, "… wrote:" on a later line
+    if (/^On\b.+\b(at|,)\b/i.test(l) && /wrote:?\s*$/i.test((lines[i + 1] || '').trim())) { cut = i; break; }
+    // Outlook / generic original-message markers
+    if (/^-{2,}\s*Original Message\s*-{2,}/i.test(l)) { cut = i; break; }
+    if (/^_{10,}$/.test(l)) { cut = i; break; }            // Outlook divider rule
+    if (/^From:\s.+/i.test(l) &&
+        /^(Sent|To|Subject|Date):/im.test(lines.slice(i + 1, i + 4).join('\n'))) { cut = i; break; }
+    // First ">"-quoted line
+    if (/^>/.test(lines[i])) { cut = i; break; }
+  }
+
+  if (cut === -1) return text;
+  const visible = lines.slice(0, cut).join('\n').replace(/\s+$/, '');
+  return visible.trim() ? visible : text;
 }
 
 function stageBadge(stage) {
@@ -1329,16 +1358,25 @@ function renderThreadTab(body) {
 
   const threadHtml = thread.length === 0
     ? `<div class="thread-empty">No messages yet. Send an outreach to start the conversation.</div>`
-    : thread.map(msg => `
+    : thread.map((msg, i) => {
+        const full    = msg.body || '';
+        const visible = msg.direction === 'inbound' ? stripQuotedText(full) : full;
+        const trimmed = visible.length < full.length;
+        const toBr = s => escapeHtml(s).replace(/\n/g, '<br>');
+        return `
       <div class="thread-msg ${msg.direction||'outbound'}">
         <div class="thread-msg-header">
           <span class="thread-direction">${msg.direction === 'inbound' ? `↙ ${escapeHtml(c.name||'Candidate')}` : '↗ You'}</span>
           <span class="thread-time">${formatRelative(msg.timestamp)}</span>
         </div>
         ${msg.subject ? `<div class="thread-subject">${escapeHtml(msg.subject)}</div>` : ''}
-        <div class="thread-body">${escapeHtml(msg.body||'').replace(/\n/g,'<br>')}</div>
-      </div>
-    `).join('');
+        <div class="thread-body">${toBr(visible)}</div>
+        ${trimmed ? `
+          <button class="thread-quote-toggle" data-qi="${i}" style="background:none;border:none;color:var(--text-muted);font-size:0.74rem;cursor:pointer;padding:4px 0;margin-top:2px">··· show quoted text</button>
+          <div class="thread-quoted" data-qi="${i}" style="display:none;border-left:2px solid var(--border);padding-left:10px;margin-top:6px;color:var(--text-muted);font-size:0.82rem">${toBr(full)}</div>
+        ` : ''}
+      </div>`;
+      }).join('');
 
   const isConsultantThread = _modalUser && _modalUser.userType === 'career_consultant';
   const thirdAiBtn = isConsultantThread
@@ -1377,6 +1415,17 @@ function renderThreadTab(body) {
   const msgsEl = body.querySelector('#thread-msgs');
   if (msgsEl) msgsEl.scrollTop = msgsEl.scrollHeight;
 
+  // Quoted-text toggles
+  body.querySelectorAll('.thread-quote-toggle').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const block = body.querySelector(`.thread-quoted[data-qi="${btn.dataset.qi}"]`);
+      if (!block) return;
+      const show = block.style.display === 'none';
+      block.style.display = show ? 'block' : 'none';
+      btn.textContent = show ? '··· hide quoted text' : '··· show quoted text';
+    });
+  });
+
   // AI buttons
   async function aiGenerate(type) {
     const btn = body.querySelector(`#th-gen-${type}`);
@@ -1386,7 +1435,7 @@ function renderThreadTab(body) {
       let result;
       if (type === 'reply') {
         const lastInbound = [...thread].reverse().find(m => m.direction === 'inbound');
-        result = await API.ai.reply(c.id, lastInbound ? lastInbound.body : null);
+        result = await API.ai.reply(c.id, lastInbound ? stripQuotedText(lastInbound.body) : null);
       } else if (type === 'outreach') {
         result = await API.ai.outreach(c.id);
       } else if (type === 'jd') {
