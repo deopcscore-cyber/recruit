@@ -5,7 +5,7 @@
 let currentUser = null;
 let allCandidates = [];
 let currentView = 'pipeline';
-let currentFilter = { stage: '', search: '' };
+let currentFilter = { stage: '', search: '', dateRange: '', customDate: '' };
 
 // Handle token-expired errors — show a reconnect banner and mark Gmail as disconnected locally
 function handleReauthError(err) {
@@ -114,6 +114,19 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Stage filter
   document.getElementById('stage-filter').addEventListener('change', e => {
     currentFilter.stage = e.target.value;
+    renderCandidates();
+  });
+
+  // Date filter (by recent activity)
+  document.getElementById('date-filter').addEventListener('change', e => {
+    currentFilter.dateRange = e.target.value;
+    const custom = document.getElementById('date-filter-custom');
+    custom.style.display = e.target.value === 'custom' ? '' : 'none';
+    if (e.target.value !== 'custom') { currentFilter.customDate = ''; custom.value = ''; }
+    renderCandidates();
+  });
+  document.getElementById('date-filter-custom').addEventListener('change', e => {
+    currentFilter.customDate = e.target.value;
     renderCandidates();
   });
 
@@ -297,7 +310,34 @@ function getFilteredCandidates() {
   if (currentTagFilter) {
     filtered = filtered.filter(c => (c.tags || []).includes(currentTagFilter));
   }
+  // Date filter — by most recent activity (added, updated, or last message)
+  const range = currentFilter.dateRange;
+  if (range) {
+    let cutoff = null;
+    if (range === 'custom') {
+      if (currentFilter.customDate) cutoff = new Date(currentFilter.customDate + 'T00:00:00');
+    } else {
+      const days = parseInt(range, 10);
+      if (Number.isFinite(days)) cutoff = new Date(Date.now() - days * 86400000);
+    }
+    if (cutoff && !isNaN(cutoff)) {
+      filtered = filtered.filter(c => candidateActivityDate(c) >= cutoff);
+    }
+  }
   return filtered;
+}
+
+// Most recent moment we touched this candidate: newest of created, updated,
+// or last thread message. Used by the date filter.
+function candidateActivityDate(c) {
+  let t = 0;
+  const consider = v => { if (v) { const d = new Date(v).getTime(); if (d > t) t = d; } };
+  consider(c.createdAt);
+  consider(c.updatedAt);
+  if (Array.isArray(c.thread) && c.thread.length) {
+    consider(c.thread[c.thread.length - 1].timestamp);
+  }
+  return new Date(t);
 }
 
 function renderTagFilterBar() {

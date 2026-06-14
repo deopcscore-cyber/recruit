@@ -110,6 +110,16 @@
           <option>Closed</option>
         </select>
 
+        <!-- Date filter -->
+        <select id="date-filter" title="Filter by recent activity">
+          <option value="">Any time</option>
+          <option value="7">Last 7 days</option>
+          <option value="30">Last 30 days</option>
+          <option value="90">Last 90 days</option>
+          <option value="custom">On or after…</option>
+        </select>
+        <input type="date" id="date-filter-custom" style="display:none" />
+
         <!-- Tag filter chips — populated dynamically -->
         <div id="tag-filter-bar" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap"></div>
 
