@@ -79,7 +79,7 @@
         method: 'POST',
         credentials: 'same-origin',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: data.url || '', text: data.text })
+        body: JSON.stringify({ url: data.url || '', text: data.text, coEmails: data.coEmails || [] })
       })
       .then(function(r) {
         if (r.status === 401) throw new Error('You are signed out — log in to Recruit Pro first, then try the bookmark again.');

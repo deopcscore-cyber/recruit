@@ -2141,6 +2141,12 @@ function buildBookmarkletLink() {
     btn.textContent='⏳ Importing…';document.body.appendChild(btn);
     var url=location.href;
     var text=document.body.innerText;
+    var coEmails=(function(){
+      var seen={},out=[],RE=/[a-zA-Z0-9._%+\\-]+@[a-zA-Z0-9.\\-]+\\.[a-zA-Z]{2,}/g,IG=/@(linkedin\\.com|licdn\\.com|contactout\\.com|example\\.com|sentry\\.|w3\\.org)/i;
+      function add(e){e=(e||'').toLowerCase().trim().replace(/[)>.,;]+$/,'');if(e&&/^[^\\s@]+@[^\\s@]+\\.[^\\s@]{2,}$/.test(e)&&!IG.test(e)&&!seen[e]){seen[e]=1;out.push(e);}}
+      function walk(r){if(!r||!r.querySelectorAll)return;r.querySelectorAll('a[href^="mailto:"]').forEach(function(a){add((a.getAttribute('href')||'').replace(/^mailto:/i,'').split('?')[0]);});((r.textContent||'').match(RE)||[]).forEach(add);r.querySelectorAll('*').forEach(function(el){if(el.shadowRoot)walk(el.shadowRoot);});}
+      walk(document);return out;
+    })();
     var origin='${origin}';
     var w=window.open(origin+'/li-capture','_blank','width=540,height=320,resizable=yes');
     if(!w){
@@ -2153,7 +2159,7 @@ function buildBookmarkletLink() {
       if(evt.origin!==origin)return;
       if(!evt.data||!evt.data.ready)return;
       window.removeEventListener('message',onMsg);
-      w.postMessage({url:url,text:text},origin);
+      w.postMessage({url:url,text:text,coEmails:coEmails},origin);
       btn.textContent='✔ Sent! Opening dashboard…';
       setTimeout(function(){btn.remove();},2500);
     }

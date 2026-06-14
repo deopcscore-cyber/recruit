@@ -71,9 +71,14 @@
         setTimeout(resetBtn, 5000);
         return;
       }
-      const label = response.name ? `✓ ${response.name} added!` : '✓ Added to pipeline!';
-      setBtn(label, '#2f9e44');
-      setTimeout(resetBtn, 4000);
+      if (response.email) {
+        setBtn(`✓ ${response.name || 'Added'} · ${response.email}`, '#2f9e44');
+        setTimeout(resetBtn, 4000);
+      } else {
+        // Imported, but ContactOut hadn't revealed an email on the page.
+        setBtn('✓ Added — no email found. Reveal it in ContactOut, then add it in the app.', '#f08c00');
+        setTimeout(resetBtn, 7000);
+      }
     });
   }
 
@@ -92,44 +97,44 @@
     }
   }
 
-  // ── Read ContactOut injected emails from the DOM ──────────────────────────
-  // ContactOut extension injects a sidebar/overlay with email addresses.
-  // We harvest whatever it has already displayed so the server doesn't need
-  // a separate API call for this import.
+  // ── Read ContactOut revealed emails from the page ─────────────────────────
+  // ContactOut renders revealed emails inside (often nested) shadow DOM, which
+  // ordinary querySelectorAll can't see through. We walk every open shadow root
+  // recursively and harvest real email addresses + mailto: links. No guessing —
+  // this only returns emails ContactOut has actually displayed on the page.
+  const EMAIL_RE = /[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/g;
+  // Infra domains we never want to capture as a candidate's email.
+  const IGNORE_DOMAINS = /@(linkedin\.com|licdn\.com|contactout\.com|example\.com|sentry\.|w3\.org)/i;
+
   function readContactOutEmails () {
     const seen = new Set();
     const emails = [];
 
     function addEmail (e) {
-      const clean = (e || '').toLowerCase().trim();
-      if (clean && isEmail(clean) && !seen.has(clean)) {
+      const clean = (e || '').toLowerCase().trim().replace(/[)>.,;]+$/, '');
+      if (clean && isEmail(clean) && !IGNORE_DOMAINS.test(clean) && !seen.has(clean)) {
         seen.add(clean);
         emails.push(clean);
       }
     }
 
-    // 1. Any mailto: links (ContactOut renders these for revealed emails)
-    document.querySelectorAll('a[href^="mailto:"]').forEach(a => {
-      addEmail(a.href.replace(/^mailto:/i, '').split('?')[0]);
-    });
+    // Recursively walk the DOM, descending into every open shadow root.
+    function walk (root) {
+      if (!root || !root.querySelectorAll) return;
 
-    // 2. ContactOut widget containers (class/id/data-* heuristics)
-    const selectors = [
-      '[class*="contactout"]',
-      '[id*="contactout"]',
-      '[data-extension="contactout"]',
-      '[class*="co-profile"]',
-      '[class*="co-sidebar"]'
-    ];
-    selectors.forEach(sel => {
-      document.querySelectorAll(sel).forEach(el => {
-        const matches = (el.innerText || '').match(
-          /[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/g
-        ) || [];
-        matches.forEach(addEmail);
+      // mailto: links inside this root
+      root.querySelectorAll('a[href^="mailto:"]').forEach(a => {
+        addEmail((a.getAttribute('href') || '').replace(/^mailto:/i, '').split('?')[0]);
       });
-    });
 
+      // Plain-text emails in this root's own text (dedup handles repeats)
+      (((root.textContent) || '').match(EMAIL_RE) || []).forEach(addEmail);
+
+      // Descend into the shadow root of every element
+      root.querySelectorAll('*').forEach(el => { if (el.shadowRoot) walk(el.shadowRoot); });
+    }
+
+    walk(document);
     return emails;
   }
 
