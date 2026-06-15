@@ -1379,9 +1379,6 @@ function renderThreadTab(body) {
       }).join('');
 
   const isConsultantThread = _modalUser && _modalUser.userType === 'career_consultant';
-  const thirdAiBtn = isConsultantThread
-    ? `<button class="btn btn-ghost btn-sm" id="th-gen-followup">✦ Follow Up</button>`
-    : `<button class="btn btn-ghost btn-sm" id="th-gen-jd">✦ Role JD</button>`;
 
   body.innerHTML = `
     <div class="thread-container">
@@ -1393,8 +1390,8 @@ function renderThreadTab(body) {
           <div class="compose-ai-btns">
             <button class="btn btn-ghost btn-sm" id="th-gen-reply">✦ Draft Reply</button>
             <button class="btn btn-ghost btn-sm" id="th-gen-outreach">✦ Outreach</button>
-            ${thirdAiBtn}
-            <button class="btn btn-ghost btn-sm" id="th-set-followup" title="Set follow-up reminder">⏰ Follow Up</button>
+            <button class="btn btn-ghost btn-sm" id="th-gen-followup" title="Draft a follow-up on this conversation">✦ Draft Follow Up</button>
+            <button class="btn btn-ghost btn-sm" id="th-set-followup" title="Set a reminder to follow up later">⏰ Remind me</button>
           </div>
         </div>
         <div class="form-group" style="margin-bottom:8px">
@@ -1459,11 +1456,7 @@ function renderThreadTab(body) {
 
   body.querySelector('#th-gen-reply').addEventListener('click', () => aiGenerate('reply'));
   body.querySelector('#th-gen-outreach').addEventListener('click', () => aiGenerate('outreach'));
-  if (isConsultantThread) {
-    body.querySelector('#th-gen-followup').addEventListener('click', () => aiGenerate('followup'));
-  } else {
-    body.querySelector('#th-gen-jd').addEventListener('click', () => aiGenerate('jd'));
-  }
+  body.querySelector('#th-gen-followup').addEventListener('click', () => aiGenerate('followup'));
 
   // Follow Up — inline date picker injected below the button
   body.querySelector('#th-set-followup').addEventListener('click', function() {
