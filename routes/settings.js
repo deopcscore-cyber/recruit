@@ -74,6 +74,12 @@ router.put('/', async (req, res) => {
     // Secondary test email
     if (secondaryTestEmail !== undefined) user.secondaryTestEmail = secondaryTestEmail.trim();
 
+    // Real browser timezone offset (hours, e.g. +1, -5) — used for send windows
+    if (req.body.tzOffset !== undefined) {
+      const tz = Number(req.body.tzOffset);
+      if (Number.isFinite(tz) && tz >= -12 && tz <= 14) user.tzOffset = tz;
+    }
+
     // Resume consultant partner (for recruiter Victory emails)
     if (resumeConsultantName  !== undefined) user.resumeConsultantName  = resumeConsultantName.trim();
     if (resumeConsultantEmail !== undefined) user.resumeConsultantEmail = resumeConsultantEmail.trim();
@@ -130,6 +136,28 @@ router.put('/', async (req, res) => {
     }
 
     await storage.saveUser(user);
+
+    // If autopilot is on, plan today's batch immediately so jobs queue right
+    // away instead of waiting up to 15 min for the background loop.
+    if (user.autopilot && user.autopilot.enabled) {
+      try {
+        const autopilot = require('../services/autopilot');
+        const queueSvc  = require('../services/queue');
+        const emailConnected = !!(user.gmail?.connected)
+          || !!(user.zoho?.connected && user.zoho.accessToken && user.zoho.refreshToken)
+          || !!(user.outlook?.connected && user.outlook.accessToken);
+        if (emailConnected && (user.credits || 0) > 0) {
+          const cands = await storage.getUserCandidates(user.id);
+          const plan = autopilot.planDailyRun(user, cands, new Date());
+          if (plan.ran) {
+            if (plan.jobs && plan.jobs.length) queueSvc.addJobs(plan.jobs);
+            user.autopilot.lastRunDate = plan.lastRunDate;
+            await storage.saveUser(user);
+          }
+        }
+      } catch (e) { console.error('Autopilot immediate-run error:', e.message); }
+    }
+
     return res.json({
       ...user.style,
       name: user.name || '',

@@ -182,6 +182,15 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Live local clock in the sidebar
   startSidebarClock();
 
+  // Record the user's real browser timezone (used for autopilot send windows).
+  // Fire-and-forget; only matters for scheduling accuracy.
+  try {
+    const tzOffset = -new Date().getTimezoneOffset() / 60;
+    if (!currentUser || currentUser.tzOffset !== tzOffset) {
+      API.settings.update({ tzOffset }).catch(() => {});
+    }
+  } catch {}
+
   // Analytics refresh button
   document.getElementById('refresh-analytics-btn').addEventListener('click', loadAnalyticsPage);
 
@@ -2562,6 +2571,7 @@ function renderAutopilotConfig(cfg) {
         let max = parseInt($('ap-max-spacing').value, 10) || 60;
         if (max < min) max = min;
         await API.settings.update({
+          tzOffset: -new Date().getTimezoneOffset() / 60,  // real browser timezone
           autopilot: {
             enabled:       $('ap-enabled').checked,
             dailyCap:      parseInt($('ap-daily-cap').value, 10) || 30,

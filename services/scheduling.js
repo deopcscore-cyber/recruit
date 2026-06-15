@@ -81,8 +81,12 @@ function followUpTime({ locationText = '', fallbackOffset = DEFAULT_OFFSET, days
   return nextSendTime({ locationText, fallbackOffset, from: base });
 }
 
-// Infer the user's own offset from their company/location settings, default ET.
+// The user's own UTC offset (hours). Prefer the real timezone captured from
+// their browser; fall back to guessing from location text, then ET.
 function userOffset(user) {
+  if (user && typeof user.tzOffset === 'number' && user.tzOffset >= -12 && user.tzOffset <= 14) {
+    return user.tzOffset;
+  }
   const guess = guessOffset((user && (user.location || user.companyName)) || '');
   return guess === null ? DEFAULT_OFFSET : guess;
 }
