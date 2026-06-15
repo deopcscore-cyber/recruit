@@ -145,7 +145,8 @@ router.get('/me', requireAuth, async (req, res) => {
       credits:  user.credits  || 0,
       totalSpent: user.totalSpent || 0,
       resumeConsultantName:  user.resumeConsultantName  || '',
-      resumeConsultantEmail: user.resumeConsultantEmail || ''
+      resumeConsultantEmail: user.resumeConsultantEmail || '',
+      tzOffset: (typeof user.tzOffset === 'number') ? user.tzOffset : null
     });
   } catch (err) {
     console.error('Get me error:', err);
