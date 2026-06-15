@@ -640,7 +640,11 @@
                 <input type="checkbox" id="ap-warmup" checked /> Warm-up ramp <span class="text-muted text-xs">(start ~10/day, climb to the limit over ~2 weeks — safest for your sender reputation)</span>
               </label>
               <p style="font-size:0.78rem;color:var(--text-muted);margin:0 0 12px;line-height:1.5">Each email is freshly AI-personalized and counts against your credits. Sends only to <strong>Imported, never-contacted</strong> candidates (oldest first). Follow-ups and reply detection still apply. 30/day is a safe cold-email ceiling for Gmail.</p>
-              <button type="button" class="btn btn-primary btn-sm" id="ap-save">Save Auto-Outreach Settings</button>
+              <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+                <button type="button" class="btn btn-primary btn-sm" id="ap-save">Save Auto-Outreach Settings</button>
+                <button type="button" class="btn btn-secondary btn-sm" id="ap-run-now" title="Queue today's batch right now, ignoring the send window">▶ Send batch now</button>
+              </div>
+              <div id="ap-run-result" style="font-size:0.82rem;margin-top:10px;display:none"></div>
             </div>
           </div>
 

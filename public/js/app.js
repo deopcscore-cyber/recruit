@@ -2589,6 +2589,34 @@ function renderAutopilotConfig(cfg) {
       finally { saveBtn.disabled = false; saveBtn.textContent = 'Save Auto-Outreach Settings'; }
     });
   }
+
+  // "Send batch now" — force a run regardless of window, for testing/control
+  const runBtn = $('ap-run-now');
+  if (runBtn && !runBtn._wired) {
+    runBtn._wired = true;
+    runBtn.addEventListener('click', async () => {
+      const result = $('ap-run-result');
+      runBtn.disabled = true; runBtn.textContent = 'Running…';
+      try {
+        const r = await API.settings.autopilotRunNow();
+        if (result) {
+          result.style.display = 'block';
+          if (r.queued > 0) {
+            result.style.color = '#16a34a';
+            result.textContent = `✓ ${r.message}`;
+          } else {
+            result.style.color = '#b45309';
+            result.textContent = `⚠️ ${r.message || 'Nothing was queued.'}`;
+          }
+        }
+        if (r.queued > 0) Toast.success(`Queued ${r.queued} email${r.queued !== 1 ? 's' : ''}`);
+        refreshAutopilotStatus();
+      } catch (err) {
+        if (result) { result.style.display = 'block'; result.style.color = '#dc2626'; result.textContent = '✗ ' + err.message; }
+        Toast.error(err.message);
+      } finally { runBtn.disabled = false; runBtn.textContent = '▶ Send batch now'; }
+    });
+  }
 }
 
 // Live local clock — uses the browser's own timezone, so it's always the user's

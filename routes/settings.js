@@ -401,10 +401,64 @@ router.get('/autopilot-status', async (req, res) => {
       emailConnected,
       ok: diag.ok,
       blocker: diag.blocker,
-      statusMessage: diag.message
+      statusMessage: diag.message,
+      lastRunDate: cfg.lastRunDate || null
     });
   } catch (err) {
     return res.status(500).json({ error: 'Failed to get autopilot status' });
+  }
+});
+
+// POST /api/settings/autopilot/run-now — force a planning pass right now.
+// Bypasses the once-per-day guard and the send window so the user can kick off
+// (and verify) sending on demand. Returns exactly what happened.
+router.post('/autopilot/run-now', async (req, res) => {
+  try {
+    const autopilot = require('../services/autopilot');
+    const queueSvc  = require('../services/queue');
+    const user = await storage.getUserById(req.session.userId);
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    if (!user.autopilot || !user.autopilot.enabled) {
+      return res.status(400).json({ error: 'Enable auto-outreach first, then run.' });
+    }
+
+    const emailConnected = !!(user.gmail?.connected)
+      || !!(user.zoho?.connected && user.zoho.accessToken && user.zoho.refreshToken)
+      || !!(user.outlook?.connected && user.outlook.accessToken);
+    if (!emailConnected) return res.status(400).json({ error: 'No email account connected. Connect one in the Email tab first.' });
+    if ((user.credits || 0) <= 0) return res.status(402).json({ error: 'Out of credits — add credits to send.' });
+
+    const candidates = await storage.getUserCandidates(req.session.userId);
+
+    // Force a fresh run: clear today's guard so planDailyRun re-plans, and send
+    // the first one in ~1 minute regardless of the configured window.
+    user.autopilot.lastRunDate = null;
+    const forced = { ...user.autopilot, windowStart: '00:00', windowEnd: '23:59', weekdaysOnly: false };
+    const plan = autopilot.planDailyRun({ ...user, autopilot: forced }, candidates, new Date());
+
+    if (!plan.ran) {
+      return res.json({ queued: 0, reason: plan.reason, message: `Nothing to send (${plan.reason}).` });
+    }
+    if (!plan.jobs || !plan.jobs.length) {
+      return res.json({ queued: 0, reason: plan.reason || 'no_jobs', message: 'No eligible candidates to email right now.' });
+    }
+
+    // Schedule the first one a minute out, the rest on their normal cadence
+    queueSvc.addJobs(plan.jobs);
+    user.autopilot.lastRunDate = plan.lastRunDate;
+    await storage.saveUser(user);
+
+    const nextAt = plan.jobs.map(j => j.scheduledAt).sort()[0];
+    return res.json({
+      queued: plan.jobs.length,
+      eligibleTotal: plan.eligibleTotal,
+      effectiveCap: plan.effectiveCap,
+      nextAt,
+      message: `Queued ${plan.jobs.length} — first goes out around ${new Date(nextAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}.`
+    });
+  } catch (err) {
+    console.error('Autopilot run-now error:', err);
+    return res.status(500).json({ error: 'Run failed: ' + err.message });
   }
 });
 

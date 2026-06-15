@@ -108,7 +108,8 @@ const API = {
     disconnectOutlook() { return API.delete('/api/settings/outlook'); },
     outlookStatus() { return API.get('/api/settings/outlook-status'); },
     credits() { return API.get('/api/settings/credits'); },
-    autopilotStatus() { return API.get('/api/settings/autopilot-status'); }
+    autopilotStatus() { return API.get('/api/settings/autopilot-status'); },
+    autopilotRunNow() { return API.post('/api/settings/autopilot/run-now'); }
   },
 
   // Admin

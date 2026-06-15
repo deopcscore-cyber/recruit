@@ -73,7 +73,9 @@
       "Bash(sed -n '670,685p' server.js)",
       "Bash(sed -n '44,60p' routes/analytics.js)",
       "Bash(node --check services/scheduling.js)",
-      "Bash(git checkout *)"
+      "Bash(git checkout *)",
+      "Bash(git commit --allow-empty -q -m 'chore: trigger Railway deploy \\(autopilot timezone + silent-failure fixes\\) *)",
+      "Bash(rm -rf /tmp/rn /tmp/rn.jar /tmp/rn.log)"
     ]
   }
 }
