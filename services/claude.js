@@ -114,28 +114,33 @@ PARAGRAPH 1 — Open with the specific thing you noticed (2-3 sentences):
   - "Going from [X] to [Y] without leaving [Company] is a harder move than it looks from the outside."
 - Reference real companies, real roles, real transitions by name. Vary the structure — a short punchy first sentence works well.
 
-PARAGRAPH 2 — The one thing they may not realise (2-3 sentences):
-- Share ONE concrete, specific insight about how their story reads from the outside versus what it actually represents.
-- Be direct and honest — not critical, not flattering. Like a smart colleague giving an unfiltered observation.
-- Focus on a specific transition, gap, or positioning issue that is unique to THEIR background. Name it plainly.
-- Do NOT say "your resume is weak" or anything negative. Say what you see — the contrast between what they built and how it currently reads.
-- Example: "The compliance move at Elevance reads as a lateral on paper — but based on what you were doing in operations before it, that's actually a significant scope expansion that most job descriptions wouldn't surface."
+PARAGRAPH 2 — GIVE one genuinely useful insight, free (2-3 sentences):
+- This is the most important paragraph. Do NOT tease ("I have some thoughts"). Actually DELIVER one concrete, specific, useful observation they can act on — real value, given freely, with nothing asked in return yet.
+- It should be the kind of thing a sharp peer would tell them over coffee: a specific way their story is underselling them, and what a stronger framing would look like.
+- Be specific to THEIR background — name the real transition, role, or gap. Make it feel like genuine insight, not a setup for a pitch.
+- Example: "Here's the thing most people miss reading your background: the compliance move at Elevance looks like a lateral on paper, but coming out of the operations work you did before it, that's actually a major jump in scope. Framed right, that single transition is the strongest argument for you at the VP level — but it's currently buried as just another line."
+- Do NOT say "your resume is weak." Frame it as untapped value, not a flaw.
 
-PARAGRAPH 3 — Short, confident close (2 sentences max):
+PARAGRAPH 3 — Close with a specific, easy question (2 sentences max):
 - Do NOT mention career coaching, resume services, or anything you sell.
-- Do NOT ask for a call, meeting, or to "connect."
-- Simply offer to share what you wrote down — frame it as: you already have a few specific thoughts on this and you're happy to share them if they want to see it.
-- One clean sentence: "I wrote down a few specific thoughts on this — reply if you want me to send them over."
-- Optional: add a second sentence that reinforces it's specific to them: "Nothing generic — just what I actually see when I look at your background."
+- Do NOT ask for a call, meeting, or "connect."
+- Do NOT say "reply if you want my thoughts" — you already gave a real one above.
+- End with ONE direct, genuinely curious question about THEIR situation that's easy to answer in a single line. The question should follow naturally from the insight you just gave.
+- Good question styles (pick what fits their situation):
+  - "Out of curiosity — is moving up in scope something you're actively thinking about, or are you happy where you are?"
+  - "Was that move a deliberate step toward [X], or did it just happen that way?"
+  - "Are you even open to a move right now, or just keeping an eye on what's out there?"
+- The goal: a real human question that's almost rude NOT to answer, and takes 10 seconds to reply to.
 
 RULES:
-- Do NOT add a signature, sign-off name, title, or company at the end — the sender's email signature is appended automatically. End the email after the final sentence of paragraph 3.
-- Under 220 words total — short emails get read, long emails get deleted
+- Do NOT add a signature, sign-off name, title, or company at the end — the sender's email signature is appended automatically. End the email after the question in paragraph 3.
+- Under 200 words total — short emails get read, long emails get deleted
 - Do NOT mention career coaching, consulting, resume writing, or any service you offer
 - Do NOT use numbers like "helped 2,000 professionals" — that's marketing copy, not a human
 - Do NOT use phrases like "exciting opportunity", "I came across your profile", "no obligation", "quick call"
 - Sound like a real person who genuinely read their background — direct, curious, warm but not salesy
-- The email should feel like it was written specifically for this one person, not templated
+- The email must end with a question mark
+- The email should feel written specifically for this one person, not templated
 - Output as JSON with two fields: { "subject": "...", "body": "..." }
 - subject: a short, specific subject line (under 9 words) that references something real about their background — NOT generic. Examples: "Your path from X to Y", "A thought on your compliance transition", "Something I noticed about your background at [Company]"
 - body: the full email body starting with "Dear ${firstName},"
