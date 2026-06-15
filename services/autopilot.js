@@ -55,6 +55,11 @@ function windowBounds(cfg, now, offsetHours) {
   const s = parseHM(cfg.windowStart), e = parseHM(cfg.windowEnd);
   const startLocal = new Date(local); startLocal.setUTCHours(s.h, s.m, 0, 0);
   const endLocal   = new Date(local); endLocal.setUTCHours(e.h, e.m, 0, 0);
+  // If end is at/before start the window crosses midnight (e.g. 14:00→03:00):
+  // treat the end as the following day so the window isn't a negative span.
+  if (endLocal.getTime() <= startLocal.getTime()) {
+    endLocal.setUTCDate(endLocal.getUTCDate() + 1);
+  }
   return {
     startMs: startLocal.getTime() - offsetHours * 3600 * 1000,
     endMs:   endLocal.getTime()   - offsetHours * 3600 * 1000,
@@ -151,4 +156,31 @@ function planDailyRun(user, candidates, now = new Date()) {
   return { ran: true, jobs, count: jobs.length, lastRunDate: today, effectiveCap: cap, eligibleTotal: eligible.length };
 }
 
-module.exports = { DEFAULTS, getConfig, effectiveCap, daysSinceStart, planDailyRun };
+/**
+ * Explain the current autopilot state for the dashboard — returns a blocker
+ * code + human message when nothing will send, or { ok:true } when healthy.
+ * @param opts.emailConnected  whether the user has any email provider connected
+ * @param opts.credits         current credit balance (cents)
+ * @param opts.eligible        number of eligible (uncontacted) candidates
+ */
+function diagnose(user, { emailConnected, credits, eligible, now = new Date() } = {}) {
+  const cfg = getConfig(user);
+  if (!cfg.enabled)      return { ok: false, blocker: 'disabled',     message: 'Auto-outreach is turned off.' };
+  if (!emailConnected)   return { ok: false, blocker: 'no_email',     message: 'No email account connected. Connect Gmail, Zoho, or Outlook in the Email tab — nothing can send until then.' };
+  if ((credits || 0) <= 0) return { ok: false, blocker: 'no_credits', message: 'Out of credits. Auto-outreach is paused until your balance is topped up.' };
+
+  const offset = scheduling.userOffset(user);
+  const { startMs, endMs, dow } = windowBounds(cfg, now, offset);
+  if (cfg.weekdaysOnly && (dow === 0 || dow === 6)) {
+    return { ok: false, blocker: 'weekend', message: 'It\'s the weekend — weekdays-only is on, so sending resumes Monday.' };
+  }
+  if (!eligible || eligible <= 0) {
+    return { ok: false, blocker: 'no_candidates', message: 'No uncontacted candidates left to email. Import more and they\'ll start going out automatically.' };
+  }
+  const t = now.getTime();
+  if (t > endMs)  return { ok: true, blocker: null, message: 'Today\'s window has passed — sending resumes at the start of your next send window.' };
+  if (t < startMs) return { ok: true, blocker: null, message: 'Waiting for today\'s send window to open.' };
+  return { ok: true, blocker: null, message: 'Active and sending.' };
+}
+
+module.exports = { DEFAULTS, getConfig, effectiveCap, daysSinceStart, planDailyRun, diagnose, windowBounds };

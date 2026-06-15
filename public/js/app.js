@@ -2584,13 +2584,30 @@ async function refreshAutopilotStatus() {
   try {
     const s = await API.settings.autopilotStatus();
     if (!s.enabled) { box.style.display = 'none'; return; }
-    const next = s.nextAt ? new Date(s.nextAt).toLocaleString([], { weekday:'short', hour:'2-digit', minute:'2-digit' }) : '—';
     box.style.display = 'block';
+
+    // Blocked — something is stopping sends. Show an amber warning with the reason.
+    if (s.blocker) {
+      box.style.background = '#fef3c7';
+      box.style.border = '1px solid #fcd34d';
+      box.style.color = '#92400e';
+      box.innerHTML = `<strong>⚠️ Not sending.</strong> ${escapeHtml(s.statusMessage || '')}`;
+      return;
+    }
+
+    // Healthy — reset to the blue "active" styling
+    box.style.background = '#eef2ff';
+    box.style.border = '1px solid #c7d2fe';
+    box.style.color = '#3730a3';
+    const next = s.nextAt ? new Date(s.nextAt).toLocaleString([], { weekday:'short', hour:'2-digit', minute:'2-digit' }) : '—';
+    const failNote = s.failedToday ? `<br><span style="color:#b45309">${s.failedToday} failed today${s.lastError ? ' — ' + escapeHtml(s.lastError) : ''}</span>` : '';
     box.innerHTML = `
       <strong>Active.</strong> Sent <strong>${s.sentToday}</strong> today ·
       ${s.pendingToday} queued · next at <strong>${next}</strong><br>
       Today's limit: ${s.todaysCap}${s.warmup && s.todaysCap < s.dailyCap ? ` <span style="opacity:.7">(warming up → ${s.dailyCap})</span>` : ''} ·
-      <strong>${s.eligibleRemaining}</strong> candidates remaining in pipeline`;
+      <strong>${s.eligibleRemaining}</strong> candidates remaining in pipeline
+      ${s.nextAt ? '' : `<br><span style="opacity:.8">${escapeHtml(s.statusMessage || '')}</span>`}
+      ${failNote}`;
   } catch { box.style.display = 'none'; }
 }
 

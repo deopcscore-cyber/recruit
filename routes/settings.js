@@ -343,7 +343,21 @@ router.get('/autopilot-status', async (req, res) => {
     const pending = jobs.filter(j => j.status === 'pending');
     const today = new Date().toISOString().slice(0, 10);
     const sentToday = jobs.filter(j => j.status === 'sent' && (j.sentAt || '').slice(0, 10) === today).length;
+    const failedToday = jobs.filter(j => j.status === 'failed' && (j.createdAt || '').slice(0, 10) === today);
     const nextAt = pending.map(j => j.scheduledAt).sort()[0] || null;
+
+    // Is any email provider connected?
+    const emailConnected = !!(user.gmail?.connected)
+      || !!(user.zoho?.connected && user.zoho.accessToken && user.zoho.refreshToken)
+      || !!(user.outlook?.connected && user.outlook.accessToken);
+
+    // Why isn't it sending? (no email / no credits / weekend / no candidates / window)
+    const diag = autopilot.diagnose(user, {
+      emailConnected,
+      credits: user.credits || 0,
+      eligible,
+      now: new Date()
+    });
 
     return res.json({
       enabled: cfg.enabled,
@@ -353,7 +367,13 @@ router.get('/autopilot-status', async (req, res) => {
       eligibleRemaining: eligible,
       pendingToday: pending.length,
       sentToday,
-      nextAt
+      failedToday: failedToday.length,
+      lastError: failedToday.length ? (failedToday[failedToday.length - 1].error || '') : '',
+      nextAt,
+      emailConnected,
+      ok: diag.ok,
+      blocker: diag.blocker,
+      statusMessage: diag.message
     });
   } catch (err) {
     return res.status(500).json({ error: 'Failed to get autopilot status' });
