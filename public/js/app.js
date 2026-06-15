@@ -179,6 +179,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   });
 
+  // Live local clock in the sidebar
+  startSidebarClock();
+
   // Analytics refresh button
   document.getElementById('refresh-analytics-btn').addEventListener('click', loadAnalyticsPage);
 
@@ -2576,6 +2579,24 @@ function renderAutopilotConfig(cfg) {
       finally { saveBtn.disabled = false; saveBtn.textContent = 'Save Auto-Outreach Settings'; }
     });
   }
+}
+
+// Live local clock — uses the browser's own timezone, so it's always the user's
+// real local time. Ticks every second; shows time + abbreviated zone.
+function startSidebarClock() {
+  const timeEl = document.getElementById('sidebar-clock-time');
+  if (!timeEl) return;
+  let tz = '';
+  try {
+    const parts = new Intl.DateTimeFormat([], { timeZoneName: 'short' }).formatToParts(new Date());
+    tz = (parts.find(p => p.type === 'timeZoneName') || {}).value || '';
+  } catch {}
+  const tick = () => {
+    const t = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    timeEl.textContent = tz ? `${t} ${tz}` : t;
+  };
+  tick();
+  setInterval(tick, 1000);
 }
 
 async function refreshAutopilotStatus() {
