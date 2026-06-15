@@ -2478,6 +2478,9 @@ async function loadSettingsPage() {
     // Daily auto-outreach (autopilot) config
     renderAutopilotConfig(style.autopilot || {});
 
+    // Outreach style sample
+    renderOutreachSample(style.outreachSample || '');
+
     await updateGmailStatus();
     await updateZohoStatus();
     await updateOutlookStatus();
@@ -2544,6 +2547,36 @@ function collectFollowUpSteps() {
   return [...document.querySelectorAll('#followup-steps .fu-days')]
     .map(inp => ({ days: parseInt(inp.value, 10) }))
     .filter(s => Number.isFinite(s.days) && s.days >= 1 && s.days <= 90);
+}
+
+// ---- Outreach style sample ----
+function renderOutreachSample(sample) {
+  const ta = document.getElementById('outreach-sample');
+  if (!ta) return;
+  ta.value = sample || '';
+
+  const saveBtn = document.getElementById('outreach-sample-save');
+  if (saveBtn && !saveBtn._wired) {
+    saveBtn._wired = true;
+    saveBtn.addEventListener('click', async () => {
+      saveBtn.disabled = true; saveBtn.textContent = 'Saving…';
+      try {
+        await API.settings.update({ outreachSample: ta.value });
+        Toast.success(ta.value.trim().length > 40 ? 'Style saved — outreach will now match your sample' : 'Saved');
+      } catch (err) { Toast.error(err.message); }
+      finally { saveBtn.disabled = false; saveBtn.textContent = 'Save Style Sample'; }
+    });
+  }
+
+  const clearBtn = document.getElementById('outreach-sample-clear');
+  if (clearBtn && !clearBtn._wired) {
+    clearBtn._wired = true;
+    clearBtn.addEventListener('click', async () => {
+      ta.value = '';
+      try { await API.settings.update({ outreachSample: '' }); Toast.show('Style sample cleared — using the built-in approach'); }
+      catch (err) { Toast.error(err.message); }
+    });
+  }
 }
 
 // ---- Daily auto-outreach (autopilot) settings ----

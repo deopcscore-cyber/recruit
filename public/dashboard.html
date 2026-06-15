@@ -595,6 +595,30 @@
         <!-- ═══ AI & STYLE TAB ═══════════════════════════════════════════════ -->
         <div class="settings-tab-panel" data-panel="ai">
 
+          <!-- Outreach style sample -->
+          <div class="settings-card">
+            <div class="settings-card-header">
+              <h3>✍️ Your Outreach Style</h3>
+              <span class="settings-card-hint">Paste a sample email — the AI writes in your voice, not a generic template</span>
+            </div>
+            <div class="settings-card-body">
+              <p style="font-size:0.82rem;color:var(--text-muted);margin:0 0 12px;line-height:1.6">
+                Paste one outreach email you'd love to send — your real voice, structure and length.
+                Every outreach the AI generates will <strong>mirror this style</strong> while writing
+                fresh, personalized content for each candidate. This also keeps your emails looking
+                different from everyone else's. Leave blank to use the built-in approach.
+              </p>
+              <div class="form-group">
+                <label>Sample outreach email</label>
+                <textarea id="outreach-sample" rows="9" placeholder="Hi [name],
+
+I came across your work leading...&#10;&#10;[Paste a full example email here — the way YOU would write it. The AI copies the style, not the words.]"></textarea>
+              </div>
+              <button type="button" class="btn btn-primary btn-sm" id="outreach-sample-save">Save Style Sample</button>
+              <button type="button" class="btn btn-secondary btn-sm" id="outreach-sample-clear" style="margin-left:8px">Clear</button>
+            </div>
+          </div>
+
           <!-- Daily auto-outreach (Autopilot) -->
           <div class="settings-card" style="border:1px solid #c7d2fe">
             <div class="settings-card-header">

@@ -37,6 +37,7 @@ router.get('/', async (req, res) => {
       userType:                 user.userType                 || 'recruiter_company',
       resumeConsultantName:     user.resumeConsultantName     || '',
       resumeConsultantEmail:    user.resumeConsultantEmail    || '',
+      outreachSample:           user.outreachSample           || '',
       followUpConfig:           user.followUpConfig           || { enabled: true, steps: [{ days: 3 }, { days: 7 }] },
       autopilot:                Object.assign({ enabled:false, dailyCap:30, windowStart:'09:00', windowEnd:'17:00', weekdaysOnly:true, minSpacingMin:20, maxSpacingMin:60, warmup:true }, user.autopilot || {})
     });
@@ -83,6 +84,9 @@ router.put('/', async (req, res) => {
     // Resume consultant partner (for recruiter Victory emails)
     if (resumeConsultantName  !== undefined) user.resumeConsultantName  = resumeConsultantName.trim();
     if (resumeConsultantEmail !== undefined) user.resumeConsultantEmail = resumeConsultantEmail.trim();
+
+    // Outreach style sample — AI mirrors this when generating outreach
+    if (req.body.outreachSample !== undefined) user.outreachSample = String(req.body.outreachSample).slice(0, 4000);
 
     // Daily auto-outreach (autopilot) config
     if (req.body.autopilot && typeof req.body.autopilot === 'object') {
@@ -172,6 +176,7 @@ router.put('/', async (req, res) => {
       userType:                 user.userType                 || 'recruiter_company',
       resumeConsultantName:     user.resumeConsultantName     || '',
       resumeConsultantEmail:    user.resumeConsultantEmail    || '',
+      outreachSample:           user.outreachSample           || '',
       followUpConfig:           user.followUpConfig           || { enabled: true, steps: [{ days: 3 }, { days: 7 }] },
       autopilot:                Object.assign({ enabled:false, dailyCap:30, windowStart:'09:00', windowEnd:'17:00', weekdaysOnly:true, minSpacingMin:20, maxSpacingMin:60, warmup:true }, user.autopilot || {})
     });

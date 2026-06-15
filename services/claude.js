@@ -78,11 +78,63 @@ function formatUserStyle(user) {
 }
 
 async function generateOutreach(candidate, user) {
+  // If the user provided a sample of how their outreach should look, match that
+  // style instead of a built-in template — keeps every user's emails distinct.
+  if (user.outreachSample && user.outreachSample.trim().length > 40) {
+    return _generateFromSample(candidate, user);
+  }
   // Route to the right prompt based on the user's account type
   const type = user.userType || 'recruiter_company';
   if (type === 'career_consultant')      return _generateCareerConsultantOutreach(candidate, user);
   if (type === 'recruiter_independent')  return _generateIndependentRecruiterOutreach(candidate, user);
   return _generateCompanyRecruiterOutreach(candidate, user);
+}
+
+// ── Style-matched outreach from a user-provided sample ────────────────────────
+// The user pastes an example email they like; we mirror its voice, structure,
+// tone and length, but write fresh content for THIS candidate.
+async function _generateFromSample(candidate, user) {
+  const candidateInfo = formatCandidateContext(candidate);
+  const company       = getCompanyContext(user);
+  const firstName     = (candidate.name || '').trim().split(/\s+/)[0];
+  const sample        = user.outreachSample.trim().slice(0, 2500);
+
+  const prompt = `You are ${user.name || 'the sender'}${company.name ? ' at ' + company.name : ''}, writing a cold outreach email to the person below.
+
+The sender gave you a SAMPLE that represents EXACTLY the voice, tone, structure, paragraph count and length they want. Your job is to write a NEW email for THIS specific person that feels like it came from the same author as the sample — same rhythm, same personality, same format — but with content written fresh for this candidate.
+
+SAMPLE TO MATCH (mirror its style, NOT its specific content):
+"""
+${sample}
+"""
+
+${company.name || company.pitch ? `SENDER CONTEXT:\n${company.name ? 'Company: ' + company.name + '\n' : ''}${company.pitch ? 'About: ' + company.pitch : ''}\n` : ''}
+THE PERSON YOU'RE WRITING TO:
+${candidateInfo}
+
+RULES:
+- Match the sample's TONE, STRUCTURE, PARAGRAPH COUNT, and approximate LENGTH closely.
+- Do NOT copy sentences from the sample verbatim and do NOT reuse its names, companies, or specific details — reproduce its FEEL, not its words.
+- Personalize the actual content to THIS person: reference their real companies, roles, and career details from the info above.
+- Vary the wording naturally so two different candidates never get near-identical emails.
+- If the sample has a signature/sign-off, leave it out — the sender's signature is appended automatically.
+- Output as JSON with two fields: { "subject": "...", "body": "..." }. The subject should match the style of the sample's subject if it has one, otherwise write a short specific one. Body starts with the greeting (e.g. "Dear ${firstName}," or whatever greeting style the sample uses).
+
+Output ONLY valid JSON. No markdown, no commentary.`;
+
+  const response = await client.messages.create({
+    model: MODEL, max_tokens: 1000,
+    messages: [{ role: 'user', content: prompt }]
+  });
+  const raw = response.content[0].text.trim();
+  const costCents = calcCostCents(response.usage);
+  try {
+    const clean = raw.replace(/^```json\s*/i, '').replace(/```\s*$/, '').trim();
+    const parsed = JSON.parse(clean);
+    return { text: parsed.body || parsed.text || raw, subject: parsed.subject || '', costCents };
+  } catch {
+    return { text: raw, subject: '', costCents };
+  }
 }
 
 // ── Career Consultant outreach ────────────────────────────────────────────────
