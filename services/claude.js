@@ -77,6 +77,16 @@ function formatUserStyle(user) {
   return lines.join('\n') || 'Warm, professional, human';
 }
 
+// If the user provided an outreach sample, return a prompt block telling the
+// model to match their VOICE (tone/personality/rhythm) for messages that aren't
+// the cold outreach itself — follow-ups, replies. We borrow voice, not structure,
+// because those messages serve a different purpose than the original sample.
+function voiceGuidance(user) {
+  const s = (user && user.outreachSample || '').trim();
+  if (s.length < 40) return '';
+  return `\nWRITE IN THE SENDER'S VOICE. Below is a sample of how this sender naturally writes — match its tone, warmth, personality and rhythm. Do NOT copy its words or its structure (this message has a different purpose); just sound like the same person wrote it:\n"""\n${s.slice(0, 1500)}\n"""\n`;
+}
+
 async function generateOutreach(candidate, user) {
   // If the user provided a sample of how their outreach should look, match that
   // style instead of a built-in template — keeps every user's emails distinct.
@@ -752,6 +762,7 @@ If they ask what you charge:
 If they're very interested and asking what's next:
 → Guide them to send the resume if not done, or reference the feedback you'll be sending.
 
+${voiceGuidance(user)}
 CRITICAL RULES:
 - ALWAYS address their actual message FIRST before pivoting
 - Sound like a real person — specific, warm, direct
@@ -923,6 +934,7 @@ If they pushed back, were skeptical, or asked how you found them:
 If they gave specific availability for a call:
 → Acknowledge it warmly ("Thursday after 3pm and next Friday all day — noted, and I appreciate you making that easy."), but explain that before locking in time, you want to [next step] so the call is as productive as possible.
 
+${voiceGuidance(user)}
 CRITICAL RULES:
 - ALWAYS address what they actually said BEFORE pivoting to the next step
 - NEVER skip over a question, concern, or hesitation to get to the template
@@ -1026,7 +1038,7 @@ CANDIDATE INFORMATION:
 ${candidateInfo}
 
 ${scenarioInstructions}
-
+${voiceGuidance(user)}
 CRITICAL RULES:
 - Keep the entire email body under 150 words
 - Sound like a real person — specific, warm, not robotic
