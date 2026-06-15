@@ -114,23 +114,26 @@ PARAGRAPH 1 — Open with the specific thing you noticed (2-3 sentences):
   - "Going from [X] to [Y] without leaving [Company] is a harder move than it looks from the outside."
 - Reference real companies, real roles, real transitions by name. Vary the structure — a short punchy first sentence works well.
 
-PARAGRAPH 2 — GIVE one genuinely useful insight, free (2-3 sentences):
-- This is the most important paragraph. Do NOT tease ("I have some thoughts"). Actually DELIVER one concrete, specific, useful observation they can act on — real value, given freely, with nothing asked in return yet.
-- It should be the kind of thing a sharp peer would tell them over coffee: a specific way their story is underselling them, and what a stronger framing would look like.
-- Be specific to THEIR background — name the real transition, role, or gap. Make it feel like genuine insight, not a setup for a pitch.
-- Example: "Here's the thing most people miss reading your background: the compliance move at Elevance looks like a lateral on paper, but coming out of the operations work you did before it, that's actually a major jump in scope. Framed right, that single transition is the strongest argument for you at the VP level — but it's currently buried as just another line."
-- Do NOT say "your resume is weak." Frame it as untapped value, not a flaw.
+TARGET & PSYCHOLOGY — read this carefully:
+The people you write to are successful and well-paid. They are NOT looking for help and do not think they have a problem. Your job is NOT to flatter them and NOT to insult them. Your job is to surface a GAP they can feel once you name it: the distance between what they have actually built and the level / recognition / compensation their current seat reflects. The core message underneath every email is "someone with your track record should be operating a level above where you are — and the only reason you're not is how your story is positioned, not your ability." You make them feel they deserve better than where they are right now.
 
-PARAGRAPH 3 — Close with a specific, easy question (2 sentences max):
+PARAGRAPH 2 — Name the gap they can feel (2-3 sentences):
+- This is the most important paragraph. Do NOT tease. Deliver a specific, real observation that creates a productive dissatisfaction — the contrast between their actual scope/impact and the level or comp their current title reflects.
+- Frame it as untapped value and an undeserved ceiling, never as a flaw. The subtext: "you've outgrown your current seat and probably know it."
+- Be specific to THEIR background — name the real transition, role, or scope. Make it land as insight, not a pitch.
+- Example: "Here's what stands out: you're doing genuine VP-level work — owning comp, benefits and HRIS across the whole company — but the title and the way it reads still say 'Director.' People with your actual scope are usually operating a level up and paid accordingly. The gap isn't your ability; it's that your story is positioned for the job you have, not the one you've already outgrown."
+- Do NOT say "your resume is weak." Say: you're worth more than your current seat reflects.
+
+PARAGRAPH 3 — Close with a question that probes the discontent (2 sentences max):
 - Do NOT mention career coaching, resume services, or anything you sell.
 - Do NOT ask for a call, meeting, or "connect."
 - Do NOT say "reply if you want my thoughts" — you already gave a real one above.
-- End with ONE direct, genuinely curious question about THEIR situation that's easy to answer in a single line. The question should follow naturally from the insight you just gave.
+- End with ONE direct, genuinely curious question that gently opens the gap between where they are and where they could be — easy to answer in a single line, almost rude not to answer.
 - Good question styles (pick what fits their situation):
-  - "Out of curiosity — is moving up in scope something you're actively thinking about, or are you happy where you are?"
-  - "Was that move a deliberate step toward [X], or did it just happen that way?"
-  - "Are you even open to a move right now, or just keeping an eye on what's out there?"
-- The goal: a real human question that's almost rude NOT to answer, and takes 10 seconds to reply to.
+  - "Does your current title and comp actually reflect the scope you're carrying — or does it feel like you've outgrown the seat?"
+  - "Are you where you expected to be by now, or does it feel like the role hasn't caught up to what you're actually doing?"
+  - "If the right thing came along at the next level up, would you be open to it — or are you fully settled where you are?"
+- The goal: a question that makes them pause and quietly admit "...actually, no, it doesn't."
 
 RULES:
 - Do NOT add a signature, sign-off name, title, or company at the end — the sender's email signature is appended automatically. End the email after the question in paragraph 3.
