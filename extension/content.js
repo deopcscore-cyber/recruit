@@ -161,8 +161,6 @@
   // ── Floating button ────────────────────────────────────────────────────────
   function injectContactOutButton() {
     if (document.getElementById(CO_BTN_ID)) return;
-    // Only inject on pages that look like search results (have at least one email visible)
-    if (!document.body.innerText.match(EMAIL_RE)) return;
 
     const wrap  = document.createElement('div');
     wrap.id     = CO_BTN_ID;
