@@ -137,7 +137,7 @@
       }
     }
 
-    // Work history
+    // Work history — "Title at Company" lines, skipping schools
     const career = [];
     for (const line of lines) {
       if (line === name || line.includes('@')) continue;
@@ -148,6 +148,23 @@
         const c = line.slice(atIdx + 4).replace(/\s+in\s+\d{4}.*/i, '').replace(/\s+\d{4}\s*[-–]\s*.*/,'').trim();
         if (t && c) career.push({ title: t, company: c });
       }
+    }
+
+    // Education — school lines (degree at school, or school name alone)
+    const education = [];
+    for (const line of lines) {
+      if (line === name || line.includes('@')) continue;
+      if (!SCHOOL_WORDS.test(line)) continue;
+      // Strip trailing year ranges like "in 2016 - 2019" or "1985"
+      const clean = line.replace(/\s+in\s+\d{4}.*/i, '').replace(/\s+\d{4}\s*[-–]\s*.*/,'').trim();
+      const atIdx = clean.lastIndexOf(' at ');
+      if (atIdx > 3) {
+        const degree = clean.slice(0, atIdx).trim();
+        const school = clean.slice(atIdx + 4).trim();
+        if (degree && school) { education.push({ degree, school }); continue; }
+      }
+      // Just a school name with no "at" separator
+      if (clean.length > 4) education.push({ degree: '', school: clean });
     }
 
     // Location — comma-separated, letters only, not a job line
@@ -165,7 +182,7 @@
       .map(e => e.toLowerCase()).filter(e => isEmail(e) && !IGNORE_DOMAINS.test(e));
     const bestEmail = allEmails.find(e => PERSONAL_RE.test(e)) || email;
 
-    return { name, email: bestEmail, linkedin, title, company, location, phone, career };
+    return { name, email: bestEmail, linkedin, title, company, location, phone, career, education };
   }
 
   // ── Auto-expand all "...more" / "Show more" buttons ────────────────────────
