@@ -27,14 +27,23 @@
     return location.hostname.includes('contactout.com');
   }
 
-  // ── Find candidate card elements by walking up from visible email text nodes ──
-  // This approach doesn't rely on any ContactOut class names or HTML structure —
-  // it finds email addresses in the DOM text, then climbs up to the card boundary.
-  function findCandidateCards() {
-    const seen   = new Set(); // dedup by email
-    const cards  = [];        // { email, el } pairs
+  // UI strings that ContactOut injects — never a candidate name
+  const NOT_A_NAME = new Set([
+    'view phone', 'view email', 'ai write personalized message',
+    'send email', 'save', 'export', 'search', 'clear all',
+    '...more', '…more', 'show more', 'see more', 'more',
+    'people', 'companies', 'advanced', 'select all'
+  ]);
 
-    // Walk every text node in the page
+  // ── Find candidate cards by walking up from email text nodes ──────────────
+  // Key insight: ContactOut splits each row into a LEFT panel (name/job)
+  // and a RIGHT panel (email/phone/buttons). Walking up from an email node
+  // lands in the right panel — we need to keep going until we reach the
+  // full row ancestor that ALSO contains a job title ("X at Y").
+  function findCandidateCards() {
+    const seen  = new Set();
+    const cards = [];
+
     const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, null);
     let node;
     while ((node = walker.nextNode())) {
@@ -44,18 +53,20 @@
       if (seen.has(email)) continue;
       seen.add(email);
 
-      // Walk UP from this text node's parent to find the card boundary.
-      // The card is the first ancestor that:
-      //   (a) has at least 3 newlines worth of content (name + title + company)
-      //   (b) is not the whole page
+      // Walk UP until we find an ancestor that contains BOTH:
+      //   • the email (obviously), AND
+      //   • a job-title pattern (" at SomeCompany")
+      // The contact-info column only has email/phone/buttons, so we keep
+      // climbing until we hit the full person row which has the job history.
       let el = node.parentElement;
       let card = null;
-      for (let i = 0; i < 12; i++) {
+      for (let i = 0; i < 16; i++) {
         if (!el || el === document.body) break;
         const text = el.innerText || '';
-        const lines = text.split('\n').filter(l => l.trim()).length;
-        // A candidate card has 4+ non-empty lines and is not the entire results list
-        if (lines >= 4 && lines <= 40) {
+        // Must have a "Title at Company" pattern AND reasonable line count
+        const hasJob  = / at [A-Z]/.test(text);
+        const lines   = text.split('\n').filter(l => l.trim()).length;
+        if (hasJob && lines >= 4 && lines <= 60) {
           card = el;
           break;
         }
@@ -63,7 +74,13 @@
       }
       if (card) cards.push({ email, el: card });
     }
-    return cards;
+
+    // Dedup cards (same DOM element captured via multiple emails)
+    const uniqueEls = new Map();
+    for (const c of cards) {
+      if (!uniqueEls.has(c.el)) uniqueEls.set(c.el, c);
+    }
+    return [...uniqueEls.values()];
   }
 
   // ── Extract one candidate from a card element ──────────────────────────────
@@ -73,14 +90,13 @@
       .map(l => l.trim())
       .filter(Boolean);
 
-    // LinkedIn URL — try href first, then data attributes, then text containing linkedin.com/in/
+    // LinkedIn URL
     let linkedin = '';
     const liAnchor = el.querySelector('a[href*="linkedin.com/in/"]');
     if (liAnchor) {
       linkedin = liAnchor.href.split('?')[0];
     } else {
-      // Some SPAs store it in data attributes
-      const dataEl = el.querySelector('[data-url*="linkedin.com/in/"], [data-href*="linkedin.com/in/"]');
+      const dataEl = el.querySelector('[data-url*="linkedin.com/in/"],[data-href*="linkedin.com/in/"]');
       if (dataEl) linkedin = (dataEl.dataset.url || dataEl.dataset.href || '').split('?')[0];
     }
 
@@ -88,11 +104,15 @@
     const telLink = el.querySelector('a[href^="tel:"]');
     const phone = telLink ? telLink.href.replace('tel:', '').trim() : '';
 
-    // Name — first line that looks like a human name (2–5 words, letters only, no @)
+    // Name — first line that looks like a human name:
+    //   • 2–5 words, letters/hyphens/apostrophes only
+    //   • NOT a known ContactOut UI string
+    //   • NOT a job title (no " at ")
     let name = '';
     for (const line of lines) {
       if (line.includes('@')) continue;
-      if (line.includes(' at ') || line.includes(' in ')) continue;
+      if (line.includes(' at ') || line.includes(' - ')) continue;
+      if (NOT_A_NAME.has(line.toLowerCase())) continue;
       const words = line.split(/\s+/);
       if (words.length >= 2 && words.length <= 5 && /^[A-Za-z\-'. ]+$/.test(line)) {
         name = line;
@@ -100,26 +120,28 @@
       }
     }
 
-    // Title + Company — first line matching "Title at Company" (skip name and email lines)
+    // Title + Company — first "X at Y" line that isn't a school
+    const SCHOOL_WORDS = /university|college|school|institute|bachelor|master|degree/i;
     let title = '', company = '';
     for (const line of lines) {
       if (line === name || line.includes('@')) continue;
+      if (SCHOOL_WORDS.test(line)) continue;
       const atIdx = line.lastIndexOf(' at ');
       if (atIdx > 3 && atIdx < line.length - 4) {
-        title   = line.slice(0, atIdx).trim()
-          .replace(/^(Vice President|VP|Director|Manager|Senior|Head|Chief|Lead),?\s+/i, m => m); // keep full title
+        title   = line.slice(0, atIdx).trim();
         company = line.slice(atIdx + 4)
-          .replace(/\s+in\s+\d{4}.*/i, '')   // strip "in 2020 - Present"
-          .replace(/\s+\d{4}\s*[-–]\s*.*/,'') // strip trailing years
+          .replace(/\s+in\s+\d{4}.*/i, '')
+          .replace(/\s+\d{4}\s*[-–]\s*.*/,'')
           .trim();
-        break;
+        if (title && company) break;
       }
     }
 
-    // Work history — all "Title at Company" lines
+    // Work history
     const career = [];
     for (const line of lines) {
       if (line === name || line.includes('@')) continue;
+      if (SCHOOL_WORDS.test(line)) continue;
       const atIdx = line.lastIndexOf(' at ');
       if (atIdx > 3 && atIdx < line.length - 4) {
         const t = line.slice(0, atIdx).trim();
@@ -128,22 +150,20 @@
       }
     }
 
-    // Location — line that has commas and looks like "City, State, Country"
+    // Location — comma-separated, letters only, not a job line
     let location = '';
     for (const line of lines) {
-      if (line.includes('@') || line === name) continue;
-      if (line.includes(',') && !line.includes(' at ') && /^[A-Za-z\s,]+$/.test(line)) {
+      if (line.includes('@') || line === name || line.includes(' at ')) continue;
+      if (line.includes(',') && /^[A-Za-z\s,]+$/.test(line) && line.length < 80) {
         location = line;
         break;
       }
     }
 
-    // Prefer personal email
+    // Prefer personal email over work email
     const allEmails = ((el.innerText || '').match(EMAIL_RE) || [])
-      .map(e => e.toLowerCase())
-      .filter(e => isEmail(e) && !IGNORE_DOMAINS.test(e));
-    const personalEmail = allEmails.find(e => PERSONAL_RE.test(e));
-    const bestEmail = personalEmail || email;
+      .map(e => e.toLowerCase()).filter(e => isEmail(e) && !IGNORE_DOMAINS.test(e));
+    const bestEmail = allEmails.find(e => PERSONAL_RE.test(e)) || email;
 
     return { name, email: bestEmail, linkedin, title, company, location, phone, career };
   }
