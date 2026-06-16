@@ -65,6 +65,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   document.getElementById('sidebar-user-name').textContent = currentUser.name;
   document.getElementById('sidebar-user-email').textContent = currentUser.email;
 
+  // Email reconnect banner — show if the Gmail token expired
+  initReauthBanner();
+
   // Credits display
   updateCreditsDisplay(currentUser.credits);
 
@@ -2649,6 +2652,32 @@ function renderAutopilotConfig(cfg) {
         Toast.error(err.message);
       } finally { runBtn.disabled = false; runBtn.textContent = '▶ Send batch now'; }
     });
+  }
+}
+
+// Email reconnect banner — appears when the email token has expired so users
+// notice immediately instead of finding out only when a send fails.
+function initReauthBanner() {
+  const banner = document.getElementById('reauth-banner');
+  if (!banner) return;
+  if (!currentUser || !currentUser.emailNeedsReauth) { banner.style.display = 'none'; return; }
+  banner.style.display = 'flex';
+
+  const reconnect = document.getElementById('reauth-reconnect-btn');
+  if (reconnect && !reconnect._wired) {
+    reconnect._wired = true;
+    reconnect.addEventListener('click', async () => {
+      reconnect.disabled = true; reconnect.textContent = 'Opening…';
+      try {
+        const { url } = await API.email.getConnectUrl();
+        window.location.href = url;
+      } catch (err) { Toast.error(err.message); reconnect.disabled = false; reconnect.textContent = 'Reconnect now'; }
+    });
+  }
+  const dismiss = document.getElementById('reauth-dismiss-btn');
+  if (dismiss && !dismiss._wired) {
+    dismiss._wired = true;
+    dismiss.addEventListener('click', () => { banner.style.display = 'none'; });
   }
 }
 

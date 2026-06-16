@@ -146,7 +146,8 @@ router.get('/me', requireAuth, async (req, res) => {
       totalSpent: user.totalSpent || 0,
       resumeConsultantName:  user.resumeConsultantName  || '',
       resumeConsultantEmail: user.resumeConsultantEmail || '',
-      tzOffset: (typeof user.tzOffset === 'number') ? user.tzOffset : null
+      tzOffset: (typeof user.tzOffset === 'number') ? user.tzOffset : null,
+      emailNeedsReauth: !!(user.gmail && user.gmail.needsReauth)
     });
   } catch (err) {
     console.error('Get me error:', err);

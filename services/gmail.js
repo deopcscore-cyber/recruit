@@ -163,6 +163,7 @@ async function handleGmailError(err, user) {
   if (isInvalidGrant && user && user.gmail) {
     user.gmail.connected = false;
     user.gmail.tokens = null;
+    user.gmail.needsReauth = true;   // surfaced as a reconnect banner in the app
     await storage.saveUser(user);
     throw new Error('GMAIL_REAUTH_REQUIRED: Your Gmail connection has expired. Please go to Settings → Email and reconnect Gmail.');
   }
