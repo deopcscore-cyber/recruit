@@ -205,6 +205,36 @@ router.put('/:id', async (req, res) => {
   }
 });
 
+// DELETE /api/candidates/bulk  — delete multiple candidates by ID array
+// Body: { ids: ["id1","id2",...] }
+router.delete('/bulk', async (req, res) => {
+  try {
+    const { ids } = req.body;
+    if (!Array.isArray(ids) || ids.length === 0) return res.status(400).json({ error: 'Provide an ids array' });
+
+    const candidates = await storage.getAllCandidates();
+    const idSet = new Set(ids);
+
+    // Only allow deleting own candidates
+    const toDelete = candidates.filter(c => idSet.has(c.id) && c.userId === req.session.userId);
+    const updated  = candidates.filter(c => !idSet.has(c.id) || c.userId !== req.session.userId);
+    await storage.saveAllCandidates(updated);
+
+    // Clean up resume files
+    toDelete.forEach(c => {
+      ['pdf', 'docx'].forEach(ext => {
+        const p = path.join(RESUMES_DIR, `${c.id}.${ext}`);
+        if (fs.existsSync(p)) try { fs.unlinkSync(p); } catch (_) {}
+      });
+    });
+
+    return res.json({ success: true, deleted: toDelete.length });
+  } catch (err) {
+    console.error('Bulk delete error:', err);
+    return res.status(500).json({ error: 'Failed to bulk delete' });
+  }
+});
+
 // DELETE /api/candidates/:id
 router.delete('/:id', async (req, res) => {
   try {
