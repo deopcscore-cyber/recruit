@@ -7,6 +7,7 @@
   "permissions": ["storage", "tabs"],
 
   "host_permissions": [
+    "https://contactout.com/*",
     "https://app.contactout.com/*",
     "https://www.linkedin.com/*",
     "https://*.up.railway.app/*",
@@ -17,6 +18,7 @@
   "content_scripts": [
     {
       "matches": [
+        "https://contactout.com/*",
         "https://app.contactout.com/*",
         "https://www.linkedin.com/in/*"
       ],
