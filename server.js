@@ -81,6 +81,7 @@ app.use('/api/queue',      require('./routes/queue'));
 app.use('/api/push',       require('./routes/push'));
 app.use('/api/templates',  require('./routes/templates'));
 app.use('/api/linkedin',   require('./routes/linkedin'));
+app.use('/api/contactout', require('./routes/contactout'));
 app.use('/api/admin',      require('./routes/admin'));
 
 // ─── Admin bootstrap — grant admin to the logged-in user if they match ADMIN_EMAIL ──

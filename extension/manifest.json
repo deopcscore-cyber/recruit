@@ -1,12 +1,13 @@
 {
   "manifest_version": 3,
   "name": "Recruit Pro Importer",
-  "version": "1.0.0",
-  "description": "One-click LinkedIn profile import into Recruit Pro. Reads ContactOut emails automatically if ContactOut is also installed.",
+  "version": "2.0.0",
+  "description": "One-click import from ContactOut search results into Recruit Pro. Also works on LinkedIn profiles.",
 
   "permissions": ["storage", "tabs"],
 
   "host_permissions": [
+    "https://app.contactout.com/*",
     "https://www.linkedin.com/*",
     "https://*.up.railway.app/*",
     "https://*.railway.app/*",
@@ -15,7 +16,10 @@
 
   "content_scripts": [
     {
-      "matches": ["https://www.linkedin.com/in/*"],
+      "matches": [
+        "https://app.contactout.com/*",
+        "https://www.linkedin.com/in/*"
+      ],
       "js": ["content.js"],
       "run_at": "document_idle",
       "all_frames": false
