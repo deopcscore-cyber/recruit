@@ -85,7 +85,9 @@ router.post('/bulk-import', bulkLimiter, async (req, res) => {
       try {
         if (!raw.name || raw.name.trim().length < 2) { failed++; continue; }
 
-        const email    = (raw.email || '').toLowerCase().trim();
+        const email = (raw.email || '').toLowerCase().trim();
+        // Require a revealed email — don't import masked/empty profiles
+        if (!email) { skipped++; continue; }
         const linkedin = normalizeLinkedIn(raw.linkedin);
 
         // Duplicate check — by email OR LinkedIn URL

@@ -7,8 +7,9 @@
 (function () {
   'use strict';
 
-  const EMAIL_RE = /[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/g;
+  const EMAIL_RE     = /[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/g;
   const IGNORE_DOMAINS = /@(linkedin\.com|licdn\.com|contactout\.com|example\.com|sentry\.|w3\.org)/i;
+  const PERSONAL_RE  = /@(gmail|yahoo|hotmail|outlook|icloud|me|live|aol|protonmail|pm)\./i;
 
   function isEmail(s) {
     return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(s);
@@ -61,11 +62,12 @@
     const liLink = row.querySelector('a[href*="linkedin.com/in/"]');
     const linkedin = liLink ? liLink.href.split('?')[0] : '';
 
-    // Email — scrape visible text (ContactOut shows them plainly)
+    // Email — prefer personal (gmail/yahoo/etc) over work email
     const emailMatches = (rowText.match(EMAIL_RE) || []).filter(
       e => isEmail(e) && !IGNORE_DOMAINS.test(e)
     );
-    const email = emailMatches[0] || '';
+    const personalEmail = emailMatches.find(e => PERSONAL_RE.test(e));
+    const email = personalEmail || emailMatches[0] || '';
 
     // Phone — look for tel: links or phone-pattern text
     const telLink = row.querySelector('a[href^="tel:"]');
@@ -187,12 +189,18 @@
     await expandAllMore();
 
     setCoBtnText('⏳ Reading contacts…', '#1c7ed6');
-    const rows    = findCandidateRows();
-    const candidates = rows.map(extractCandidate).filter(c => c.name);
+    const rows = findCandidateRows();
+    const all  = rows.map(extractCandidate).filter(c => c.name);
+    // Only import profiles where an email was visible — skip masked/hidden ones
+    const candidates = all.filter(c => c.email);
+    const noEmail    = all.length - candidates.length;
 
     if (candidates.length === 0) {
-      setCoBtnText('❌ No contacts found on page', '#e03131');
-      setTimeout(resetCoBtn, 4000);
+      const msg = noEmail > 0
+        ? `❌ No revealed emails on page — reveal emails in ContactOut first`
+        : '❌ No contacts found on page';
+      setCoBtnText(msg, '#e03131');
+      setTimeout(resetCoBtn, 5000);
       return;
     }
 
@@ -210,10 +218,10 @@
         return;
       }
       const { added = 0, skipped = 0 } = response;
-      const msg = skipped > 0
-        ? `✓ ${added} added · ${skipped} already in pipeline`
-        : `✓ ${added} contacts added`;
-      setCoBtnText(msg, '#2f9e44');
+      const parts = [`✓ ${added} added`];
+      if (skipped > 0) parts.push(`${skipped} already in pipeline`);
+      if (noEmail > 0)  parts.push(`${noEmail} skipped (no email)`);
+      setCoBtnText(parts.join(' · '), '#2f9e44');
       setTimeout(resetCoBtn, 6000);
     });
   }
