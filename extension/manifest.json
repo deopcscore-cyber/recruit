@@ -8,6 +8,7 @@
 
   "host_permissions": [
     "https://contactout.com/*",
+    "https://www.contactout.com/*",
     "https://app.contactout.com/*",
     "https://www.linkedin.com/*",
     "https://*.up.railway.app/*",
@@ -19,6 +20,7 @@
     {
       "matches": [
         "https://contactout.com/*",
+        "https://www.contactout.com/*",
         "https://app.contactout.com/*",
         "https://www.linkedin.com/in/*"
       ],

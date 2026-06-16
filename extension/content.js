@@ -7,6 +7,8 @@
 (function () {
   'use strict';
 
+  console.log('[Recruit Pro] content script loaded on:', location.hostname, location.pathname);
+
   const EMAIL_RE      = /[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/g;
   const EMAIL_EXACT   = /^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$/;
   const IGNORE_DOMAINS = /@(linkedin\.com|licdn\.com|contactout\.com|example\.com|sentry\.|w3\.org)/i;
