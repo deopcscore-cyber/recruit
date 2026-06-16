@@ -7,15 +7,13 @@
 (function () {
   'use strict';
 
-  const EMAIL_RE     = /[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/g;
+  const EMAIL_RE      = /[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/g;
+  const EMAIL_EXACT   = /^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$/;
   const IGNORE_DOMAINS = /@(linkedin\.com|licdn\.com|contactout\.com|example\.com|sentry\.|w3\.org)/i;
-  const PERSONAL_RE  = /@(gmail|yahoo|hotmail|outlook|icloud|me|live|aol|protonmail|pm)\./i;
+  const PERSONAL_RE   = /@(gmail|yahoo|hotmail|outlook|icloud|me|live|aol|protonmail|pm)\./i;
 
-  function isEmail(s) {
-    return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(s);
-  }
-
-  function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+  function isEmail(s) { return EMAIL_EXACT.test(s); }
+  function sleep(ms)  { return new Promise(r => setTimeout(r, ms)); }
 
   /* ════════════════════════════════════════════════════════════
      CONTACTOUT — bulk import from search results page
@@ -27,137 +25,149 @@
     return location.hostname.includes('contactout.com');
   }
 
-  // ── Find all candidate rows on the page ────────────────────────────────────
-  // ContactOut renders results as a list of repeated card elements.
-  // We anchor on LinkedIn links — every row that has one is a candidate card.
-  function findCandidateRows() {
-    const liLinks = [...document.querySelectorAll('a[href*="linkedin.com/in/"]')];
-    if (liLinks.length === 0) return [];
+  // ── Find candidate card elements by walking up from visible email text nodes ──
+  // This approach doesn't rely on any ContactOut class names or HTML structure —
+  // it finds email addresses in the DOM text, then climbs up to the card boundary.
+  function findCandidateCards() {
+    const seen   = new Set(); // dedup by email
+    const cards  = [];        // { email, el } pairs
 
-    // Walk up from each LinkedIn link to find the common card ancestor.
-    // We look for an ancestor that contains an email address — that's the card boundary.
-    const rows = new Set();
-    for (const link of liLinks) {
-      let el = link;
-      for (let i = 0; i < 10; i++) {
-        el = el.parentElement;
-        if (!el) break;
-        const txt = el.innerText || '';
-        if (EMAIL_RE.test(txt) || txt.includes('@')) {
-          rows.add(el);
+    // Walk every text node in the page
+    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, null);
+    let node;
+    while ((node = walker.nextNode())) {
+      const txt = node.textContent.trim();
+      if (!isEmail(txt) || IGNORE_DOMAINS.test(txt)) continue;
+      const email = txt.toLowerCase();
+      if (seen.has(email)) continue;
+      seen.add(email);
+
+      // Walk UP from this text node's parent to find the card boundary.
+      // The card is the first ancestor that:
+      //   (a) has at least 3 newlines worth of content (name + title + company)
+      //   (b) is not the whole page
+      let el = node.parentElement;
+      let card = null;
+      for (let i = 0; i < 12; i++) {
+        if (!el || el === document.body) break;
+        const text = el.innerText || '';
+        const lines = text.split('\n').filter(l => l.trim()).length;
+        // A candidate card has 4+ non-empty lines and is not the entire results list
+        if (lines >= 4 && lines <= 40) {
+          card = el;
           break;
         }
-        // Also stop at very wide containers to avoid capturing the whole page
-        if (el === document.body) break;
+        el = el.parentElement;
       }
+      if (card) cards.push({ email, el: card });
     }
-    return [...rows];
+    return cards;
   }
 
   // ── Extract one candidate from a card element ──────────────────────────────
-  function extractCandidate(row) {
-    const rowText = row.innerText || row.textContent || '';
+  function extractCandidate({ email, el }) {
+    const lines = (el.innerText || '')
+      .split('\n')
+      .map(l => l.trim())
+      .filter(Boolean);
 
-    // LinkedIn URL
-    const liLink = row.querySelector('a[href*="linkedin.com/in/"]');
-    const linkedin = liLink ? liLink.href.split('?')[0] : '';
-
-    // Email — prefer personal (gmail/yahoo/etc) over work email
-    const emailMatches = (rowText.match(EMAIL_RE) || []).filter(
-      e => isEmail(e) && !IGNORE_DOMAINS.test(e)
-    );
-    const personalEmail = emailMatches.find(e => PERSONAL_RE.test(e));
-    const email = personalEmail || emailMatches[0] || '';
-
-    // Phone — look for tel: links or phone-pattern text
-    const telLink = row.querySelector('a[href^="tel:"]');
-    const phone = telLink ? telLink.href.replace('tel:', '').trim() : '';
-
-    // Name — ContactOut puts the name in a prominent element near the top of the card.
-    // Try common class name patterns, then fall back to the first sizeable bold text.
-    let name = '';
-    const nameSelectors = [
-      '[class*="name"]', '[class*="Name"]',
-      '[class*="person"]', 'h2', 'h3', 'h4',
-      'strong', 'b'
-    ];
-    for (const sel of nameSelectors) {
-      const el = row.querySelector(sel);
-      if (el) {
-        const t = el.textContent.trim();
-        // Must look like a human name: 2–5 words, no @ sign
-        if (t && !t.includes('@') && t.split(/\s+/).length >= 2 && t.split(/\s+/).length <= 6) {
-          name = t;
-          break;
-        }
-      }
+    // LinkedIn URL — try href first, then data attributes, then text containing linkedin.com/in/
+    let linkedin = '';
+    const liAnchor = el.querySelector('a[href*="linkedin.com/in/"]');
+    if (liAnchor) {
+      linkedin = liAnchor.href.split('?')[0];
+    } else {
+      // Some SPAs store it in data attributes
+      const dataEl = el.querySelector('[data-url*="linkedin.com/in/"], [data-href*="linkedin.com/in/"]');
+      if (dataEl) linkedin = (dataEl.dataset.url || dataEl.dataset.href || '').split('?')[0];
     }
 
-    // Title + Company — look for "X at Y" patterns in the card text
-    let title = '', company = '';
-    const lines = rowText.split('\n').map(l => l.trim()).filter(Boolean);
+    // Phone — tel: link
+    const telLink = el.querySelector('a[href^="tel:"]');
+    const phone = telLink ? telLink.href.replace('tel:', '').trim() : '';
+
+    // Name — first line that looks like a human name (2–5 words, letters only, no @)
+    let name = '';
     for (const line of lines) {
-      if (line.includes('@') || line === name) continue;
-      const atIdx = line.lastIndexOf(' at ');
-      if (atIdx > 5 && atIdx < line.length - 4) {
-        title   = line.slice(0, atIdx).trim();
-        company = line.slice(atIdx + 4).replace(/\s+in\s+\d{4}.*/i, '').trim();
+      if (line.includes('@')) continue;
+      if (line.includes(' at ') || line.includes(' in ')) continue;
+      const words = line.split(/\s+/);
+      if (words.length >= 2 && words.length <= 5 && /^[A-Za-z\-'. ]+$/.test(line)) {
+        name = line;
         break;
       }
     }
 
-    // Location — typically after the name/icons line, doesn't contain "at "
-    let location = '';
-    const locEl = row.querySelector('[class*="location"], [class*="Location"]');
-    if (locEl) {
-      location = locEl.textContent.trim();
-    } else {
-      // Heuristic: a line that looks like "City, State, Country"
-      for (const line of lines) {
-        if (line.includes(',') && !line.includes('@') && !line.includes(' at ') && line !== name) {
-          if (/[A-Z][a-z]+,\s*[A-Z]/.test(line)) { location = line; break; }
-        }
+    // Title + Company — first line matching "Title at Company" (skip name and email lines)
+    let title = '', company = '';
+    for (const line of lines) {
+      if (line === name || line.includes('@')) continue;
+      const atIdx = line.lastIndexOf(' at ');
+      if (atIdx > 3 && atIdx < line.length - 4) {
+        title   = line.slice(0, atIdx).trim()
+          .replace(/^(Vice President|VP|Director|Manager|Senior|Head|Chief|Lead),?\s+/i, m => m); // keep full title
+        company = line.slice(atIdx + 4)
+          .replace(/\s+in\s+\d{4}.*/i, '')   // strip "in 2020 - Present"
+          .replace(/\s+\d{4}\s*[-–]\s*.*/,'') // strip trailing years
+          .trim();
+        break;
       }
     }
 
-    // Work history — all lines matching "Title at Company" after expanding "...more"
+    // Work history — all "Title at Company" lines
     const career = [];
     for (const line of lines) {
+      if (line === name || line.includes('@')) continue;
       const atIdx = line.lastIndexOf(' at ');
-      if (atIdx > 5 && atIdx < line.length - 4 && !line.includes('@')) {
+      if (atIdx > 3 && atIdx < line.length - 4) {
         const t = line.slice(0, atIdx).trim();
-        const c = line.slice(atIdx + 4).replace(/\s+in\s+\d{4}.*/i, '').trim();
+        const c = line.slice(atIdx + 4).replace(/\s+in\s+\d{4}.*/i, '').replace(/\s+\d{4}\s*[-–]\s*.*/,'').trim();
         if (t && c) career.push({ title: t, company: c });
       }
     }
 
-    return { name, email, linkedin, title, company, location, phone, career };
+    // Location — line that has commas and looks like "City, State, Country"
+    let location = '';
+    for (const line of lines) {
+      if (line.includes('@') || line === name) continue;
+      if (line.includes(',') && !line.includes(' at ') && /^[A-Za-z\s,]+$/.test(line)) {
+        location = line;
+        break;
+      }
+    }
+
+    // Prefer personal email
+    const allEmails = ((el.innerText || '').match(EMAIL_RE) || [])
+      .map(e => e.toLowerCase())
+      .filter(e => isEmail(e) && !IGNORE_DOMAINS.test(e));
+    const personalEmail = allEmails.find(e => PERSONAL_RE.test(e));
+    const bestEmail = personalEmail || email;
+
+    return { name, email: bestEmail, linkedin, title, company, location, phone, career };
   }
 
   // ── Auto-expand all "...more" / "Show more" buttons ────────────────────────
   async function expandAllMore() {
-    const candidates = [...document.querySelectorAll('button, span[role="button"], a')].filter(el => {
-      const t = (el.textContent || '').trim().toLowerCase();
-      return t === '...more' || t === '…more' || t === 'show more' || t === 'see more';
-    });
-    for (const btn of candidates) {
-      try { btn.click(); } catch (_) {}
-      await sleep(30);
-    }
-    if (candidates.length > 0) await sleep(600);
+    const btns = [...document.querySelectorAll('button, span, a, [role="button"]')]
+      .filter(el => {
+        const t = (el.textContent || '').trim().toLowerCase();
+        return t === '...more' || t === '…more' || t === 'show more' || t === 'see more'
+          || t === '... more' || t === 'more';
+      });
+    for (const btn of btns) { try { btn.click(); } catch (_) {} await sleep(20); }
+    if (btns.length > 0) await sleep(600);
   }
 
-  // ── Inject floating button for ContactOut ──────────────────────────────────
+  // ── Floating button ────────────────────────────────────────────────────────
   function injectContactOutButton() {
     if (document.getElementById(CO_BTN_ID)) return;
+    // Only inject on pages that look like search results (have at least one email visible)
+    if (!document.body.innerText.match(EMAIL_RE)) return;
 
-    const count = findCandidateRows().length;
-    if (count === 0) return;
-
-    const wrap = document.createElement('div');
-    wrap.id = CO_BTN_ID;
+    const wrap  = document.createElement('div');
+    wrap.id     = CO_BTN_ID;
     const inner = document.createElement('div');
-    inner.id = CO_BTN_ID + '-inner';
+    inner.id    = CO_BTN_ID + '-inner';
     Object.assign(inner.style, {
       position: 'fixed', bottom: '28px', right: '28px', zIndex: '2147483647',
       background: '#3b5bdb', color: '#fff',
@@ -169,7 +179,10 @@
       userSelect: 'none', transition: 'transform .15s,box-shadow .15s',
       whiteSpace: 'nowrap'
     });
-    inner.textContent = `📥 Import ${count} contacts`;
+
+    const count = findCandidateCards().length;
+    inner.textContent = count > 0 ? `📥 Import ${count} contacts` : '📥 Import this page';
+
     wrap.appendChild(inner);
     document.body.appendChild(wrap);
 
@@ -189,16 +202,15 @@
     await expandAllMore();
 
     setCoBtnText('⏳ Reading contacts…', '#1c7ed6');
-    const rows = findCandidateRows();
-    const all  = rows.map(extractCandidate).filter(c => c.name);
-    // Only import profiles where an email was visible — skip masked/hidden ones
+    const cards = findCandidateCards();
+    const all   = cards.map(extractCandidate).filter(c => c.name);
     const candidates = all.filter(c => c.email);
     const noEmail    = all.length - candidates.length;
 
     if (candidates.length === 0) {
-      const msg = noEmail > 0
-        ? `❌ No revealed emails on page — reveal emails in ContactOut first`
-        : '❌ No contacts found on page';
+      const msg = cards.length === 0
+        ? '❌ No contacts detected — try refreshing the page'
+        : '❌ No revealed emails — reveal emails in ContactOut first';
       setCoBtnText(msg, '#e03131');
       setTimeout(resetCoBtn, 5000);
       return;
@@ -220,7 +232,7 @@
       const { added = 0, skipped = 0 } = response;
       const parts = [`✓ ${added} added`];
       if (skipped > 0) parts.push(`${skipped} already in pipeline`);
-      if (noEmail > 0)  parts.push(`${noEmail} skipped (no email)`);
+      if (noEmail  > 0) parts.push(`${noEmail} skipped (no email)`);
       setCoBtnText(parts.join(' · '), '#2f9e44');
       setTimeout(resetCoBtn, 6000);
     });
@@ -234,11 +246,11 @@
   function resetCoBtn() {
     const el = document.getElementById(CO_BTN_ID + '-inner');
     if (!el) return;
-    const count = findCandidateRows().length;
-    el.textContent = `📥 Import ${count} contacts`;
+    const count = findCandidateCards().length;
+    el.textContent = count > 0 ? `📥 Import ${count} contacts` : '📥 Import this page';
     el.style.background = '#3b5bdb';
-    el.style.transform = '';
-    el.style.boxShadow = '0 4px 24px rgba(59,91,219,.45)';
+    el.style.transform  = '';
+    el.style.boxShadow  = '0 4px 24px rgba(59,91,219,.45)';
   }
 
   /* ════════════════════════════════════════════════════════════
@@ -283,14 +295,12 @@
 
   function onLinkedInImport() {
     setLiBtn('⏳ Importing…', '#1c7ed6');
-
     const payload = {
       type:     'IMPORT_PROFILE',
       url:      location.href,
       text:     document.body.innerText,
       coEmails: readContactOutEmails()
     };
-
     chrome.runtime.sendMessage(payload, (response) => {
       if (chrome.runtime.lastError) {
         setLiBtn('❌ Extension error — reload page', '#e03131');
@@ -358,28 +368,28 @@
   ════════════════════════════════════════════════════════════ */
 
   if (isContactOutPage()) {
-    // ContactOut: inject button once results render, re-check on navigation
-    setTimeout(injectContactOutButton, 1500);
+    // Inject after page renders (results load async)
+    setTimeout(injectContactOutButton, 2000);
 
-    // Re-inject when ContactOut navigates (SPA)
+    // Re-inject on SPA navigation (ContactOut is a React SPA)
     let lastHref = location.href;
     setInterval(() => {
       if (location.href !== lastHref) {
         lastHref = location.href;
         const old = document.getElementById(CO_BTN_ID);
         if (old) old.remove();
-        setTimeout(injectContactOutButton, 1500);
+        setTimeout(injectContactOutButton, 2000);
       }
     }, 800);
 
-    // Also watch for results dynamically loading in
+    // Also re-inject when results load dynamically (button got removed or wasn't there yet)
     const obs = new MutationObserver(() => {
       if (!document.getElementById(CO_BTN_ID)) injectContactOutButton();
     });
     obs.observe(document.body, { childList: true, subtree: true });
 
   } else {
-    // LinkedIn: inject button on /in/ pages
+    // LinkedIn: inject on /in/ profile pages
     let lastPath = location.pathname;
 
     function checkPath() {
@@ -393,10 +403,7 @@
 
     ['pushState', 'replaceState'].forEach(method => {
       const original = history[method].bind(history);
-      history[method] = function (...args) {
-        original(...args);
-        setTimeout(checkPath, 100);
-      };
+      history[method] = function (...args) { original(...args); setTimeout(checkPath, 100); };
     });
     window.addEventListener('popstate', () => setTimeout(checkPath, 100));
 
