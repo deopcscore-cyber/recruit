@@ -38,6 +38,7 @@ router.get('/', async (req, res) => {
       resumeConsultantName:     user.resumeConsultantName     || '',
       resumeConsultantEmail:    user.resumeConsultantEmail    || '',
       outreachSample:           user.outreachSample           || '',
+      subjectSample:            user.subjectSample            || '',
       followUpConfig:           user.followUpConfig           || { enabled: true, steps: [{ days: 3 }, { days: 7 }] },
       autopilot:                Object.assign({ enabled:false, dailyCap:30, windowStart:'09:00', windowEnd:'17:00', weekdaysOnly:true, minSpacingMin:20, maxSpacingMin:60, warmup:true }, user.autopilot || {})
     });
@@ -87,6 +88,8 @@ router.put('/', async (req, res) => {
 
     // Outreach style sample — AI mirrors this when generating outreach
     if (req.body.outreachSample !== undefined) user.outreachSample = String(req.body.outreachSample).slice(0, 4000);
+    // Subject line sample — AI mirrors this style for all generated subjects
+    if (req.body.subjectSample !== undefined) user.subjectSample = String(req.body.subjectSample).slice(0, 200);
 
     // Daily auto-outreach (autopilot) config
     if (req.body.autopilot && typeof req.body.autopilot === 'object') {

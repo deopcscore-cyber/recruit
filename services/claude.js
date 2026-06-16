@@ -77,6 +77,14 @@ function formatUserStyle(user) {
   return lines.join('\n') || 'Warm, professional, human';
 }
 
+// If the user provided a subject line sample, return a prompt instruction
+// to mirror its style (length, tone, specificity) for the generated subject.
+function subjectGuidance(user) {
+  const s = (user && user.subjectSample || '').trim();
+  if (!s) return '';
+  return `\nSUBJECT LINE STYLE: Mirror the style of this example subject the sender provided — match its length, tone, and level of specificity. Do NOT copy it verbatim; write a fresh one for this person:\nExample: "${s}"\n`;
+}
+
 // If the user provided an outreach sample, return a prompt block telling the
 // model to match their VOICE (tone/personality/rhythm) for messages that aren't
 // the cold outreach itself — follow-ups, replies. We borrow voice, not structure,
@@ -128,7 +136,7 @@ RULES:
 - Personalize the actual content to THIS person: reference their real companies, roles, and career details from the info above.
 - Vary the wording naturally so two different candidates never get near-identical emails.
 - If the sample has a signature/sign-off, leave it out — the sender's signature is appended automatically.
-- Output as JSON with two fields: { "subject": "...", "body": "..." }. The subject should match the style of the sample's subject if it has one, otherwise write a short specific one. Body starts with the greeting (e.g. "Dear ${firstName}," or whatever greeting style the sample uses).
+- Output as JSON with two fields: { "subject": "...", "body": "..." }. ${subjectGuidance(user) || 'The subject should match the style of the sample\'s subject if it has one, otherwise write a short specific one.'} Body starts with the greeting (e.g. "Dear ${firstName}," or whatever greeting style the sample uses).
 
 Output ONLY valid JSON. No markdown, no commentary.`;
 
@@ -207,7 +215,7 @@ RULES:
 - The email must end with a question mark
 - The email should feel written specifically for this one person, not templated
 - Output as JSON with two fields: { "subject": "...", "body": "..." }
-- subject: a short, specific subject line (under 9 words) that references something real about their background — NOT generic. Examples: "Your path from X to Y", "A thought on your compliance transition", "Something I noticed about your background at [Company]"
+- subject: a short, specific subject line that references something real about their background — NOT generic.${subjectGuidance(user) || ' Examples: "Your path from X to Y", "A thought on your compliance transition", "Something I noticed about your background at [Company]"'}
 - body: the full email body starting with "Dear ${firstName},"
 
 Output ONLY valid JSON. No markdown, no extra text.

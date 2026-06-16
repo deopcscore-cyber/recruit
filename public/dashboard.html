@@ -617,7 +617,12 @@
                 different from everyone else's. Leave blank to use the built-in approach.
               </p>
               <div class="form-group">
-                <label>Sample outreach email</label>
+                <label>Sample subject line <span style="font-weight:400;color:var(--text-muted)">(optional — AI will match this style)</span></label>
+                <input type="text" id="subject-sample" maxlength="200"
+                  placeholder="e.g. Your path from Director to VP at Acme" style="font-size:0.88rem">
+              </div>
+              <div class="form-group" style="margin-top:12px">
+                <label>Sample outreach email body</label>
                 <textarea id="outreach-sample" rows="9" placeholder="Hi [name],
 
 I came across your work leading...&#10;&#10;[Paste a full example email here — the way YOU would write it. The AI copies the style, not the words.]"></textarea>

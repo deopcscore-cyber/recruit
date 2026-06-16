@@ -2482,7 +2482,7 @@ async function loadSettingsPage() {
     renderAutopilotConfig(style.autopilot || {});
 
     // Outreach style sample
-    renderOutreachSample(style.outreachSample || '');
+    renderOutreachSample(style.outreachSample || '', style.subjectSample || '');
 
     await updateGmailStatus();
     await updateZohoStatus();
@@ -2553,10 +2553,12 @@ function collectFollowUpSteps() {
 }
 
 // ---- Outreach style sample ----
-function renderOutreachSample(sample) {
-  const ta = document.getElementById('outreach-sample');
+function renderOutreachSample(sample, subjectSample) {
+  const ta  = document.getElementById('outreach-sample');
+  const sub = document.getElementById('subject-sample');
   if (!ta) return;
-  ta.value = sample || '';
+  ta.value  = sample || '';
+  if (sub) sub.value = subjectSample || '';
 
   const saveBtn = document.getElementById('outreach-sample-save');
   if (saveBtn && !saveBtn._wired) {
@@ -2564,7 +2566,9 @@ function renderOutreachSample(sample) {
     saveBtn.addEventListener('click', async () => {
       saveBtn.disabled = true; saveBtn.textContent = 'Saving…';
       try {
-        await API.settings.update({ outreachSample: ta.value });
+        const payload = { outreachSample: ta.value };
+        if (sub) payload.subjectSample = sub.value.trim().slice(0, 200);
+        await API.settings.update(payload);
         Toast.success(ta.value.trim().length > 40 ? 'Style saved — outreach will now match your sample' : 'Saved');
       } catch (err) { Toast.error(err.message); }
       finally { saveBtn.disabled = false; saveBtn.textContent = 'Save Style Sample'; }
@@ -2576,8 +2580,11 @@ function renderOutreachSample(sample) {
     clearBtn._wired = true;
     clearBtn.addEventListener('click', async () => {
       ta.value = '';
-      try { await API.settings.update({ outreachSample: '' }); Toast.show('Style sample cleared — using the built-in approach'); }
-      catch (err) { Toast.error(err.message); }
+      if (sub) sub.value = '';
+      try {
+        await API.settings.update({ outreachSample: '', subjectSample: '' });
+        Toast.show('Style sample cleared — using the built-in approach');
+      } catch (err) { Toast.error(err.message); }
     });
   }
 }
