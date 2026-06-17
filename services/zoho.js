@@ -49,7 +49,7 @@ async function exchangeCode(userId, code) {
 
   user.zoho = {
     connected:    true,
-    address:      address.toLowerCase(),
+    address:      (address || '').toLowerCase(),
     accountId,
     accessToken:  data.access_token,
     refreshToken: data.refresh_token,
@@ -89,6 +89,9 @@ async function fetchAccountInfo(accessToken) {
   });
   const acct = data.data && data.data[0];
   if (!acct) throw new Error('No Zoho account found');
+
+  // Log the full account object once so we can see exactly what Zoho returns
+  console.log('Zoho account object:', JSON.stringify(acct, null, 2));
 
   // Zoho returns the email in different fields depending on account type
   const address = acct.emailAddress || acct.mailId || acct.primaryEmailAddress
