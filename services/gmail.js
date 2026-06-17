@@ -126,9 +126,10 @@ async function exchangeCode(userId, code) {
   if (!user) throw new Error('User not found');
 
   user.gmail = {
-    connected: true,
+    connected:   true,
     tokens,
-    address: data.email || ''
+    address:     data.email || '',
+    profileName: data.name  || ''   // Google account display name — used as From name
   };
   await storage.saveUser(user);
   return user;
@@ -265,12 +266,14 @@ async function sendEmail(userId, { to, subject, body, threadId, inReplyTo, refer
   }
   const gmail = google.gmail({ version: 'v1', auth });
 
-  // Build "Display Name <email>" — this is what recipients see as the sender name
+  // Build "Display Name <email>" — this is what recipients see as the sender name.
+  // Priority: Google profile name (from OAuth) → app registration name → capitalised email local-part.
+  // Google profile name is the most reliable for Workspace accounts because it matches
+  // what Google's directory has on record for that address.
   const fromEmail = user.gmail.address || '';
-  // Use profile name; fall back to capitalised local-part of email (e.g. "rachel.autwell" → "Rachel Autwell")
-  const fromName = (user.name || '').trim() || fromEmail.split('@')[0]
-    .replace(/[._-]+/g, ' ')
-    .replace(/\b\w/g, c => c.toUpperCase());
+  const fromName = (user.gmail.profileName || '').trim()
+    || (user.name || '').trim()
+    || fromEmail.split('@')[0].replace(/[._-]+/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
   const from = `"${fromName}" <${fromEmail}>`;
 
   // Signature is passed separately so buildRawEmail can detect the body format correctly
