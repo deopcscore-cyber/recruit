@@ -44,13 +44,14 @@ async function exchangeCode(userId, code) {
   const user = await storage.getUserById(userId);
   if (!user) throw new Error('User not found');
 
-  // Fetch the account ID and address
-  const { accountId, address } = await fetchAccountInfo(data.access_token);
+  // Fetch the account ID, address, and display name
+  const { accountId, address, displayName } = await fetchAccountInfo(data.access_token);
 
   const existingRefreshToken = (user.zoho && user.zoho.refreshToken) || null;
   user.zoho = {
     connected:    true,
     address:      (address || '').toLowerCase(),
+    displayName:  displayName || '',
     accountId,
     accessToken:  data.access_token,
     refreshToken: data.refresh_token || existingRefreshToken,
@@ -91,9 +92,6 @@ async function fetchAccountInfo(accessToken) {
   const acct = data.data && data.data[0];
   if (!acct) throw new Error('No Zoho account found');
 
-  // Log the full account object once so we can see exactly what Zoho returns
-  console.log('Zoho account object:', JSON.stringify(acct, null, 2));
-
   // primaryEmailAddress and mailboxAddress are plain strings.
   // emailAddress is an array of alias objects — skip it as a direct source.
   const address = acct.primaryEmailAddress
@@ -109,7 +107,11 @@ async function fetchAccountInfo(accessToken) {
     throw new Error('Could not read email address from Zoho account');
   }
 
-  return { accountId: acct.accountId, address };
+  const displayName = acct.displayName
+    || [acct.firstName, acct.lastName].filter(Boolean).join(' ')
+    || '';
+
+  return { accountId: acct.accountId, address, displayName };
 }
 
 // ── Send email via Zoho REST API ──────────────────────────────────────────────
@@ -124,7 +126,7 @@ async function sendEmail(userId, { to, subject, body, inReplyTo, references, tra
   const sigPlain = buildSignaturePlainText(user);
   const { htmlBody } = buildRawEmailParts({ body, signatureHtml: sigHtml, signaturePlain: sigPlain, trackingId, baseUrl: BASE_URL });
 
-  const fromName = user.name || '';
+  const fromName = (user.zoho.displayName || user.name || '').trim();
   const fromAddr = fromName ? `${fromName} <${address}>` : address;
 
   const payload = {
