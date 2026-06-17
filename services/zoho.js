@@ -93,13 +93,18 @@ async function fetchAccountInfo(accessToken) {
   // Log the full account object once so we can see exactly what Zoho returns
   console.log('Zoho account object:', JSON.stringify(acct, null, 2));
 
-  // Zoho returns the email in different fields depending on account type
-  const address = acct.emailAddress || acct.mailId || acct.primaryEmailAddress
-    || (Array.isArray(acct.emailAlias) && acct.emailAlias[0])
+  // primaryEmailAddress and mailboxAddress are plain strings.
+  // emailAddress is an array of alias objects — skip it as a direct source.
+  const address = acct.primaryEmailAddress
+    || acct.mailboxAddress
+    || acct.mailId
+    || (Array.isArray(acct.emailAddress)
+        ? (acct.emailAddress.find(e => e.isPrimary)?.mailId || acct.emailAddress[0]?.mailId)
+        : (typeof acct.emailAddress === 'string' ? acct.emailAddress : ''))
     || '';
 
   if (!address) {
-    console.error('Zoho account fields returned:', Object.keys(acct));
+    console.error('Zoho: could not find email in account object keys:', Object.keys(acct));
     throw new Error('Could not read email address from Zoho account');
   }
 
