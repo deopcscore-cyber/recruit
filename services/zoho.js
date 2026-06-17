@@ -47,12 +47,13 @@ async function exchangeCode(userId, code) {
   // Fetch the account ID and address
   const { accountId, address } = await fetchAccountInfo(data.access_token);
 
+  const existingRefreshToken = (user.zoho && user.zoho.refreshToken) || null;
   user.zoho = {
     connected:    true,
     address:      (address || '').toLowerCase(),
     accountId,
     accessToken:  data.access_token,
-    refreshToken: data.refresh_token,
+    refreshToken: data.refresh_token || existingRefreshToken,
     expiresAt:    Date.now() + (data.expires_in || 3600) * 1000
   };
   await storage.saveUser(user);

@@ -9,7 +9,7 @@ const zohoService    = require('../services/zoho');
 const outlookService = require('../services/outlook');
 
 function isZohoOAuthReady(user) {
-  return !!(user.zoho?.connected && user.zoho.accessToken && user.zoho.refreshToken);
+  return !!(user.zoho?.connected && user.zoho.accessToken);
 }
 function isOutlookReady(user) {
   return !!(user.outlook?.connected && user.outlook.accessToken);
