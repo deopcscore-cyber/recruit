@@ -59,6 +59,17 @@
     }
     input:focus { border-color: #3b5bdb; }
 
+    /* Password field with show/hide toggle */
+    .pw-wrap { position: relative; }
+    .pw-wrap input { padding-right: 44px; }
+    .pw-toggle {
+      position: absolute; right: 12px; top: 50%; transform: translateY(-50%);
+      background: none; border: none; cursor: pointer; padding: 4px;
+      color: #94a3b8; display: flex; align-items: center;
+    }
+    .pw-toggle:hover { color: #3b5bdb; }
+    .pw-toggle svg { width: 18px; height: 18px; }
+
     /* User type selector */
     .user-type-label { font-size: 13px; font-weight: 600; color: #374151; margin-bottom: 10px; display: block; }
     .user-type-grid { display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; }
@@ -81,9 +92,22 @@
     }
     .btn-primary:hover { background: #2f4fcc; }
     .btn-primary:disabled { background: #a5b4fc; cursor: not-allowed; }
-    .auth-error { color: #dc2626; font-size: 13px; margin-top: 10px; text-align: center; min-height: 18px; }
+    .auth-error   { color: #dc2626; font-size: 13px; margin-top: 10px; text-align: center; min-height: 18px; }
+    .auth-success { color: #2f9e44; font-size: 13px; margin-top: 10px; text-align: center; min-height: 18px; }
 
     .divider { text-align: center; font-size: 12px; color: #94a3b8; margin: 16px 0; }
+
+    .forgot-link {
+      display: block; text-align: right; font-size: 12px; color: #3b5bdb;
+      text-decoration: none; margin-top: -8px; margin-bottom: 16px; cursor: pointer;
+    }
+    .forgot-link:hover { text-decoration: underline; }
+
+    .back-to-login {
+      display: inline-block; font-size: 13px; color: #3b5bdb;
+      cursor: pointer; margin-bottom: 20px; text-decoration: none;
+    }
+    .back-to-login:hover { text-decoration: underline; }
   </style>
 </head>
 <body>
@@ -96,7 +120,7 @@
       <p>The smart outreach platform</p>
     </div>
 
-    <div class="auth-tabs">
+    <div class="auth-tabs" id="main-tabs">
       <div class="auth-tab active" data-tab="login">Sign in</div>
       <div class="auth-tab" data-tab="register">Create account</div>
     </div>
@@ -109,8 +133,14 @@
       </div>
       <div class="form-group">
         <label for="login-password">Password</label>
-        <input type="password" id="login-password" placeholder="••••••••" required />
+        <div class="pw-wrap">
+          <input type="password" id="login-password" placeholder="••••••••" required />
+          <button type="button" class="pw-toggle" data-target="login-password" aria-label="Show password">
+            <svg id="eye-login" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.477 0 8.268 2.943 9.542 7-1.274 4.057-5.065 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+          </button>
+        </div>
       </div>
+      <span class="forgot-link" id="forgot-link">Forgot password?</span>
       <button type="submit" class="btn-primary" id="login-btn">Sign in</button>
       <div class="auth-error" id="login-error"></div>
     </form>
@@ -127,7 +157,12 @@
       </div>
       <div class="form-group">
         <label for="reg-password">Password</label>
-        <input type="password" id="reg-password" placeholder="At least 6 characters" required />
+        <div class="pw-wrap">
+          <input type="password" id="reg-password" placeholder="At least 6 characters" required />
+          <button type="button" class="pw-toggle" data-target="reg-password" aria-label="Show password">
+            <svg id="eye-reg" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.477 0 8.268 2.943 9.542 7-1.274 4.057-5.065 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+          </button>
+        </div>
       </div>
 
       <span class="user-type-label">What best describes you?</span>
@@ -150,7 +185,7 @@
         </label>
         <label class="user-type-option" data-value="career_consultant">
           <input type="radio" name="userType" value="career_consultant">
-          <span class="uto-icon">🚀</span>
+          <span class="uto-icon">🧭</span>
           <div class="uto-text">
             <h4>Career Consultant</h4>
             <p>I help professionals advance their careers</p>
@@ -161,13 +196,52 @@
       <button type="submit" class="btn-primary" id="register-btn">Create account →</button>
       <div class="auth-error" id="register-error"></div>
     </form>
+
+    <!-- Forgot password -->
+    <div class="auth-form" id="forgot-form">
+      <a class="back-to-login" id="back-from-forgot">← Back to sign in</a>
+      <div class="form-group">
+        <label for="forgot-email">Enter your account email</label>
+        <input type="email" id="forgot-email" placeholder="you@example.com" required />
+      </div>
+      <button type="button" class="btn-primary" id="forgot-btn">Send reset link</button>
+      <div class="auth-error"   id="forgot-error"></div>
+      <div class="auth-success" id="forgot-success"></div>
+    </div>
+
+    <!-- Reset password (shown via ?reset=TOKEN in URL) -->
+    <div class="auth-form" id="reset-form">
+      <div class="form-group">
+        <label for="reset-password">New password</label>
+        <div class="pw-wrap">
+          <input type="password" id="reset-password" placeholder="At least 6 characters" required />
+          <button type="button" class="pw-toggle" data-target="reset-password" aria-label="Show password">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.477 0 8.268 2.943 9.542 7-1.274 4.057-5.065 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+          </button>
+        </div>
+      </div>
+      <button type="button" class="btn-primary" id="reset-btn">Set new password</button>
+      <div class="auth-error"   id="reset-error"></div>
+      <div class="auth-success" id="reset-success"></div>
+    </div>
   </div>
 
   <script>
-    // Tab switching + URL param support (?tab=register)
+    // ── Helpers ──────────────────────────────────────────────────────────────
+    const EYE_OPEN  = `<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.477 0 8.268 2.943 9.542 7-1.274 4.057-5.065 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>`;
+    const EYE_SHUT  = `<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.477 0-8.268-2.943-9.542-7a9.966 9.966 0 012.212-3.592m3.286-2.413A9.956 9.956 0 0112 5c4.477 0 8.268 2.943 9.542 7a9.966 9.966 0 01-1.655 2.905M15 12a3 3 0 11-4.5-2.598M3 3l18 18"/>`;
+
+    function showPanel(id) {
+      document.querySelectorAll('.auth-form').forEach(f => f.classList.toggle('active', f.id === id));
+      const hideTabs = ['forgot-form','reset-form'].includes(id);
+      document.getElementById('main-tabs').style.display = hideTabs ? 'none' : '';
+    }
+
+    // ── Tab switching ─────────────────────────────────────────────────────────
     function switchTab(name) {
       document.querySelectorAll('.auth-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === name));
-      document.querySelectorAll('.auth-form').forEach(f => f.classList.toggle('active', f.id === name + '-form'));
+      showPanel(name + '-form');
+      document.getElementById('main-tabs').style.display = '';
     }
     document.querySelectorAll('.auth-tab').forEach(tab => {
       tab.addEventListener('click', () => switchTab(tab.dataset.tab));
@@ -175,7 +249,17 @@
     const urlTab = new URLSearchParams(location.search).get('tab');
     if (urlTab === 'register') switchTab('register');
 
-    // User type selection
+    // ── Password show/hide toggles ────────────────────────────────────────────
+    document.querySelectorAll('.pw-toggle').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const inp = document.getElementById(btn.dataset.target);
+        const showing = inp.type === 'text';
+        inp.type = showing ? 'password' : 'text';
+        btn.querySelector('svg').innerHTML = showing ? EYE_OPEN : EYE_SHUT;
+      });
+    });
+
+    // ── User type selection ───────────────────────────────────────────────────
     document.querySelectorAll('.user-type-option').forEach(opt => {
       opt.addEventListener('click', () => {
         document.querySelectorAll('.user-type-option').forEach(o => o.classList.remove('selected'));
@@ -184,7 +268,7 @@
       });
     });
 
-    // Login
+    // ── Login ─────────────────────────────────────────────────────────────────
     document.getElementById('login-form').addEventListener('submit', async (e) => {
       e.preventDefault();
       const btn = document.getElementById('login-btn');
@@ -201,7 +285,7 @@
       } catch { errEl.textContent = 'Network error. Please try again.'; btn.disabled = false; btn.textContent = 'Sign in'; }
     });
 
-    // Register
+    // ── Register ──────────────────────────────────────────────────────────────
     document.getElementById('register-form').addEventListener('submit', async (e) => {
       e.preventDefault();
       const btn = document.getElementById('register-btn');
@@ -224,8 +308,63 @@
       } catch { errEl.textContent = 'Network error. Please try again.'; btn.disabled = false; btn.textContent = 'Create account →'; }
     });
 
-    // Redirect if already logged in
-    fetch('/api/auth/me').then(r => { if (r.ok) window.location.href = '/dashboard'; }).catch(() => {});
+    // ── Forgot password ───────────────────────────────────────────────────────
+    document.getElementById('forgot-link').addEventListener('click', () => showPanel('forgot-form'));
+    document.getElementById('back-from-forgot').addEventListener('click', () => switchTab('login'));
+
+    document.getElementById('forgot-btn').addEventListener('click', async () => {
+      const btn    = document.getElementById('forgot-btn');
+      const errEl  = document.getElementById('forgot-error');
+      const okEl   = document.getElementById('forgot-success');
+      const email  = document.getElementById('forgot-email').value.trim();
+      if (!email) { errEl.textContent = 'Enter your email address'; return; }
+      errEl.textContent = ''; okEl.textContent = '';
+      btn.disabled = true; btn.textContent = 'Sending…';
+      try {
+        const res  = await fetch('/api/auth/forgot-password', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email })
+        });
+        const data = await res.json();
+        if (!res.ok) { errEl.textContent = data.error || 'Failed to send reset link'; }
+        else { okEl.textContent = 'Reset link sent — check your inbox (and spam folder).'; }
+      } catch { errEl.textContent = 'Network error. Please try again.'; }
+      btn.disabled = false; btn.textContent = 'Send reset link';
+    });
+
+    // ── Reset password (from email link ?reset=TOKEN) ─────────────────────────
+    const resetToken = new URLSearchParams(location.search).get('reset');
+    if (resetToken) {
+      showPanel('reset-form');
+    }
+
+    document.getElementById('reset-btn').addEventListener('click', async () => {
+      const btn    = document.getElementById('reset-btn');
+      const errEl  = document.getElementById('reset-error');
+      const okEl   = document.getElementById('reset-success');
+      const pw     = document.getElementById('reset-password').value;
+      if (!pw || pw.length < 6) { errEl.textContent = 'Password must be at least 6 characters'; return; }
+      errEl.textContent = ''; okEl.textContent = '';
+      btn.disabled = true; btn.textContent = 'Saving…';
+      try {
+        const res  = await fetch('/api/auth/reset-password', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token: resetToken, password: pw })
+        });
+        const data = await res.json();
+        if (!res.ok) { errEl.textContent = data.error || 'Reset failed — link may have expired'; }
+        else {
+          okEl.textContent = 'Password updated! Redirecting to sign in…';
+          setTimeout(() => { window.location.href = '/login'; }, 2000);
+        }
+      } catch { errEl.textContent = 'Network error. Please try again.'; }
+      btn.disabled = false; btn.textContent = 'Set new password';
+    });
+
+    // ── Redirect if already logged in ─────────────────────────────────────────
+    if (!resetToken) {
+      fetch('/api/auth/me').then(r => { if (r.ok) window.location.href = '/dashboard'; }).catch(() => {});
+    }
   </script>
 </body>
 </html>
