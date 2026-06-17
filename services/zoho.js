@@ -89,7 +89,18 @@ async function fetchAccountInfo(accessToken) {
   });
   const acct = data.data && data.data[0];
   if (!acct) throw new Error('No Zoho account found');
-  return { accountId: acct.accountId, address: acct.emailAddress };
+
+  // Zoho returns the email in different fields depending on account type
+  const address = acct.emailAddress || acct.mailId || acct.primaryEmailAddress
+    || (Array.isArray(acct.emailAlias) && acct.emailAlias[0])
+    || '';
+
+  if (!address) {
+    console.error('Zoho account fields returned:', Object.keys(acct));
+    throw new Error('Could not read email address from Zoho account');
+  }
+
+  return { accountId: acct.accountId, address };
 }
 
 // ── Send email via Zoho REST API ──────────────────────────────────────────────
