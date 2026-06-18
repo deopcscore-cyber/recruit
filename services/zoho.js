@@ -169,13 +169,19 @@ async function sendEmail(userId, { to, subject, body, inReplyTo, references, tra
   };
   if (inReplyTo) payload.inReplyTo = inReplyTo;
 
-  const { data } = await axios.post(
-    `${userApiBase(user)}/accounts/${accountId}/messages`,
-    payload,
-    { headers: { Authorization: `Zoho-oauthtoken ${token}`, 'Content-Type': 'application/json' } }
-  );
+  const sendUrl = `${userApiBase(user)}/accounts/${accountId}/messages`;
+  console.log('Zoho send →', sendUrl, '| from:', fromAddr, '| to:', to);
+  let resp;
+  try {
+    resp = await axios.post(sendUrl, payload,
+      { headers: { Authorization: `Zoho-oauthtoken ${token}`, 'Content-Type': 'application/json' } });
+  } catch (err) {
+    const body = err.response && JSON.stringify(err.response.data);
+    console.error('Zoho send error:', err.response?.status, body);
+    throw new Error(`Zoho send failed (${err.response?.status}): ${body || err.message}`);
+  }
 
-  const msgId = (data.data && data.data.messageId) || uuidv4();
+  const msgId = (resp.data.data && resp.data.data.messageId) || uuidv4();
   return { gmailMessageId: null, gmailThreadId: null, smtpMessageId: String(msgId) };
 }
 
