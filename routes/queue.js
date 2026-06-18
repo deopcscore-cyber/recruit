@@ -10,7 +10,7 @@ router.use(requireAuth);
 
 function emailConnected(user) {
   return (user.gmail && user.gmail.connected) ||
-    (user.zoho && user.zoho.connected && user.zoho.accessToken && user.zoho.refreshToken) ||
+    (user.zoho && user.zoho.connected && user.zoho.accessToken) ||
     (user.outlook && user.outlook.connected && user.outlook.accessToken);
 }
 

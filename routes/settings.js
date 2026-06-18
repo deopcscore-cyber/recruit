@@ -151,7 +151,7 @@ router.put('/', async (req, res) => {
         const autopilot = require('../services/autopilot');
         const queueSvc  = require('../services/queue');
         const emailConnected = !!(user.gmail?.connected)
-          || !!(user.zoho?.connected && user.zoho.accessToken && user.zoho.refreshToken)
+          || !!(user.zoho?.connected && user.zoho.accessToken)
           || !!(user.outlook?.connected && user.outlook.accessToken);
         if (emailConnected && (user.credits || 0) > 0) {
           const cands = await storage.getUserCandidates(user.id);
@@ -384,7 +384,7 @@ router.get('/autopilot-status', async (req, res) => {
 
     // Is any email provider connected?
     const emailConnected = !!(user.gmail?.connected)
-      || !!(user.zoho?.connected && user.zoho.accessToken && user.zoho.refreshToken)
+      || !!(user.zoho?.connected && user.zoho.accessToken)
       || !!(user.outlook?.connected && user.outlook.accessToken);
 
     // Why isn't it sending? (no email / no credits / weekend / no candidates / window)
@@ -431,7 +431,7 @@ router.post('/autopilot/run-now', async (req, res) => {
     }
 
     const emailConnected = !!(user.gmail?.connected)
-      || !!(user.zoho?.connected && user.zoho.accessToken && user.zoho.refreshToken)
+      || !!(user.zoho?.connected && user.zoho.accessToken)
       || !!(user.outlook?.connected && user.outlook.accessToken);
     if (!emailConnected) return res.status(400).json({ error: 'No email account connected. Connect one in the Email tab first.' });
     if ((user.credits || 0) <= 0) return res.status(402).json({ error: 'Out of credits — add credits to send.' });
