@@ -357,7 +357,7 @@ const { v4: queueUuid } = require('uuid');
 
 // Provider helpers (mirrors routes/email.js dispatcher)
 function _isZohoOAuthReady(user) {
-  return !!(user.zoho?.connected && user.zoho.accessToken && user.zoho.refreshToken);
+  return !!(user.zoho?.connected && user.zoho.accessToken);
 }
 function _isOutlookReady(user) {
   return !!(user.outlook?.connected && user.outlook.accessToken);
