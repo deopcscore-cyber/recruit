@@ -311,6 +311,9 @@ router.delete('/zoho', async (req, res) => {
   try {
     const user = await storage.getUserById(req.session.userId);
     if (!user) return res.status(404).json({ error: 'User not found' });
+    // Revoke tokens with Zoho so next connect is treated as a fresh grant
+    // (Zoho only returns a refresh_token on first authorization unless revoked first)
+    await zohoService.revokeTokens(user).catch(() => {});
     user.zoho = { connected: false, address: '', accessToken: '', refreshToken: '' };
     await storage.saveUser(user);
     return res.json({ success: true });

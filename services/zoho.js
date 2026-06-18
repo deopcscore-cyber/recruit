@@ -80,6 +80,14 @@ async function refreshTokens(user) {
   return user.zoho.accessToken;
 }
 
+async function revokeTokens(user) {
+  const token = user.zoho?.refreshToken || user.zoho?.accessToken;
+  if (!token) return;
+  await axios.post(`https://accounts.zoho.com/oauth/v2/token/revoke?token=${encodeURIComponent(token)}`, null, {
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+  });
+}
+
 async function getAccessToken(user) {
   if (!user.zoho || !user.zoho.connected) throw new Error('Zoho not connected');
   // Token still valid — use it
@@ -250,4 +258,4 @@ async function getSentAddresses(userId) {
   } catch { return []; }
 }
 
-module.exports = { getAuthUrl, exchangeCode, sendEmail, fetchUnreadReplies, getSentAddresses };
+module.exports = { getAuthUrl, exchangeCode, revokeTokens, sendEmail, fetchUnreadReplies, getSentAddresses };
