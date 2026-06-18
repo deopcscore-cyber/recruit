@@ -9,8 +9,21 @@ const storage = require('./storage');
 const { BASE_URL, ZOHO_CLIENT_ID, ZOHO_CLIENT_SECRET } = require('../config');
 const { buildRawEmailParts, buildSignatureHtml, buildSignaturePlainText } = require('./gmail');
 
-const TOKEN_URL = 'https://accounts.zoho.com/oauth/v2/token';
-const API_BASE  = 'https://mail.zoho.com/api';
+const TOKEN_URL      = 'https://accounts.zoho.com/oauth/v2/token';
+const API_BASE_DEFAULT = 'https://mail.zoho.com/api';
+
+// Zoho's api_domain from the token response tells us the user's data center.
+// Map e.g. "https://www.zohoapis.eu" → "https://mail.zoho.eu/api"
+function apiBaseFromDomain(apiDomain) {
+  if (!apiDomain) return API_BASE_DEFAULT;
+  const match = apiDomain.match(/zohoapis\.(.+)$/);
+  if (!match) return API_BASE_DEFAULT;
+  return `https://mail.zoho.${match[1]}/api`;
+}
+
+function userApiBase(user) {
+  return (user.zoho && user.zoho.apiBase) || API_BASE_DEFAULT;
+}
 
 // ── OAuth2 helpers ────────────────────────────────────────────────────────────
 // `state` is an opaque CSRF nonce verified against the session on callback —
@@ -45,8 +58,10 @@ async function exchangeCode(userId, code) {
   const user = await storage.getUserById(userId);
   if (!user) throw new Error('User not found');
 
+  const apiBase = apiBaseFromDomain(data.api_domain);
+
   // Fetch the account ID, address, and display name
-  const { accountId, address, displayName } = await fetchAccountInfo(data.access_token);
+  const { accountId, address, displayName } = await fetchAccountInfo(data.access_token, apiBase);
 
   const existingRefreshToken = (user.zoho && user.zoho.refreshToken) || null;
   user.zoho = {
@@ -54,6 +69,7 @@ async function exchangeCode(userId, code) {
     address:      (address || '').toLowerCase(),
     displayName:  displayName || '',
     accountId,
+    apiBase,
     accessToken:  data.access_token,
     refreshToken: data.refresh_token || existingRefreshToken,
     expiresAt:    Date.now() + (data.expires_in || 3600) * 1000
@@ -99,8 +115,8 @@ async function getAccessToken(user) {
   return refreshTokens(user);
 }
 
-async function fetchAccountInfo(accessToken) {
-  const { data } = await axios.get(`${API_BASE}/accounts`, {
+async function fetchAccountInfo(accessToken, apiBase = API_BASE_DEFAULT) {
+  const { data } = await axios.get(`${apiBase}/accounts`, {
     headers: { Authorization: `Zoho-oauthtoken ${accessToken}` }
   });
   const acct = data.data && data.data[0];
@@ -154,7 +170,7 @@ async function sendEmail(userId, { to, subject, body, inReplyTo, references, tra
   if (inReplyTo) payload.inReplyTo = inReplyTo;
 
   const { data } = await axios.post(
-    `${API_BASE}/accounts/${accountId}/messages`,
+    `${userApiBase(user)}/accounts/${accountId}/messages`,
     payload,
     { headers: { Authorization: `Zoho-oauthtoken ${token}`, 'Content-Type': 'application/json' } }
   );
@@ -172,7 +188,7 @@ async function fetchUnreadReplies(userId) {
   const { accountId, address } = user.zoho;
 
   // Fetch INBOX folder ID
-  const foldersRes = await axios.get(`${API_BASE}/accounts/${accountId}/folders`, {
+  const foldersRes = await axios.get(`${userApiBase(user)}/accounts/${accountId}/folders`, {
     headers: { Authorization: `Zoho-oauthtoken ${token}` }
   });
   const inbox = (foldersRes.data.data || []).find(f =>
@@ -181,7 +197,7 @@ async function fetchUnreadReplies(userId) {
   if (!inbox) return [];
 
   // Get unread messages
-  const msgsRes = await axios.get(`${API_BASE}/accounts/${accountId}/folders/${inbox.folderId}/messages/view`, {
+  const msgsRes = await axios.get(`${userApiBase(user)}/accounts/${accountId}/folders/${inbox.folderId}/messages/view`, {
     params: { status: 'unread', limit: 50 },
     headers: { Authorization: `Zoho-oauthtoken ${token}` }
   });
@@ -197,7 +213,7 @@ async function fetchUnreadReplies(userId) {
 
       // Fetch full message content
       const fullRes = await axios.get(
-        `${API_BASE}/accounts/${accountId}/folders/${inbox.folderId}/messages/${msg.messageId}`,
+        `${userApiBase(user)}/accounts/${accountId}/folders/${inbox.folderId}/messages/${msg.messageId}`,
         { headers: { Authorization: `Zoho-oauthtoken ${token}` } }
       );
       const full = fullRes.data.data || {};
@@ -215,7 +231,7 @@ async function fetchUnreadReplies(userId) {
 
       // Mark as read
       await axios.put(
-        `${API_BASE}/accounts/${accountId}/updatemessage`,
+        `${userApiBase(user)}/accounts/${accountId}/updatemessage`,
         { mode: 'markAsRead', messageId: [String(msg.messageId)] },
         { headers: { Authorization: `Zoho-oauthtoken ${token}`, 'Content-Type': 'application/json' } }
       ).catch(() => {});
@@ -236,7 +252,7 @@ async function getSentAddresses(userId) {
     const token = await getAccessToken(user);
     const { accountId } = user.zoho;
 
-    const foldersRes = await axios.get(`${API_BASE}/accounts/${accountId}/folders`, {
+    const foldersRes = await axios.get(`${userApiBase(user)}/accounts/${accountId}/folders`, {
       headers: { Authorization: `Zoho-oauthtoken ${token}` }
     });
     const sent = (foldersRes.data.data || []).find(f =>
@@ -244,7 +260,7 @@ async function getSentAddresses(userId) {
     );
     if (!sent) return [];
 
-    const msgsRes = await axios.get(`${API_BASE}/accounts/${accountId}/folders/${sent.folderId}/messages/view`, {
+    const msgsRes = await axios.get(`${userApiBase(user)}/accounts/${accountId}/folders/${sent.folderId}/messages/view`, {
       params: { limit: 200 },
       headers: { Authorization: `Zoho-oauthtoken ${token}` }
     });

@@ -157,7 +157,10 @@ router.put('/', async (req, res) => {
           const cands = await storage.getUserCandidates(user.id);
           const plan = autopilot.planDailyRun(user, cands, new Date());
           if (plan.ran) {
-            if (plan.jobs && plan.jobs.length) queueSvc.addJobs(plan.jobs);
+            if (plan.jobs && plan.jobs.length) {
+              queueSvc.cancelPendingForUser(user.id, 'outreach');
+              queueSvc.addJobs(plan.jobs);
+            }
             user.autopilot.lastRunDate = plan.lastRunDate;
             await storage.saveUser(user);
           }
@@ -454,7 +457,8 @@ router.post('/autopilot/run-now', async (req, res) => {
       return res.json({ queued: 0, reason: plan.reason || 'no_jobs', message: 'No eligible candidates to email right now.' });
     }
 
-    // Schedule the first one a minute out, the rest on their normal cadence
+    // Clear any existing pending outreach so we don't double-queue
+    queueSvc.cancelPendingForUser(req.session.userId, 'outreach');
     queueSvc.addJobs(plan.jobs);
     user.autopilot.lastRunDate = plan.lastRunDate;
     await storage.saveUser(user);
