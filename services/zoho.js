@@ -22,6 +22,7 @@ function getAuthUrl(state) {
     client_id:     ZOHO_CLIENT_ID,
     response_type: 'code',
     access_type:   'offline',
+    prompt:        'consent',
     redirect_uri:  `${BASE_URL}/auth/zoho/callback`,
     state
   });
@@ -81,7 +82,12 @@ async function refreshTokens(user) {
 
 async function getAccessToken(user) {
   if (!user.zoho || !user.zoho.connected) throw new Error('Zoho not connected');
+  // Token still valid — use it
   if (Date.now() < (user.zoho.expiresAt || 0) - 60000) return user.zoho.accessToken;
+  // Token expired — need refresh token to get a new one
+  if (!user.zoho.refreshToken) {
+    throw new Error('Zoho session expired — please disconnect and reconnect Zoho in Settings > Email');
+  }
   return refreshTokens(user);
 }
 
