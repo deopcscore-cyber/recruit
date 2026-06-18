@@ -164,8 +164,7 @@ async function sendEmail(userId, { to, subject, body, inReplyTo, references, tra
     toAddress:   to,
     subject,
     content:     htmlBody,
-    mailFormat:  'html',
-    charset:     'UTF-8'
+    mailFormat:  'html'
   };
   if (inReplyTo) payload.inReplyTo = inReplyTo;
 
