@@ -228,21 +228,26 @@ function buildRawEmail({ from, to, subject, body, signatureHtml = '', signatureP
     headers.push(`References: ${references || bracket}`);
   }
 
+  // Base64-encode each MIME part so non-ASCII chars (em dashes, curly quotes, etc.)
+  // survive transit — 7bit only allows ASCII 0-127 and corrupts anything higher.
+  const plainB64 = Buffer.from(plainText, 'utf8').toString('base64').match(/.{1,76}/g).join('\r\n');
+  const htmlB64  = Buffer.from(fullHtml,  'utf8').toString('base64').match(/.{1,76}/g).join('\r\n');
+
   // ── Assemble multipart/alternative body ──────────────────────────────────────
   const rawEmail = [
     headers.join('\r\n'),
     '',
     `--${boundary}`,
     'Content-Type: text/plain; charset=utf-8',
-    'Content-Transfer-Encoding: 7bit',
+    'Content-Transfer-Encoding: base64',
     '',
-    plainText,
+    plainB64,
     '',
     `--${boundary}`,
     'Content-Type: text/html; charset=utf-8',
-    'Content-Transfer-Encoding: 7bit',
+    'Content-Transfer-Encoding: base64',
     '',
-    fullHtml,
+    htmlB64,
     '',
     `--${boundary}--`
   ].join('\r\n');
