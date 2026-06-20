@@ -1998,49 +1998,49 @@ function initSettingsPage() {
     const twitter = document.getElementById('sig-twitter').value.trim();
     const disc    = document.getElementById('sig-disclaimer').value.trim();
 
-    const photoHtml = photo
-      ? `<img src="${photo}" width="72" height="72" style="border-radius:50%;object-fit:cover;display:block;border:3px solid #1a3e72;box-shadow:0 2px 10px rgba(26,62,114,.18)" />`
+    const photoBlock = photo
+      ? `<td width="100" style="padding-right:16px;vertical-align:middle"><img src="${photo}" width="84" height="84" alt="${name}" style="display:block;border-radius:50%;width:84px;height:84px;object-fit:cover"></td>`
       : '';
 
-    const contactParts = [];
-    if (website) contactParts.push(`<a href="${website}" style="color:#1a3e72;text-decoration:none;font-size:12px">🌐 ${website.replace(/^https?:\/\//, '')}</a>`);
-    if (loc)     contactParts.push(`<span style="color:#64748b;font-size:12px">📍 ${loc}</span>`);
-    const contactLine = contactParts.length ? `<p style="margin:5px 0 0">${contactParts.join(' &nbsp;|&nbsp; ')}</p>` : '';
+    const titleLine   = title   ? `<p style="margin:3px 0 0;font-size:13px;color:#444444;font-family:Arial,sans-serif;line-height:1.5">${title}${company ? ' at ' + company : ''}</p>` : '';
+    const companyLine = company ? `<p style="margin:2px 0 0;font-size:13px;color:#444444;font-family:Arial,sans-serif;line-height:1.5">${company}</p>` : '';
 
-    const iconBadge = (href, bg, letter) => href
-      ? `<a href="${href}" target="_blank" style="display:inline-block;background:${bg};color:#fff;width:28px;height:28px;line-height:28px;text-align:center;border-radius:6px;font-weight:800;font-size:13px;text-decoration:none;margin-right:6px">${letter}</a>`
+    const websiteLine  = website ? `<p style="margin:0 0 5px;font-size:13px;color:#444444;font-family:Arial,sans-serif">🌐&nbsp;<a href="${website}" style="color:#444444;text-decoration:none">${website.replace(/^https?:\/\//, '')}</a></p>` : '';
+    const locationLine = loc     ? `<p style="margin:0 0 5px;font-size:13px;color:#444444;font-family:Arial,sans-serif">📍&nbsp;${loc}</p>` : '';
+
+    const iconTd = (href, bg, label) => href
+      ? `<td width="40" style="padding-right:8px"><a href="${href}" target="_blank" style="display:block;width:38px;height:38px;border-radius:19px;background-color:${bg};text-align:center;line-height:38px;text-decoration:none;color:#ffffff;font-family:Arial,sans-serif;font-size:14px;font-weight:700">${label}</a></td>`
       : '';
+    const socialTds = [iconTd(linkedin,'#0A66C2','in'), iconTd(facebook,'#1877F2','f'), iconTd(twitter,'#1a1a1a','X')].filter(Boolean).join('');
+    const socialBlock = socialTds ? `<table border="0" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin-bottom:12px"><tr>${socialTds}</tr></table>` : '';
 
-    const socialHtml = (linkedin || facebook || twitter)
-      ? `<div style="margin-top:12px">${iconBadge(linkedin,'#0077B5','in')}${iconBadge(facebook,'#1877F2','f')}${iconBadge(twitter,'#111','𝕏')}</div>`
-      : '';
-
-    const ctaHtml = website
-      ? `<a href="${website}" target="_blank" style="display:inline-block;background:#1a3e72;color:#fff;font-size:11px;font-weight:700;letter-spacing:.4px;text-transform:uppercase;padding:7px 15px;border-radius:5px;text-decoration:none;margin-left:10px">Visit Website →</a>`
-      : '';
-
-    const actionsHtml = (linkedin || facebook || twitter || website)
-      ? `<div style="margin-top:12px;display:flex;align-items:center">${(linkedin||facebook||twitter)?`<span>${iconBadge(linkedin,'#0077B5','in')}${iconBadge(facebook,'#1877F2','f')}${iconBadge(twitter,'#111','𝕏')}</span>`:''} ${ctaHtml}</div>`
+    const visitBtn = website
+      ? `<a href="${website}" target="_blank" style="display:inline-block;padding:7px 22px;border:1.5px solid #333333;border-radius:6px;color:#333333;text-decoration:none;font-family:Arial,sans-serif;font-size:12.5px;font-weight:500;margin-bottom:14px">Visit Website</a>`
       : '';
 
     const discHtml = disc
-      ? `<div style="margin-top:14px;padding-top:10px;border-top:1px solid #e8edf4"><p style="margin:0;font-size:9.5px;color:#94a3b8;line-height:1.55">${disc}</p></div>`
+      ? `<p style="margin:0;font-size:11px;color:#888888;line-height:1.6;font-family:Arial,sans-serif;max-width:600px">${disc}</p>`
       : '';
 
     content.innerHTML = `
-      <div style="max-width:540px">
-        <div style="height:3px;background:linear-gradient(90deg,#1a3e72 0%,#3b6dc7 60%,rgba(59,109,199,0) 100%);margin-bottom:20px;border-radius:2px"></div>
-        <p style="margin:0 0 18px;font-size:16px;font-family:Georgia,serif;color:#2d2d2d;font-style:italic">Sincerely,</p>
-        <div style="display:flex;align-items:flex-start">
-          ${photo ? `<div style="flex-shrink:0;margin-right:18px">${photoHtml}</div>` : ''}
-          <div style="border-left:3px solid #1a3e72;padding-left:14px;line-height:1.4">
-            <p style="margin:0;font-size:16px;font-weight:700;color:#0f172a;letter-spacing:-.2px">${name}</p>
-            ${title ? `<p style="margin:3px 0 0;font-size:12px;color:#475569">${title}</p>` : ''}
-            ${company ? `<p style="margin:3px 0 0;font-size:12px;font-weight:600;color:#1a3e72">${company}</p>` : ''}
-            ${contactLine}
-          </div>
-        </div>
-        ${actionsHtml}
+      <div style="font-family:Arial,sans-serif;max-width:640px">
+        <p style="margin:0 0 14px;font-family:'Dancing Script',cursive;font-size:30px;color:#2d2d2d;line-height:1;font-weight:600">Sincerely</p>
+        <table border="0" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin-bottom:14px">
+          <tr>
+            ${photoBlock}
+            <td style="vertical-align:middle">
+              <p style="margin:0;font-size:18px;font-weight:700;color:#111111;font-family:Arial,sans-serif;line-height:1.2">${name}</p>
+              ${titleLine}
+              ${companyLine}
+            </td>
+          </tr>
+        </table>
+        <hr style="border:none;border-top:1px solid #dddddd;margin:0 0 14px">
+        ${websiteLine}
+        ${locationLine}
+        <div style="height:10px"></div>
+        ${socialBlock}
+        ${visitBtn}
         ${discHtml}
       </div>`;
     box.style.display = 'block';
