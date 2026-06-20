@@ -563,15 +563,16 @@ function buildSignatureHtml(user) {
     : '';
 
   return `
-<div style="margin-top:28px;padding-top:20px;border-top:2px solid #1a3e72;max-width:560px">
-  <p style="margin:0 0 16px;font-size:15px;font-family:Georgia,'Times New Roman',serif;color:#374151;font-style:italic">Sincerely,</p>
+<link href="https://fonts.googleapis.com/css2?family=Dancing+Script:wght@600&display=swap" rel="stylesheet">
+<div style="margin-top:28px;padding-top:20px;border-top:1px solid #e2e8f0;max-width:560px">
+  <p style="margin:0 0 14px;font-size:22px;font-family:'Dancing Script',cursive;color:#374151;line-height:1.2">Sincerely,</p>
   <table border="0" cellpadding="0" cellspacing="0" style="border-collapse:collapse">
     <tr>
       ${photoCell}
-      <td style="vertical-align:top;border-left:3px solid #1a3e72;padding-left:14px">
+      <td style="vertical-align:top">
         <p style="margin:0;font-size:15px;font-weight:700;color:#0f172a;font-family:Arial,sans-serif;line-height:1.3">${name}</p>
-        ${title   ? `<p style="margin:3px 0 0;font-size:12px;color:#475569;font-family:Arial,sans-serif;line-height:1.4">${title}</p>` : ''}
-        ${company ? `<p style="margin:3px 0 0;font-size:12px;font-weight:600;color:#1a3e72;font-family:Arial,sans-serif;line-height:1.4">${company}</p>` : ''}
+        ${title   ? `<p style="margin:2px 0 0;font-size:12px;color:#475569;font-family:Arial,sans-serif;line-height:1.4">${title}</p>` : ''}
+        ${company ? `<p style="margin:2px 0 0;font-size:12px;color:#475569;font-family:Arial,sans-serif;line-height:1.4">${company}</p>` : ''}
         ${contactLine}
       </td>
     </tr>
