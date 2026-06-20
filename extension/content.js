@@ -145,8 +145,13 @@
       const atIdx = line.lastIndexOf(' at ');
       if (atIdx > 3 && atIdx < line.length - 4) {
         const t = line.slice(0, atIdx).trim();
-        const c = line.slice(atIdx + 4).replace(/\s+in\s+\d{4}.*/i, '').replace(/\s+\d{4}\s*[-–]\s*.*/,'').trim();
-        if (t && c) career.push({ title: t, company: c });
+        const rest = line.slice(atIdx + 4);
+        // Extract dates before stripping them
+        const dateMatch = rest.match(/(\d{4}\s*[-–]\s*(?:\d{4}|Present|present|Current|current))/i)
+                       || rest.match(/in\s+(\d{4}\s*[-–]\s*(?:\d{4}|Present|present|Current|current))/i);
+        const dates = dateMatch ? dateMatch[1].replace(/\s+/g, ' ').trim() : '';
+        const c = rest.replace(/\s+in\s+\d{4}.*/i, '').replace(/\s+\d{4}\s*[-–]\s*.*/,'').trim();
+        if (t && c) career.push({ title: t, company: c, dates });
       }
     }
 
