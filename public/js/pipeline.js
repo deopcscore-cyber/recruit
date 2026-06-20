@@ -511,6 +511,32 @@ function refreshModal() {
   });
 }
 
+function draftStorageKey(candidateId, fieldId) {
+  return `recruit_draft_${candidateId}_${fieldId}`;
+}
+
+function clearDraft(candidateId, fieldId) {
+  localStorage.removeItem(draftStorageKey(candidateId, fieldId));
+}
+
+function initDraftTextareas(body, candidateId) {
+  body.querySelectorAll('textarea.draft-textarea').forEach(ta => {
+    if (!ta.id) return;
+    const key = draftStorageKey(candidateId, ta.id);
+    const saved = localStorage.getItem(key);
+    if (saved && !ta.value) {
+      ta.value = saved;
+      const badge = document.createElement('span');
+      badge.textContent = '• Draft restored';
+      badge.style.cssText = 'font-size:0.73rem;color:#d97706;margin-left:8px;display:inline-block';
+      const label = ta.closest('.form-group')?.querySelector('label');
+      if (label) label.appendChild(badge);
+      setTimeout(() => badge.remove(), 4000);
+    }
+    ta.addEventListener('input', () => localStorage.setItem(key, ta.value));
+  });
+}
+
 function renderModalTab(tabKey) {
   const body = document.getElementById('cmodal-body');
   if (!body) return;
@@ -525,6 +551,10 @@ function renderModalTab(tabKey) {
     case 'victory':   renderVictoryTab(body); break;
     case 'thread':    renderThreadTab(body); break;
     default: body.innerHTML = '';
+  }
+
+  if (tabKey !== 'profile' && tabKey !== 'thread' && _modalCandidate) {
+    initDraftTextareas(body, _modalCandidate.id);
   }
 }
 
@@ -1235,6 +1265,7 @@ function renderReviewTab(body) {
       const updated = await API.candidates.update(c.id, stepsUpdate);
       Object.assign(_modalCandidate, result.candidate || {}, updated);
       _modalOnUpdate(_modalCandidate);
+      clearDraft(c.id, 'review-body');
       refreshModal();
       Toast.success(isConsultant ? 'Feedback sent — Proposal tab is now unlocked' : 'Review email sent — Intro tab is now unlocked');
       renderReviewTab(body);
@@ -1412,6 +1443,25 @@ function renderThreadTab(body) {
   const msgsEl = body.querySelector('#thread-msgs');
   if (msgsEl) msgsEl.scrollTop = msgsEl.scrollHeight;
 
+  // ── Draft auto-save / restore ─────────────────────────────────────────────
+  const draftKey     = `recruit_draft_${c.id}_thread`;
+  const draftSubjKey = `recruit_draft_${c.id}_thread_subj`;
+  const bodyEl  = body.querySelector('#th-body');
+  const subjEl  = body.querySelector('#th-subject');
+  const saved = localStorage.getItem(draftKey);
+  const savedSubj = localStorage.getItem(draftSubjKey);
+  if (saved)     { bodyEl.value = saved; }
+  if (savedSubj && !subjEl.value) { subjEl.value = savedSubj; }
+  if (saved) {
+    const badge = document.createElement('span');
+    badge.textContent = '• Draft restored';
+    badge.style.cssText = 'font-size:0.73rem;color:#d97706;margin-left:8px';
+    subjEl.parentElement.appendChild(badge);
+    setTimeout(() => badge.remove(), 4000);
+  }
+  bodyEl.addEventListener('input', () => localStorage.setItem(draftKey, bodyEl.value));
+  subjEl.addEventListener('input', () => localStorage.setItem(draftSubjKey, subjEl.value));
+
   // Quoted-text toggles
   body.querySelectorAll('.thread-quote-toggle').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -1540,6 +1590,8 @@ function renderThreadTab(body) {
       const result = await API.email.send({ candidateId: c.id, subject, body: msgBody, isReply });
       if (result.candidate) Object.assign(_modalCandidate, result.candidate);
       _modalOnUpdate(_modalCandidate);
+      clearDraft(c.id, 'thread');
+      clearDraft(c.id, 'thread_subj');
       Toast.success('Email sent');
       renderThreadTab(body);
     } catch (err) {
@@ -1606,6 +1658,8 @@ function wireAIDraft(body, { genBtnId, draftAreaId, subjectId, bodyId, regenBtnI
         const updated = await API.candidates.update(c.id, stepsUpdate);
         Object.assign(_modalCandidate, updated);
         _modalOnUpdate(_modalCandidate);
+        clearDraft(c.id, bodyId);
+        if (subjectId) clearDraft(c.id, subjectId);
         refreshModal();
         Toast.success('Email sent');
         renderModalTab(_activeTab);
