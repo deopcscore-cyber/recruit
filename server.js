@@ -17,7 +17,7 @@ console.log('Persistent? :', process.env.DATA_DIR
            On Railway: add Volume at /data and set DATA_DIR=/data to persist logins.`);
 
 // Ensure required sub-directories exist
-['sessions', 'resumes'].forEach(d => {
+['sessions', 'resumes', 'photos'].forEach(d => {
   const p = path.join(DATA_DIR, d);
   if (!fs.existsSync(p)) fs.mkdirSync(p, { recursive: true });
 });
@@ -69,6 +69,9 @@ app.use(express.static(path.join(__dirname, 'public'), {
     }
   }
 }));
+
+// Serve uploaded profile photos publicly
+app.use('/photos', express.static(path.join(DATA_DIR, 'photos'), { maxAge: '7d' }));
 
 // ─── Routes ───────────────────────────────────────────────────────────────────
 app.use('/api/auth',       require('./routes/auth'));

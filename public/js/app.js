@@ -1984,6 +1984,39 @@ function initSettingsPage() {
     finally { btn.disabled = false; btn.textContent = 'Save Signature'; }
   });
 
+  document.getElementById('sig-photo-upload').addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const status = document.getElementById('sig-photo-status');
+    const preview = document.getElementById('sig-photo-preview');
+    const img = document.getElementById('sig-photo-img');
+    status.textContent = 'Uploading…';
+    preview.style.display = 'flex';
+    preview.style.alignItems = 'center';
+    try {
+      const fd = new FormData();
+      fd.append('photo', file);
+      const res = await fetch('/api/settings/signature/upload-photo', { method: 'POST', body: fd });
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+      document.getElementById('sig-photo').value = data.url;
+      img.src = data.url;
+      status.textContent = 'Uploaded ✓';
+      status.style.color = '#16a34a';
+    } catch (err) {
+      status.textContent = 'Upload failed: ' + err.message;
+      status.style.color = '#ef4444';
+    }
+  });
+
+  // Show preview thumbnail if URL is already set
+  const existingPhoto = document.getElementById('sig-photo').value;
+  if (existingPhoto) {
+    document.getElementById('sig-photo-img').src = existingPhoto;
+    document.getElementById('sig-photo-preview').style.display = 'flex';
+    document.getElementById('sig-photo-preview').style.alignItems = 'center';
+  }
+
   document.getElementById('sig-linkedin-fill-btn').addEventListener('click', async () => {
     const url = document.getElementById('sig-linkedin-import').value.trim();
     const msg = document.getElementById('sig-linkedin-fill-msg');

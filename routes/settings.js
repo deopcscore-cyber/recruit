@@ -3,9 +3,31 @@ const router = express.Router();
 const bcrypt = require('bcrypt');
 const { v4: uuidv4 } = require('uuid');
 const crypto = require('crypto');
+const path = require('path');
+const fs = require('fs');
+const multer = require('multer');
 const storage = require('../services/storage');
 const requireAuth = require('../middleware/auth');
 const zohoService = require('../services/zoho');
+const { DATA_DIR } = require('../config');
+
+const PHOTOS_DIR = path.join(DATA_DIR, 'photos');
+if (!fs.existsSync(PHOTOS_DIR)) fs.mkdirSync(PHOTOS_DIR, { recursive: true });
+
+const photoUpload = multer({
+  storage: multer.diskStorage({
+    destination: (req, file, cb) => cb(null, PHOTOS_DIR),
+    filename: (req, file, cb) => {
+      const ext = path.extname(file.originalname).toLowerCase() || '.jpg';
+      cb(null, `${req.session.userId}${ext}`);
+    }
+  }),
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype.startsWith('image/')) cb(null, true);
+    else cb(new Error('Only image files are allowed'));
+  }
+});
 
 // All routes require auth
 router.use(requireAuth);
@@ -258,6 +280,26 @@ router.get('/gmail-status', async (req, res) => {
   } catch (err) {
     console.error('Gmail status error:', err);
     return res.status(500).json({ error: 'Failed to get Gmail status' });
+  }
+});
+
+// POST /api/settings/signature/upload-photo
+router.post('/signature/upload-photo', photoUpload.single('photo'), async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: 'No image file received' });
+    const { BASE_URL } = require('../config');
+    const ext = path.extname(req.file.filename);
+    const url = `${BASE_URL}/photos/${req.session.userId}${ext}`;
+    // Save to user signature too
+    const user = await storage.getUserById(req.session.userId);
+    if (user) {
+      user.signature = user.signature || {};
+      user.signature.photoUrl = url;
+      await storage.saveUser(user);
+    }
+    return res.json({ url });
+  } catch (err) {
+    return res.status(500).json({ error: err.message || 'Upload failed' });
   }
 });
 
