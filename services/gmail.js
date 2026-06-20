@@ -540,16 +540,9 @@ function buildSignatureHtml(user) {
   const locationLine= location ? `<p style="margin:0 0 5px;font-size:13px;color:#444444;font-family:Arial,sans-serif">&#128205;&nbsp;${location}</p>` : '';
 
   const iconTd = (href, bg, label) =>
-    `<td style="padding-right:10px">
-       <table border="0" cellpadding="0" cellspacing="0" style="border-collapse:collapse">
-         <tr>
-           <td align="center" valign="middle" width="42" height="42" bgcolor="${bg}"
-               style="width:42px;height:42px;border-radius:21px;background-color:${bg}">
-             <a href="${href}" target="_blank"
-                style="display:block;width:42px;height:42px;line-height:42px;text-align:center;border-radius:21px;background-color:${bg};text-decoration:none;color:#ffffff;font-family:Arial,sans-serif;font-size:15px;font-weight:700;mso-line-height-rule:exactly">${label}</a>
-           </td>
-         </tr>
-       </table>
+    `<td width="46" style="padding-right:0">
+       <a href="${href}" target="_blank"
+          style="display:inline-block;width:36px;height:36px;border-radius:18px;background-color:${bg};text-align:center;line-height:36px;text-decoration:none;color:#ffffff;font-family:Arial,sans-serif;font-size:13px;font-weight:700;mso-line-height-rule:exactly;vertical-align:middle">${label}</a>
      </td>`;
   const socialTds = [];
   if (linkedin) socialTds.push(iconTd(linkedin, '#0A66C2', 'in'));
