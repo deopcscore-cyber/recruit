@@ -507,12 +507,12 @@ function parseEmailBody(payload) {
 
 // ─── Email Signature Builder (premium) ────────────────────────────────────────
 function buildSignatureHtml(user) {
-  const sig = user.signature || {};
-  if (!sig.enabled) return '';
+  const sig  = user.signature || {};
+  const name = (user.name || '').trim();
+  if (!name) return ''; // nothing to sign with
 
-  const name       = (user.name  || '').trim();
-  const title      = (user.title || 'Senior Talent Acquisition Coordinator').trim();
-  const company    = (user.companyName || '').trim() || 'our company';
+  const title      = (user.title || '').trim();
+  const company    = (user.companyName || '').trim();
   const photo      = (sig.photoUrl  || '').trim();
   const website    = (sig.website   || '').trim();
   const location   = (sig.location  || '').trim();
@@ -537,14 +537,21 @@ function buildSignatureHtml(user) {
     ? `<p style="margin:5px 0 0;font-family:Arial,sans-serif;font-size:12px;line-height:1.5;color:#64748b">${contactParts.join('&nbsp;&nbsp;·&nbsp;&nbsp;')}</p>`
     : '';
 
-  // ── Social links (text-style, not badge buttons) ──────────────────────────
-  const socialLinks = [];
-  if (linkedin) socialLinks.push(`<a href="${linkedin}" target="_blank" style="color:#1a3e72;text-decoration:none;font-family:Arial,sans-serif;font-size:12px;font-weight:600">LinkedIn</a>`);
-  if (facebook) socialLinks.push(`<a href="${facebook}" target="_blank" style="color:#1a3e72;text-decoration:none;font-family:Arial,sans-serif;font-size:12px;font-weight:600">Facebook</a>`);
-  if (twitter)  socialLinks.push(`<a href="${twitter}"  target="_blank" style="color:#1a3e72;text-decoration:none;font-family:Arial,sans-serif;font-size:12px;font-weight:600">X / Twitter</a>`);
-  const socialRow = socialLinks.length
+  // ── Social icons — colored circle buttons ─────────────────────────────────
+  const iconBtn = (href, bg, label) =>
+    `<a href="${href}" target="_blank" style="display:inline-block;width:30px;height:30px;border-radius:50%;background:${bg};text-align:center;line-height:30px;text-decoration:none;color:#ffffff;font-family:Arial,sans-serif;font-size:13px;font-weight:700;margin-right:6px">${label}</a>`;
+  const socialIcons = [];
+  if (linkedin) socialIcons.push(iconBtn(linkedin, '#0A66C2', 'in'));
+  if (facebook) socialIcons.push(iconBtn(facebook, '#1877F2', 'f'));
+  if (twitter)  socialIcons.push(iconBtn(twitter,  '#000000', 'X'));
+  const socialRow = socialIcons.length
+    ? `<tr><td colspan="2" style="padding-top:10px">${socialIcons.join('')}</td></tr>`
+    : '';
+
+  // ── Visit Website button ───────────────────────────────────────────────────
+  const websiteBtn = website
     ? `<tr><td colspan="2" style="padding-top:10px">
-         <p style="margin:0;font-family:Arial,sans-serif;font-size:12px;color:#64748b">${socialLinks.join('&nbsp;&nbsp;·&nbsp;&nbsp;')}</p>
+         <a href="${website}" target="_blank" style="display:inline-block;padding:6px 18px;border:1px solid #1a3e72;border-radius:4px;color:#1a3e72;text-decoration:none;font-family:Arial,sans-serif;font-size:12px;font-weight:600">Visit Website</a>
        </td></tr>`
     : '';
 
@@ -563,33 +570,30 @@ function buildSignatureHtml(user) {
       ${photoCell}
       <td style="vertical-align:top;border-left:3px solid #1a3e72;padding-left:14px">
         <p style="margin:0;font-size:15px;font-weight:700;color:#0f172a;font-family:Arial,sans-serif;line-height:1.3">${name}</p>
-        <p style="margin:3px 0 0;font-size:12px;color:#475569;font-family:Arial,sans-serif;line-height:1.4">${title}</p>
+        ${title   ? `<p style="margin:3px 0 0;font-size:12px;color:#475569;font-family:Arial,sans-serif;line-height:1.4">${title}</p>` : ''}
         ${company ? `<p style="margin:3px 0 0;font-size:12px;font-weight:600;color:#1a3e72;font-family:Arial,sans-serif;line-height:1.4">${company}</p>` : ''}
         ${contactLine}
       </td>
     </tr>
     ${socialRow}
+    ${websiteBtn}
     ${disclaimerBlock}
   </table>
 </div>`;
 }
 
 function buildSignaturePlainText(user) {
-  const sig = user.signature || {};
-  if (!sig.enabled) return '';
-  const name    = user.name  || '';
-  const title   = user.title || 'Senior Talent Acquisition Coordinator';
-  const company = (user.companyName || '').trim() || '';
-  const lines = [
-    '',
-    '—',
-    name,
-    title,
-    ...(company ? [company] : [])
-  ];
-  if (sig.website)  lines.push(sig.website);
-  if (sig.location) lines.push(sig.location);
-  if (sig.linkedin) lines.push('LinkedIn: ' + sig.linkedin);
+  const name    = (user.name || '').trim();
+  if (!name) return '';
+  const sig     = user.signature || {};
+  const title   = (user.title || '').trim();
+  const company = (user.companyName || '').trim();
+  const lines   = ['', '—', name];
+  if (title)   lines.push(title);
+  if (company) lines.push(company);
+  if (sig.website)    lines.push(sig.website);
+  if (sig.location)   lines.push(sig.location);
+  if (sig.linkedin)   lines.push('LinkedIn: ' + sig.linkedin);
   if (sig.disclaimer) { lines.push(''); lines.push(sig.disclaimer); }
   return '\n' + lines.join('\n');
 }
