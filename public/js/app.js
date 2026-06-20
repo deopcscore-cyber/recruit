@@ -2062,43 +2062,45 @@ function initSettingsPage() {
       ? `<td width="100" style="padding-right:16px;vertical-align:middle"><img src="${photo}" width="84" height="84" alt="${name}" style="display:block;border-radius:50%;width:84px;height:84px;object-fit:cover"></td>`
       : '';
 
-    const titleLine   = title   ? `<p style="margin:3px 0 0;font-size:13px;color:#444444;font-family:Arial,sans-serif;line-height:1.5">${title}${company ? ' at ' + company : ''}</p>` : '';
-    const companyLine = company ? `<p style="margin:2px 0 0;font-size:13px;color:#444444;font-family:Arial,sans-serif;line-height:1.5">${company}</p>` : '';
+    const nameBlock = title
+      ? `<p style="margin:0;font-size:17px;font-weight:700;color:#111111;font-family:Arial,sans-serif;line-height:1.2">${name}</p>
+         <p style="margin:3px 0 0;font-size:13px;color:#444444;font-family:Arial,sans-serif;line-height:1.5">${title}</p>
+         ${company ? `<p style="margin:2px 0 0;font-size:13px;color:#444444;font-family:Arial,sans-serif;line-height:1.5">${company}</p>` : ''}`
+      : `<p style="margin:0;font-size:17px;font-weight:700;color:#111111;font-family:Arial,sans-serif;line-height:1.2">${name}</p>
+         ${company ? `<p style="margin:3px 0 0;font-size:13px;color:#444444;font-family:Arial,sans-serif;line-height:1.5">${company}</p>` : ''}`;
 
     const websiteLine  = website ? `<p style="margin:0 0 5px;font-size:13px;color:#444444;font-family:Arial,sans-serif">🌐&nbsp;<a href="${website}" style="color:#444444;text-decoration:none">${website.replace(/^https?:\/\//, '')}</a></p>` : '';
     const locationLine = loc     ? `<p style="margin:0 0 5px;font-size:13px;color:#444444;font-family:Arial,sans-serif">📍&nbsp;${loc}</p>` : '';
 
     const iconTd = (href, bg, label) => href
-      ? `<td width="40" style="padding-right:8px"><a href="${href}" target="_blank" style="display:block;width:38px;height:38px;border-radius:19px;background-color:${bg};text-align:center;line-height:38px;text-decoration:none;color:#ffffff;font-family:Arial,sans-serif;font-size:14px;font-weight:700">${label}</a></td>`
+      ? `<td style="padding-right:10px"><table border="0" cellpadding="0" cellspacing="0" style="border-collapse:collapse"><tr><td align="center" valign="middle" width="42" height="42" bgcolor="${bg}" style="width:42px;height:42px;border-radius:21px;background-color:${bg}"><a href="${href}" target="_blank" style="display:block;width:42px;height:42px;line-height:42px;text-align:center;border-radius:21px;background-color:${bg};text-decoration:none;color:#ffffff;font-family:Arial,sans-serif;font-size:15px;font-weight:700">${label}</a></td></tr></table></td>`
       : '';
     const socialTds = [iconTd(linkedin,'#0A66C2','in'), iconTd(facebook,'#1877F2','f'), iconTd(twitter,'#1a1a1a','X')].filter(Boolean).join('');
-    const socialBlock = socialTds ? `<table border="0" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin-bottom:12px"><tr>${socialTds}</tr></table>` : '';
+    const socialBlock = socialTds ? `<table border="0" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin-bottom:14px"><tr>${socialTds}</tr></table>` : '';
 
     const visitBtn = website
-      ? `<a href="${website}" target="_blank" style="display:inline-block;padding:7px 22px;border:1.5px solid #333333;border-radius:6px;color:#333333;text-decoration:none;font-family:Arial,sans-serif;font-size:12.5px;font-weight:500;margin-bottom:14px">Visit Website</a>`
+      ? `<a href="${website}" target="_blank" style="display:inline-block;padding:8px 24px;border:1.5px solid #333333;border-radius:6px;color:#333333;text-decoration:none;font-family:Arial,sans-serif;font-size:13px;font-weight:500;margin-bottom:14px">Visit Website</a>`
       : '';
 
     const discHtml = disc
-      ? `<p style="margin:0;font-size:11px;color:#888888;line-height:1.6;font-family:Arial,sans-serif;max-width:600px">${disc}</p>`
+      ? `<p style="margin:0;font-size:11px;color:#888888;line-height:1.6;font-family:Arial,sans-serif;max-width:560px">${disc}</p>`
       : '';
 
     content.innerHTML = `
-      <div style="font-family:Arial,sans-serif;max-width:640px">
+      <div style="font-family:Arial,sans-serif;max-width:600px;width:100%">
         <p style="margin:0 0 14px;font-family:'Dancing Script',cursive;font-size:30px;color:#2d2d2d;line-height:1;font-weight:600">Sincerely</p>
-        <table border="0" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin-bottom:14px">
+        <table border="0" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin-bottom:14px;width:100%">
           <tr>
             ${photoBlock}
             <td style="vertical-align:middle">
-              <p style="margin:0;font-size:18px;font-weight:700;color:#111111;font-family:Arial,sans-serif;line-height:1.2">${name}</p>
-              ${titleLine}
-              ${companyLine}
+              ${nameBlock}
             </td>
           </tr>
         </table>
         <hr style="border:none;border-top:1px solid #dddddd;margin:0 0 14px">
         ${websiteLine}
         ${locationLine}
-        <div style="height:10px"></div>
+        <div style="height:8px"></div>
         ${socialBlock}
         ${visitBtn}
         ${discHtml}
