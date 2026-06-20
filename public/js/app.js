@@ -2059,15 +2059,15 @@ function initSettingsPage() {
     const disc    = document.getElementById('sig-disclaimer').value.trim();
 
     const photoBlock = photo
-      ? `<td width="100" style="padding-right:16px;vertical-align:middle"><img src="${photo}" width="84" height="84" alt="${name}" style="display:block;border-radius:50%;width:84px;height:84px;object-fit:cover"></td>`
+      ? `<td width="108" style="padding-right:14px;vertical-align:middle"><img src="${photo}" width="90" height="90" alt="${name}" style="display:block;border-radius:50%;width:90px;height:90px;object-fit:cover"></td>`
       : '';
 
     const nameBlock = title
-      ? `<p style="margin:0;font-size:17px;font-weight:700;color:#111111;font-family:Arial,sans-serif;line-height:1.2">${name}</p>
-         <p style="margin:3px 0 0;font-size:13px;color:#444444;font-family:Arial,sans-serif;line-height:1.5">${title}</p>
-         ${company ? `<p style="margin:2px 0 0;font-size:13px;color:#444444;font-family:Arial,sans-serif;line-height:1.5">${company}</p>` : ''}`
-      : `<p style="margin:0;font-size:17px;font-weight:700;color:#111111;font-family:Arial,sans-serif;line-height:1.2">${name}</p>
-         ${company ? `<p style="margin:3px 0 0;font-size:13px;color:#444444;font-family:Arial,sans-serif;line-height:1.5">${company}</p>` : ''}`;
+      ? `<p style="margin:0;font-size:20px;font-weight:700;color:#111111;font-family:Arial,sans-serif;line-height:1.2">${name}</p>
+         <p style="margin:5px 0 0;font-size:15px;color:#444444;font-family:Arial,sans-serif;line-height:1.4">${title}</p>
+         ${company ? `<p style="margin:3px 0 0;font-size:15px;color:#444444;font-family:Arial,sans-serif;line-height:1.4">${company}</p>` : ''}`
+      : `<p style="margin:0;font-size:20px;font-weight:700;color:#111111;font-family:Arial,sans-serif;line-height:1.2">${name}</p>
+         ${company ? `<p style="margin:5px 0 0;font-size:15px;color:#444444;font-family:Arial,sans-serif;line-height:1.4">${company}</p>` : ''}`;
 
     const websiteLine  = website ? `<p style="margin:0 0 5px;font-size:13px;color:#444444;font-family:Arial,sans-serif">🌐&nbsp;<a href="${website}" style="color:#444444;text-decoration:none">${website.replace(/^https?:\/\//, '')}</a></p>` : '';
     const locationLine = loc     ? `<p style="margin:0 0 5px;font-size:13px;color:#444444;font-family:Arial,sans-serif">📍&nbsp;${loc}</p>` : '';

@@ -528,9 +528,9 @@ function buildSignatureHtml(user) {
   const disclaimer = (sig.disclaimer|| '').trim();
 
   const photoBlock = photo ? `
-    <td width="100" style="padding-right:16px;vertical-align:middle">
-      <img src="${photo}" width="84" height="84" alt="${name}"
-           style="display:block;border-radius:50%;width:84px;height:84px;object-fit:cover" />
+    <td width="108" style="padding-right:14px;vertical-align:middle">
+      <img src="${photo}" width="90" height="90" alt="${name}"
+           style="display:block;border-radius:50%;width:90px;height:90px;object-fit:cover" />
     </td>` : '';
 
   const titleLine  = title   ? `<p style="margin:3px 0 0;font-size:13px;color:#444444;font-family:Arial,sans-serif;line-height:1.5">${title}${company ? ' at ' + company : ''}</p>` : '';
@@ -561,11 +561,11 @@ function buildSignatureHtml(user) {
 
   // Only show company on its own line if there's no title (title already appends company)
   const nameBlock = title
-    ? `<p style="margin:0;font-size:17px;font-weight:700;color:#111111;font-family:Arial,sans-serif;line-height:1.2">${name}</p>
-       <p style="margin:3px 0 0;font-size:13px;color:#444444;font-family:Arial,sans-serif;line-height:1.5">${title}</p>
-       ${company ? `<p style="margin:2px 0 0;font-size:13px;color:#444444;font-family:Arial,sans-serif;line-height:1.5">${company}</p>` : ''}`
-    : `<p style="margin:0;font-size:17px;font-weight:700;color:#111111;font-family:Arial,sans-serif;line-height:1.2">${name}</p>
-       ${company ? `<p style="margin:3px 0 0;font-size:13px;color:#444444;font-family:Arial,sans-serif;line-height:1.5">${company}</p>` : ''}`;
+    ? `<p style="margin:0;font-size:20px;font-weight:700;color:#111111;font-family:Arial,sans-serif;line-height:1.2">${name}</p>
+       <p style="margin:5px 0 0;font-size:15px;color:#444444;font-family:Arial,sans-serif;line-height:1.4">${title}</p>
+       ${company ? `<p style="margin:3px 0 0;font-size:15px;color:#444444;font-family:Arial,sans-serif;line-height:1.4">${company}</p>` : ''}`
+    : `<p style="margin:0;font-size:20px;font-weight:700;color:#111111;font-family:Arial,sans-serif;line-height:1.2">${name}</p>
+       ${company ? `<p style="margin:5px 0 0;font-size:15px;color:#444444;font-family:Arial,sans-serif;line-height:1.4">${company}</p>` : ''}`;
 
   return `
 <link href="https://fonts.googleapis.com/css2?family=Dancing+Script:wght@600&display=swap" rel="stylesheet">
