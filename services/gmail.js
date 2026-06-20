@@ -294,7 +294,13 @@ async function sendEmail(userId, { to, subject, body, threadId, inReplyTo, refer
   try {
     response = await gmail.users.messages.send({ userId: 'me', requestBody });
   } catch (err) {
-    await handleGmailError(err, user);
+    // If the stored threadId no longer exists in Gmail (deleted), retry as a fresh thread
+    if (threadId && err.message && err.message.includes('Requested entity was not found')) {
+      const freshBody = { raw };
+      response = await gmail.users.messages.send({ userId: 'me', requestBody: freshBody });
+    } else {
+      await handleGmailError(err, user);
+    }
   }
 
   // Fetch the sent message to retrieve its SMTP Message-ID header.
