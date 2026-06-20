@@ -542,6 +542,16 @@
             </div>
             <div class="settings-card-body">
               <form id="signature-form">
+
+                <div class="form-group">
+                  <label>Auto-fill from LinkedIn <span class="text-muted text-xs">(paste your profile URL)</span></label>
+                  <div style="display:flex;gap:8px">
+                    <input type="url" id="sig-linkedin-import" placeholder="https://www.linkedin.com/in/your-name" style="flex:1" />
+                    <button type="button" id="sig-linkedin-fill-btn" class="btn btn-secondary btn-sm" style="white-space:nowrap;flex-shrink:0">Fill from LinkedIn</button>
+                  </div>
+                  <p id="sig-linkedin-fill-msg" style="display:none;margin:6px 0 0;font-size:0.8rem"></p>
+                </div>
+
                 <div class="form-group">
                   <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:0.875rem">
                     <input type="checkbox" id="sig-enabled" style="width:16px;height:16px;flex-shrink:0" />

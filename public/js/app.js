@@ -1984,6 +1984,33 @@ function initSettingsPage() {
     finally { btn.disabled = false; btn.textContent = 'Save Signature'; }
   });
 
+  document.getElementById('sig-linkedin-fill-btn').addEventListener('click', async () => {
+    const url = document.getElementById('sig-linkedin-import').value.trim();
+    const msg = document.getElementById('sig-linkedin-fill-msg');
+    const btn = document.getElementById('sig-linkedin-fill-btn');
+    if (!url) { msg.style.display='block'; msg.style.color='#ef4444'; msg.textContent='Paste a LinkedIn profile URL first.'; return; }
+    btn.disabled = true; btn.textContent = 'Loading…';
+    msg.style.display = 'none';
+    try {
+      const data = await fetch('/api/settings/signature/linkedin-prefill', {
+        method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ url })
+      }).then(r => r.json());
+      if (data.error) throw new Error(data.error);
+      if (data.name)     { document.getElementById('profile-name').value    = data.name; }
+      if (data.title)    { document.getElementById('profile-title').value   = data.title; }
+      if (data.company)  { document.getElementById('profile-company-name').value = data.company; }
+      if (data.photo)    { document.getElementById('sig-photo').value       = data.photo; }
+      if (data.location) { document.getElementById('sig-location').value    = data.location; }
+      if (url)           { document.getElementById('sig-linkedin').value    = url; }
+      msg.style.display='block'; msg.style.color='#16a34a';
+      msg.textContent = `Filled in: ${[data.name, data.title, data.company].filter(Boolean).join(' · ')}. Review and save.`;
+    } catch(err) {
+      msg.style.display='block'; msg.style.color='#ef4444'; msg.textContent = err.message;
+    } finally {
+      btn.disabled = false; btn.textContent = 'Fill from LinkedIn';
+    }
+  });
+
   document.getElementById('sig-preview-btn').addEventListener('click', () => {
     const box     = document.getElementById('sig-preview-box');
     const content = document.getElementById('sig-preview-content');

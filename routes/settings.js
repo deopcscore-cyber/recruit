@@ -261,6 +261,64 @@ router.get('/gmail-status', async (req, res) => {
   }
 });
 
+// POST /api/settings/signature/linkedin-prefill
+// Fetches a LinkedIn public profile URL and extracts OG meta tags
+// to pre-populate signature fields without any external API.
+router.post('/signature/linkedin-prefill', async (req, res) => {
+  try {
+    const { url } = req.body;
+    if (!url || !url.includes('linkedin.com/in/')) {
+      return res.status(400).json({ error: 'Please paste a valid LinkedIn profile URL' });
+    }
+
+    const https = require('https');
+    const html = await new Promise((resolve, reject) => {
+      const opts = {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)',
+          'Accept-Language': 'en-US,en;q=0.9',
+          'Accept': 'text/html'
+        }
+      };
+      https.get(url, opts, r => {
+        let data = '';
+        r.on('data', chunk => { data += chunk; if (data.length > 200000) r.destroy(); });
+        r.on('end', () => resolve(data));
+        r.on('error', reject);
+      }).on('error', reject).setTimeout(8000, function() { this.destroy(); reject(new Error('timeout')); });
+    });
+
+    const og = (prop) => {
+      const m = html.match(new RegExp(`<meta[^>]+(?:property|name)=["']${prop}["'][^>]+content=["']([^"']+)["']`, 'i'))
+             || html.match(new RegExp(`<meta[^>]+content=["']([^"']+)["'][^>]+(?:property|name)=["']${prop}["']`, 'i'));
+      return m ? m[1].replace(/&amp;/g,'&').replace(/&#39;/g,"'").trim() : '';
+    };
+
+    const fullTitle = og('og:title') || og('title');
+    // LinkedIn og:title format: "Name - Title at Company | LinkedIn"
+    const withoutSuffix = fullTitle.replace(/\s*\|\s*LinkedIn\s*$/i, '').trim();
+    const dashIdx = withoutSuffix.indexOf(' - ');
+    const name    = dashIdx > -1 ? withoutSuffix.slice(0, dashIdx).trim() : withoutSuffix;
+    const rest    = dashIdx > -1 ? withoutSuffix.slice(dashIdx + 3).trim() : '';
+
+    // "Title at Company" or just "Title"
+    const atIdx   = rest.search(/ at /i);
+    const title   = atIdx > -1 ? rest.slice(0, atIdx).trim() : rest;
+    const company = atIdx > -1 ? rest.slice(atIdx + 4).trim() : '';
+
+    const photo = og('og:image');
+
+    // Location often in description: "Location · connections · ..."
+    const desc = og('og:description');
+    const locMatch = desc.match(/^([^·•\n]+(?:Area|Region|City|State|Country|Metropolitan)?[^·•\n]*?)(?:\s*[·•]|$)/i);
+    const location = locMatch ? locMatch[1].trim() : '';
+
+    return res.json({ name, title, company, photo, location });
+  } catch (err) {
+    return res.status(500).json({ error: 'Could not read that LinkedIn profile — make sure it\'s a public profile URL' });
+  }
+});
+
 // DELETE /api/settings/gmail — disconnect Gmail
 router.delete('/gmail', async (req, res) => {
   try {
