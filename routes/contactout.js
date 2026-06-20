@@ -97,6 +97,13 @@ router.post('/bulk-import', bulkLimiter, async (req, res) => {
         const PERSONAL_RE = /@(gmail|yahoo|hotmail|outlook|icloud|me|live|aol|protonmail|pm)\./i;
         const isPersonal  = email && PERSONAL_RE.test(email);
 
+        const title    = (raw.title    || '').trim();
+        const company  = (raw.company  || '').trim();
+        const location = (raw.location || '').trim();
+        const rolePart = title && company ? `${title} at ${company}` : (title || company);
+        const locPart  = location ? `Location: ${location}` : '';
+        const autoBackground = [rolePart, locPart].filter(Boolean).join(' | ');
+
         const candidate = {
           id:           uuidv4(),
           userId:       user.id,
@@ -106,14 +113,14 @@ router.post('/bulk-import', bulkLimiter, async (req, res) => {
           workEmail:    !isPersonal && email ? email : '',
           emailSource:  email ? 'ContactOut (extension)' : '',
           phone:        (raw.phone || '').trim(),
-          title:        (raw.title || '').trim(),
-          company:      (raw.company || '').trim(),
-          location:     (raw.location || '').trim(),
+          title,
+          company,
+          location,
           linkedin:     raw.linkedin || '',
-          summary:      '',
-          background:   '',
+          summary:      autoBackground,
+          background:   autoBackground,
           career:       Array.isArray(raw.career) ? raw.career : [],
-          education:    [],
+          education:    Array.isArray(raw.education) ? raw.education : [],
           stage:        'Imported',
           tags:         [],
           notes:        '',
