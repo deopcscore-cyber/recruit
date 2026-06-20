@@ -2072,11 +2072,11 @@ function initSettingsPage() {
     const websiteLine  = website ? `<p style="margin:0 0 5px;font-size:13px;color:#444444;font-family:Arial,sans-serif">🌐&nbsp;<a href="${website}" style="color:#444444;text-decoration:none">${website.replace(/^https?:\/\//, '')}</a></p>` : '';
     const locationLine = loc     ? `<p style="margin:0 0 5px;font-size:13px;color:#444444;font-family:Arial,sans-serif">📍&nbsp;${loc}</p>` : '';
 
-    const iconTd = (href, iconFile, alt) => href
-      ? `<td width="44" style="padding-right:0;vertical-align:top"><a href="${href}" target="_blank" style="text-decoration:none;display:block"><img src="/icons/${iconFile}" width="36" height="36" alt="${alt}" border="0" style="display:block;border-radius:18px;width:36px;height:36px" /></a></td>`
+    const pillBtn = (href, bg, label) => href
+      ? `<a href="${href}" target="_blank" style="display:inline-block;background-color:${bg};color:#ffffff;text-decoration:none;font-family:Arial,sans-serif;font-size:12px;font-weight:700;padding:7px 16px;border-radius:20px;margin-right:8px;line-height:1">${label}</a>`
       : '';
-    const socialTds = [iconTd(linkedin,'linkedin.svg','LinkedIn'), iconTd(facebook,'facebook.svg','Facebook'), iconTd(twitter,'twitter.svg','Twitter')].filter(Boolean).join('');
-    const socialBlock = socialTds ? `<table border="0" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin-bottom:14px"><tr>${socialTds}</tr></table>` : '';
+    const socialPills = [pillBtn(linkedin,'#0A66C2','in  LinkedIn'), pillBtn(facebook,'#1877F2','f  Facebook'), pillBtn(twitter,'#1a1a1a','X  Twitter')].filter(Boolean).join('');
+    const socialBlock = socialPills ? `<p style="margin:0 0 14px">${socialPills}</p>` : '';
 
     const visitBtn = website
       ? `<a href="${website}" target="_blank" style="display:inline-block;padding:8px 24px;border:1.5px solid #333333;border-radius:6px;color:#333333;text-decoration:none;font-family:Arial,sans-serif;font-size:13px;font-weight:500;margin-bottom:14px">Visit Website</a>`
