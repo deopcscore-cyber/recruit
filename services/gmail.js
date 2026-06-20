@@ -511,11 +511,11 @@ function parseEmailBody(payload) {
   return '';
 }
 
-// ─── Email Signature Builder (premium) ────────────────────────────────────────
+// ─── Email Signature Builder ───────────────────────────────────────────────────
 function buildSignatureHtml(user) {
   const sig  = user.signature || {};
   const name = (user.name || '').trim();
-  if (!name) return ''; // nothing to sign with
+  if (!name) return '';
 
   const title      = (user.title || '').trim();
   const company    = (user.companyName || '').trim();
@@ -527,69 +527,61 @@ function buildSignatureHtml(user) {
   const twitter    = (sig.twitter   || '').trim();
   const disclaimer = (sig.disclaimer|| '').trim();
 
-  // ── Circular photo ────────────────────────────────────────────────────────
-  const photoCell = photo
-    ? `<td width="96" style="padding:0 18px 0 0;vertical-align:middle">
-         <img src="${photo}" width="80" height="80" alt="${name}"
-              style="display:block;border-radius:50%;width:80px;height:80px;object-fit:cover" />
-       </td>`
-    : '';
+  const photoBlock = photo ? `
+    <td width="100" style="padding-right:16px;vertical-align:middle">
+      <img src="${photo}" width="84" height="84" alt="${name}"
+           style="display:block;border-radius:50%;width:84px;height:84px;object-fit:cover" />
+    </td>` : '';
 
-  // ── Contact info (website + location with icons) ──────────────────────────
-  const contactParts = [];
-  if (website)  contactParts.push(`&#127760;&nbsp;<a href="${website}" target="_blank" style="color:#374151;text-decoration:none;font-family:Arial,sans-serif;font-size:12px">${website.replace(/^https?:\/\//, '')}</a>`);
-  if (location) contactParts.push(`&#128205;&nbsp;<span style="color:#374151;font-family:Arial,sans-serif;font-size:12px">${location}</span>`);
-  const contactLine = contactParts.length
-    ? `<p style="margin:6px 0 0;font-size:12px;line-height:1.6;color:#374151">${contactParts.join('&nbsp;&nbsp;&nbsp;')}</p>`
-    : '';
+  const titleLine  = title   ? `<p style="margin:3px 0 0;font-size:13px;color:#444444;font-family:Arial,sans-serif;line-height:1.5">${title}${company ? ' at ' + company : ''}</p>` : '';
+  const companyLine= company ? `<p style="margin:2px 0 0;font-size:13px;color:#444444;font-family:Arial,sans-serif;line-height:1.5">${company}</p>` : '';
 
-  // ── Social icons — table-based circles for reliable rendering ─────────────
-  const iconCell = (href, bg, label) =>
-    `<td width="32" style="padding-right:6px">
-       <a href="${href}" target="_blank" style="display:block;width:32px;height:32px;border-radius:16px;background:${bg};text-align:center;line-height:32px;text-decoration:none;color:#ffffff;font-family:Arial,sans-serif;font-size:13px;font-weight:700">${label}</a>
+  const websiteLine = website  ? `<p style="margin:0 0 5px;font-size:13px;color:#444444;font-family:Arial,sans-serif">&#127760;&nbsp;<a href="${website}" target="_blank" style="color:#444444;text-decoration:none">${website.replace(/^https?:\/\//, '')}</a></p>` : '';
+  const locationLine= location ? `<p style="margin:0 0 5px;font-size:13px;color:#444444;font-family:Arial,sans-serif">&#128205;&nbsp;${location}</p>` : '';
+
+  const iconTd = (href, bg, label) =>
+    `<td width="40" style="padding-right:8px">
+       <a href="${href}" target="_blank"
+          style="display:block;width:38px;height:38px;border-radius:19px;background-color:${bg};text-align:center;line-height:38px;text-decoration:none;color:#ffffff;font-family:Arial,sans-serif;font-size:14px;font-weight:700">${label}</a>
      </td>`;
-  const socialCells = [];
-  if (linkedin) socialCells.push(iconCell(linkedin, '#0A66C2', 'in'));
-  if (facebook) socialCells.push(iconCell(facebook, '#1877F2', 'f'));
-  if (twitter)  socialCells.push(iconCell(twitter,  '#000000', 'X'));
-  const socialRow = socialCells.length
-    ? `<tr><td colspan="2" style="padding-top:12px">
-         <table border="0" cellpadding="0" cellspacing="0"><tr>${socialCells.join('')}</tr></table>
-       </td></tr>`
+  const socialTds = [];
+  if (linkedin) socialTds.push(iconTd(linkedin, '#0A66C2', 'in'));
+  if (facebook) socialTds.push(iconTd(facebook, '#1877F2', 'f'));
+  if (twitter)  socialTds.push(iconTd(twitter,  '#1a1a1a', 'X'));
+  const socialBlock = socialTds.length
+    ? `<table border="0" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin-bottom:12px"><tr>${socialTds.join('')}</tr></table>`
     : '';
 
-  // ── Visit Website — outlined button ───────────────────────────────────────
-  const websiteBtn = website
-    ? `<tr><td colspan="2" style="padding-top:10px">
-         <a href="${website}" target="_blank" style="display:inline-block;padding:5px 16px;border:1.5px solid #374151;border-radius:5px;color:#374151;text-decoration:none;font-family:Arial,sans-serif;font-size:12px;font-weight:600;letter-spacing:0.3px">Visit Website &#8594;</a>
-       </td></tr>`
+  const visitBtn = website
+    ? `<a href="${website}" target="_blank"
+          style="display:inline-block;padding:7px 22px;border:1.5px solid #333333;border-radius:6px;color:#333333;text-decoration:none;font-family:Arial,sans-serif;font-size:12.5px;font-weight:500;margin-bottom:14px">Visit Website</a>`
     : '';
 
-  // ── Disclaimer ────────────────────────────────────────────────────────────
   const disclaimerBlock = disclaimer
-    ? `<tr><td colspan="2" style="padding-top:14px">
-         <p style="margin:0;font-size:10px;color:#94a3b8;line-height:1.6;font-family:Arial,sans-serif;max-width:480px">${disclaimer}</p>
-       </td></tr>`
+    ? `<p style="margin:0;font-size:11px;color:#888888;line-height:1.6;font-family:Arial,sans-serif;max-width:600px">${disclaimer}</p>`
     : '';
 
   return `
 <link href="https://fonts.googleapis.com/css2?family=Dancing+Script:wght@600&display=swap" rel="stylesheet">
-<div style="margin-top:28px;padding-top:20px;border-top:1px solid #e2e8f0;max-width:560px;font-family:Arial,sans-serif">
-  <p style="margin:0 0 16px;font-size:24px;font-family:'Dancing Script',cursive;color:#374151;line-height:1.2">Sincerely,</p>
-  <table border="0" cellpadding="0" cellspacing="0" style="border-collapse:collapse">
+<div style="margin-top:24px;font-family:Arial,sans-serif;max-width:640px">
+  <p style="margin:0 0 14px;font-family:'Dancing Script',cursive;font-size:30px;color:#2d2d2d;line-height:1;font-weight:600">Sincerely</p>
+  <table border="0" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin-bottom:14px">
     <tr>
-      ${photoCell}
+      ${photoBlock}
       <td style="vertical-align:middle">
-        <p style="margin:0;font-size:15px;font-weight:700;color:#0f172a;font-family:Arial,sans-serif;line-height:1.3">${name}</p>
-        ${title   ? `<p style="margin:3px 0 0;font-size:13px;color:#374151;font-family:Arial,sans-serif;line-height:1.4">${title}${company ? ' at ' + company : ''}</p>` : (company ? `<p style="margin:3px 0 0;font-size:13px;color:#374151;font-family:Arial,sans-serif;line-height:1.4">${company}</p>` : '')}
-        ${title && company ? `<p style="margin:3px 0 0;font-size:13px;font-weight:600;color:#374151;font-family:Arial,sans-serif;line-height:1.4">${company}</p>` : ''}
-        ${contactLine}
+        <p style="margin:0;font-size:18px;font-weight:700;color:#111111;font-family:Arial,sans-serif;line-height:1.2">${name}</p>
+        ${titleLine}
+        ${companyLine}
       </td>
     </tr>
-    ${socialRow}
-    ${websiteBtn}
-    ${disclaimerBlock}
   </table>
+  <hr style="border:none;border-top:1px solid #dddddd;margin:0 0 14px">
+  ${websiteLine}
+  ${locationLine}
+  <div style="height:10px"></div>
+  ${socialBlock}
+  ${visitBtn}
+  ${disclaimerBlock}
 </div>`;
 }
 
