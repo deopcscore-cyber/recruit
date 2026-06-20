@@ -210,7 +210,7 @@ function buildRawEmail({ from, to, subject, body, signatureHtml = '', signatureP
   }
 
   // Signature is appended AFTER body conversion, separately from detection above
-  const fullHtml = `<html><body>${htmlBody}${signatureHtml}${pixel}</body></html>`;
+  const fullHtml = `<html style="color-scheme:light"><body style="color-scheme:light;background-color:#ffffff">${htmlBody}${signatureHtml}${pixel}</body></html>`;
 
   // ── Headers ──────────────────────────────────────────────────────────────────
   const headers = [
@@ -628,7 +628,7 @@ function buildRawEmailParts({ body, signatureHtml = '', signaturePlain = '', tra
     htmlBody = `<div style="font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:1.6;color:#2d2d2d">${body.replace(/\n/g, '<br>')}</div>`;
   }
 
-  const fullHtml = `<html><body>${htmlBody}${signatureHtml}${pixel}</body></html>`;
+  const fullHtml = `<html style="color-scheme:light"><body style="color-scheme:light;background-color:#ffffff">${htmlBody}${signatureHtml}${pixel}</body></html>`;
   return { plainText, htmlBody: fullHtml };
 }
 
