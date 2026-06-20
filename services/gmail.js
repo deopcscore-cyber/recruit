@@ -194,7 +194,7 @@ function buildRawEmail({ from, to, subject, body, signatureHtml = '', signatureP
 
   // ── HTML part — detect format of body ONLY (never include signature in detection) ──
   const pixel = trackingId
-    ? `<img src="${baseUrl}/track/${trackingId}" width="1" height="1" style="display:none" />`
+    ? `<img src="${baseUrl}/track/${trackingId}" width="1" height="1" style="max-height:1px;overflow:hidden;border:0;margin:0;padding:0" />`
     : '';
 
   let htmlBody;
@@ -599,7 +599,7 @@ function buildRawEmailParts({ body, signatureHtml = '', signaturePlain = '', tra
   const plainText = stripToPlainText(body) + (signaturePlain || '');
 
   const pixel = trackingId
-    ? `<img src="${baseUrl}/track/${trackingId}" width="1" height="1" style="display:none" />`
+    ? `<img src="${baseUrl}/track/${trackingId}" width="1" height="1" style="max-height:1px;overflow:hidden;border:0;margin:0;padding:0" />`
     : '';
 
   let htmlBody;
