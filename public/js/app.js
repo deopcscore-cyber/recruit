@@ -2072,11 +2072,11 @@ function initSettingsPage() {
     const websiteLine  = website ? `<p style="margin:0 0 5px;font-size:13px;color:#444444;font-family:Arial,sans-serif">🌐&nbsp;<a href="${website}" style="color:#444444;text-decoration:none">${website.replace(/^https?:\/\//, '')}</a></p>` : '';
     const locationLine = loc     ? `<p style="margin:0 0 5px;font-size:13px;color:#444444;font-family:Arial,sans-serif">📍&nbsp;${loc}</p>` : '';
 
-    const iconTd = (href, bg, label) => href
-      ? `<td width="46" style="padding-right:0"><a href="${href}" target="_blank" style="display:inline-block;width:36px;height:36px;border-radius:18px;background-color:${bg};text-align:center;line-height:36px;text-decoration:none;color:#ffffff;font-family:Arial,sans-serif;font-size:13px;font-weight:700;mso-line-height-rule:exactly;vertical-align:middle">${label}</a></td>`
+    const iconLink = (href, bg, label) => href
+      ? `<a href="${href}" target="_blank" style="display:inline-block;width:36px;height:36px;border-radius:50%;background-color:${bg};text-align:center;line-height:36px;text-decoration:none;color:#ffffff;font-family:Arial,sans-serif;font-size:14px;font-weight:700;mso-line-height-rule:exactly;margin-right:8px">${label}</a>`
       : '';
-    const socialTds = [iconTd(linkedin,'#0A66C2','in'), iconTd(facebook,'#1877F2','f'), iconTd(twitter,'#1a1a1a','X')].filter(Boolean).join('');
-    const socialBlock = socialTds ? `<table border="0" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin-bottom:14px"><tr>${socialTds}</tr></table>` : '';
+    const socialLinks = [iconLink(linkedin,'#0A66C2','in'), iconLink(facebook,'#1877F2','f'), iconLink(twitter,'#1a1a1a','X')].filter(Boolean).join('');
+    const socialBlock = socialLinks ? `<p style="margin:0 0 14px;font-size:0;line-height:0">${socialLinks}</p>` : '';
 
     const visitBtn = website
       ? `<a href="${website}" target="_blank" style="display:inline-block;padding:8px 24px;border:1.5px solid #333333;border-radius:6px;color:#333333;text-decoration:none;font-family:Arial,sans-serif;font-size:13px;font-weight:500;margin-bottom:14px">Visit Website</a>`

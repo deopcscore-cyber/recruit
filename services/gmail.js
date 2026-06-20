@@ -539,17 +539,15 @@ function buildSignatureHtml(user) {
   const websiteLine = website  ? `<p style="margin:0 0 5px;font-size:13px;color:#444444;font-family:Arial,sans-serif">&#127760;&nbsp;<a href="${website}" target="_blank" style="color:#444444;text-decoration:none">${website.replace(/^https?:\/\//, '')}</a></p>` : '';
   const locationLine= location ? `<p style="margin:0 0 5px;font-size:13px;color:#444444;font-family:Arial,sans-serif">&#128205;&nbsp;${location}</p>` : '';
 
-  const iconTd = (href, bg, label) =>
-    `<td width="46" style="padding-right:0">
-       <a href="${href}" target="_blank"
-          style="display:inline-block;width:36px;height:36px;border-radius:18px;background-color:${bg};text-align:center;line-height:36px;text-decoration:none;color:#ffffff;font-family:Arial,sans-serif;font-size:13px;font-weight:700;mso-line-height-rule:exactly;vertical-align:middle">${label}</a>
-     </td>`;
-  const socialTds = [];
-  if (linkedin) socialTds.push(iconTd(linkedin, '#0A66C2', 'in'));
-  if (facebook) socialTds.push(iconTd(facebook, '#1877F2', 'f'));
-  if (twitter)  socialTds.push(iconTd(twitter,  '#1a1a1a', 'X'));
-  const socialBlock = socialTds.length
-    ? `<table border="0" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin-bottom:14px"><tr>${socialTds.join('')}</tr></table>`
+  const iconLink = (href, bg, label) =>
+    `<a href="${href}" target="_blank"
+        style="display:inline-block;width:36px;height:36px;border-radius:50%;background-color:${bg};text-align:center;line-height:36px;text-decoration:none;color:#ffffff;font-family:Arial,sans-serif;font-size:14px;font-weight:700;mso-line-height-rule:exactly;margin-right:8px">${label}</a>`;
+  const socialLinks = [];
+  if (linkedin) socialLinks.push(iconLink(linkedin, '#0A66C2', 'in'));
+  if (facebook) socialLinks.push(iconLink(facebook, '#1877F2', 'f'));
+  if (twitter)  socialLinks.push(iconLink(twitter,  '#1a1a1a', 'X'));
+  const socialBlock = socialLinks.length
+    ? `<p style="margin:0 0 14px;font-size:0;line-height:0">${socialLinks.join('')}</p>`
     : '';
 
   const visitBtn = website
