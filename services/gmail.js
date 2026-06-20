@@ -203,7 +203,7 @@ function buildRawEmail({ from, to, subject, body, signatureHtml = '', signatureP
     htmlBody = body;
   } else if (hasMarkdown(body)) {
     const converted = markdownToHtml(body);
-    htmlBody = `<div style="max-width:640px;margin:0 auto;font-family:Arial,Helvetica,sans-serif;font-size:15px;color:#2d2d2d;padding:24px 16px">${converted}</div>`;
+    htmlBody = `<div style="font-family:Arial,Helvetica,sans-serif;font-size:15px;color:#2d2d2d;line-height:1.6">${converted}</div>`;
   } else {
     // Plain text — convert newlines to <br>
     htmlBody = `<div style="font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:1.6;color:#2d2d2d">${body.replace(/\n/g, '<br>')}</div>`;
@@ -571,7 +571,7 @@ function buildSignatureHtml(user) {
 
   return `
 <link href="https://fonts.googleapis.com/css2?family=Dancing+Script:wght@600&display=swap" rel="stylesheet">
-<div style="margin-top:24px;font-family:Arial,sans-serif;max-width:600px;width:100%">
+<div style="margin-top:24px;font-family:Arial,sans-serif">
   <p style="margin:0 0 14px;font-family:'Dancing Script',cursive;font-size:30px;color:#2d2d2d;line-height:1;font-weight:600">Sincerely</p>
   <table border="0" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin-bottom:14px;width:100%">
     <tr>
@@ -620,7 +620,7 @@ function buildRawEmailParts({ body, signatureHtml = '', signaturePlain = '', tra
     htmlBody = body;
   } else if (hasMarkdown(body)) {
     const converted = markdownToHtml(body);
-    htmlBody = `<div style="max-width:640px;margin:0 auto;font-family:Arial,Helvetica,sans-serif;font-size:15px;color:#2d2d2d;padding:24px 16px">${converted}</div>`;
+    htmlBody = `<div style="font-family:Arial,Helvetica,sans-serif;font-size:15px;color:#2d2d2d;line-height:1.6">${converted}</div>`;
   } else {
     htmlBody = `<div style="font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:1.6;color:#2d2d2d">${body.replace(/\n/g, '<br>')}</div>`;
   }
