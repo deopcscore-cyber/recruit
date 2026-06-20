@@ -523,56 +523,60 @@ function buildSignatureHtml(user) {
 
   // ── Circular photo ────────────────────────────────────────────────────────
   const photoCell = photo
-    ? `<td width="88" style="padding:0 16px 0 0;vertical-align:top">
-         <img src="${photo}" width="72" height="72" alt="${name}"
-              style="display:block;border-radius:50%;width:72px;height:72px;object-fit:cover;border:3px solid #1a3e72" />
+    ? `<td width="96" style="padding:0 18px 0 0;vertical-align:middle">
+         <img src="${photo}" width="80" height="80" alt="${name}"
+              style="display:block;border-radius:50%;width:80px;height:80px;object-fit:cover" />
        </td>`
     : '';
 
-  // ── Contact info line ─────────────────────────────────────────────────────
+  // ── Contact info (website + location with icons) ──────────────────────────
   const contactParts = [];
-  if (location) contactParts.push(`<span style="color:#64748b;font-family:Arial,sans-serif;font-size:12px">${location}</span>`);
-  if (website)  contactParts.push(`<a href="${website}" target="_blank" style="color:#1a3e72;text-decoration:none;font-family:Arial,sans-serif;font-size:12px">${website.replace(/^https?:\/\//, '')}</a>`);
+  if (website)  contactParts.push(`&#127760;&nbsp;<a href="${website}" target="_blank" style="color:#374151;text-decoration:none;font-family:Arial,sans-serif;font-size:12px">${website.replace(/^https?:\/\//, '')}</a>`);
+  if (location) contactParts.push(`&#128205;&nbsp;<span style="color:#374151;font-family:Arial,sans-serif;font-size:12px">${location}</span>`);
   const contactLine = contactParts.length
-    ? `<p style="margin:5px 0 0;font-family:Arial,sans-serif;font-size:12px;line-height:1.5;color:#64748b">${contactParts.join('&nbsp;&nbsp;·&nbsp;&nbsp;')}</p>`
+    ? `<p style="margin:6px 0 0;font-size:12px;line-height:1.6;color:#374151">${contactParts.join('&nbsp;&nbsp;&nbsp;')}</p>`
     : '';
 
-  // ── Social icons — colored circle buttons ─────────────────────────────────
-  const iconBtn = (href, bg, label) =>
-    `<a href="${href}" target="_blank" style="display:inline-block;width:30px;height:30px;border-radius:50%;background:${bg};text-align:center;line-height:30px;text-decoration:none;color:#ffffff;font-family:Arial,sans-serif;font-size:13px;font-weight:700;margin-right:6px">${label}</a>`;
-  const socialIcons = [];
-  if (linkedin) socialIcons.push(iconBtn(linkedin, '#0A66C2', 'in'));
-  if (facebook) socialIcons.push(iconBtn(facebook, '#1877F2', 'f'));
-  if (twitter)  socialIcons.push(iconBtn(twitter,  '#000000', 'X'));
-  const socialRow = socialIcons.length
-    ? `<tr><td colspan="2" style="padding-top:10px">${socialIcons.join('')}</td></tr>`
+  // ── Social icons — table-based circles for reliable rendering ─────────────
+  const iconCell = (href, bg, label) =>
+    `<td width="32" style="padding-right:6px">
+       <a href="${href}" target="_blank" style="display:block;width:32px;height:32px;border-radius:16px;background:${bg};text-align:center;line-height:32px;text-decoration:none;color:#ffffff;font-family:Arial,sans-serif;font-size:13px;font-weight:700">${label}</a>
+     </td>`;
+  const socialCells = [];
+  if (linkedin) socialCells.push(iconCell(linkedin, '#0A66C2', 'in'));
+  if (facebook) socialCells.push(iconCell(facebook, '#1877F2', 'f'));
+  if (twitter)  socialCells.push(iconCell(twitter,  '#000000', 'X'));
+  const socialRow = socialCells.length
+    ? `<tr><td colspan="2" style="padding-top:12px">
+         <table border="0" cellpadding="0" cellspacing="0"><tr>${socialCells.join('')}</tr></table>
+       </td></tr>`
     : '';
 
-  // ── Visit Website button ───────────────────────────────────────────────────
+  // ── Visit Website — outlined button ───────────────────────────────────────
   const websiteBtn = website
     ? `<tr><td colspan="2" style="padding-top:10px">
-         <a href="${website}" target="_blank" style="display:inline-block;padding:6px 18px;border:1px solid #1a3e72;border-radius:4px;color:#1a3e72;text-decoration:none;font-family:Arial,sans-serif;font-size:12px;font-weight:600">Visit Website</a>
+         <a href="${website}" target="_blank" style="display:inline-block;padding:5px 16px;border:1.5px solid #374151;border-radius:5px;color:#374151;text-decoration:none;font-family:Arial,sans-serif;font-size:12px;font-weight:600;letter-spacing:0.3px">Visit Website &#8594;</a>
        </td></tr>`
     : '';
 
   // ── Disclaimer ────────────────────────────────────────────────────────────
   const disclaimerBlock = disclaimer
-    ? `<tr><td colspan="2" style="padding-top:12px;border-top:1px solid #e2e8f0">
-         <p style="margin:0;font-size:10px;color:#94a3b8;line-height:1.5;font-family:Arial,sans-serif">${disclaimer}</p>
+    ? `<tr><td colspan="2" style="padding-top:14px">
+         <p style="margin:0;font-size:10px;color:#94a3b8;line-height:1.6;font-family:Arial,sans-serif;max-width:480px">${disclaimer}</p>
        </td></tr>`
     : '';
 
   return `
 <link href="https://fonts.googleapis.com/css2?family=Dancing+Script:wght@600&display=swap" rel="stylesheet">
-<div style="margin-top:28px;padding-top:20px;border-top:1px solid #e2e8f0;max-width:560px">
-  <p style="margin:0 0 14px;font-size:22px;font-family:'Dancing Script',cursive;color:#374151;line-height:1.2">Sincerely,</p>
+<div style="margin-top:28px;padding-top:20px;border-top:1px solid #e2e8f0;max-width:560px;font-family:Arial,sans-serif">
+  <p style="margin:0 0 16px;font-size:24px;font-family:'Dancing Script',cursive;color:#374151;line-height:1.2">Sincerely,</p>
   <table border="0" cellpadding="0" cellspacing="0" style="border-collapse:collapse">
     <tr>
       ${photoCell}
-      <td style="vertical-align:top">
+      <td style="vertical-align:middle">
         <p style="margin:0;font-size:15px;font-weight:700;color:#0f172a;font-family:Arial,sans-serif;line-height:1.3">${name}</p>
-        ${title   ? `<p style="margin:2px 0 0;font-size:12px;color:#475569;font-family:Arial,sans-serif;line-height:1.4">${title}</p>` : ''}
-        ${company ? `<p style="margin:2px 0 0;font-size:12px;color:#475569;font-family:Arial,sans-serif;line-height:1.4">${company}</p>` : ''}
+        ${title   ? `<p style="margin:3px 0 0;font-size:13px;color:#374151;font-family:Arial,sans-serif;line-height:1.4">${title}${company ? ' at ' + company : ''}</p>` : (company ? `<p style="margin:3px 0 0;font-size:13px;color:#374151;font-family:Arial,sans-serif;line-height:1.4">${company}</p>` : '')}
+        ${title && company ? `<p style="margin:3px 0 0;font-size:13px;font-weight:600;color:#374151;font-family:Arial,sans-serif;line-height:1.4">${company}</p>` : ''}
         ${contactLine}
       </td>
     </tr>
