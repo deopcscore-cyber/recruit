@@ -2072,10 +2072,10 @@ function initSettingsPage() {
     const websiteLine  = website ? `<p style="margin:0 0 5px;font-size:13px;color:#444444;font-family:Arial,sans-serif">🌐&nbsp;<a href="${website}" style="color:#444444;text-decoration:none">${website.replace(/^https?:\/\//, '')}</a></p>` : '';
     const locationLine = loc     ? `<p style="margin:0 0 5px;font-size:13px;color:#444444;font-family:Arial,sans-serif">📍&nbsp;${loc}</p>` : '';
 
-    const iconTd = (href, bg, label) => href
-      ? `<td width="44" style="padding-right:0;vertical-align:top"><a href="${href}" target="_blank" style="display:block;width:36px;height:36px;border-radius:18px;background-color:${bg};text-align:center;font-size:0;text-decoration:none;overflow:hidden"><span style="font-size:14px;line-height:36px;font-weight:700;color:#ffffff;font-family:Arial,sans-serif;mso-line-height-rule:exactly;display:block;text-align:center">${label}</span></a></td>`
+    const iconTd = (href, iconFile, alt) => href
+      ? `<td width="44" style="padding-right:0;vertical-align:top"><a href="${href}" target="_blank" style="text-decoration:none;display:block"><img src="/icons/${iconFile}" width="36" height="36" alt="${alt}" border="0" style="display:block;border-radius:18px;width:36px;height:36px" /></a></td>`
       : '';
-    const socialTds = [iconTd(linkedin,'#0A66C2','in'), iconTd(facebook,'#1877F2','f'), iconTd(twitter,'#1a1a1a','X')].filter(Boolean).join('');
+    const socialTds = [iconTd(linkedin,'linkedin.svg','LinkedIn'), iconTd(facebook,'facebook.svg','Facebook'), iconTd(twitter,'twitter.svg','Twitter')].filter(Boolean).join('');
     const socialBlock = socialTds ? `<table border="0" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin-bottom:14px"><tr>${socialTds}</tr></table>` : '';
 
     const visitBtn = website

@@ -539,17 +539,18 @@ function buildSignatureHtml(user) {
   const websiteLine = website  ? `<p style="margin:0 0 5px;font-size:13px;color:#444444;font-family:Arial,sans-serif">&#127760;&nbsp;<a href="${website}" target="_blank" style="color:#444444;text-decoration:none">${website.replace(/^https?:\/\//, '')}</a></p>` : '';
   const locationLine= location ? `<p style="margin:0 0 5px;font-size:13px;color:#444444;font-family:Arial,sans-serif">&#128205;&nbsp;${location}</p>` : '';
 
-  const iconTd = (href, bg, label) =>
+  const ICON_BASE = BASE_URL;
+  const iconTd = (href, iconFile, alt) =>
     `<td width="44" style="padding-right:0;vertical-align:top">
-       <a href="${href}" target="_blank"
-          style="display:block;width:36px;height:36px;border-radius:18px;background-color:${bg};text-align:center;font-size:0;text-decoration:none;overflow:hidden">
-         <span style="font-size:14px;line-height:36px;font-weight:700;color:#ffffff;font-family:Arial,sans-serif;mso-line-height-rule:exactly;display:block;text-align:center">${label}</span>
+       <a href="${href}" target="_blank" style="text-decoration:none;display:block">
+         <img src="${ICON_BASE}/icons/${iconFile}" width="36" height="36" alt="${alt}" border="0"
+              style="display:block;border-radius:18px;width:36px;height:36px" />
        </a>
      </td>`;
   const socialTds = [];
-  if (linkedin) socialTds.push(iconTd(linkedin, '#0A66C2', 'in'));
-  if (facebook) socialTds.push(iconTd(facebook, '#1877F2', 'f'));
-  if (twitter)  socialTds.push(iconTd(twitter,  '#1a1a1a', 'X'));
+  if (linkedin) socialTds.push(iconTd(linkedin, 'linkedin.svg', 'LinkedIn'));
+  if (facebook) socialTds.push(iconTd(facebook, 'facebook.svg', 'Facebook'));
+  if (twitter)  socialTds.push(iconTd(twitter,  'twitter.svg',  'Twitter'));
   const socialBlock = socialTds.length
     ? `<table border="0" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin-bottom:14px"><tr>${socialTds.join('')}</tr></table>`
     : '';
