@@ -235,10 +235,29 @@ async function fetchUnreadReplies(userId) {
   const { accountId, address } = user.zoho;
   const apiBase = userApiBase(user);
 
-  // Fetch INBOX folder ID
-  const foldersRes = await axios.get(`${apiBase}/accounts/${accountId}/folders`, {
-    headers: { Authorization: `Zoho-oauthtoken ${token}` }
-  });
+  // Fetch INBOX folder ID — with region auto-detect fallback
+  let effectiveBase = apiBase;
+  let foldersRes;
+  try {
+    foldersRes = await axios.get(`${apiBase}/accounts/${accountId}/folders`, {
+      headers: { Authorization: `Zoho-oauthtoken ${token}` }
+    });
+  } catch (err) {
+    const body = err.response ? err.response.data : null;
+    const isWrongRegion = body && (
+      (body.data && body.data.errorCode === 'URL_RULE_NOT_CONFIGURED') ||
+      (err.response && err.response.status === 404)
+    );
+    if (isWrongRegion) {
+      effectiveBase = await detectAndSaveApiBase(user, token);
+      foldersRes = await axios.get(`${effectiveBase}/accounts/${accountId}/folders`, {
+        headers: { Authorization: `Zoho-oauthtoken ${token}` }
+      });
+    } else {
+      const detail = err.response ? JSON.stringify(err.response.data) : err.message;
+      throw new Error(`Zoho inbox fetch failed: ${detail}`);
+    }
+  }
   const folders = foldersRes.data.data || [];
   const inbox = folders.find(f => {
     const name = (f.folderName || f.folderid || '').toLowerCase();
@@ -254,38 +273,13 @@ async function fetchUnreadReplies(userId) {
 
   // Fetch recent messages — Zoho does not support status=unread as a query param;
   // fetch last 50 and filter by isRead/readStatus client-side
-  let msgsRes;
-  try {
-    msgsRes = await axios.get(`${apiBase}/accounts/${accountId}/folders/${folderId}/messages/view`, {
-      params: { limit: 50, sortOrder: 'desc' },
-      headers: { Authorization: `Zoho-oauthtoken ${token}` }
-    });
-  } catch (err) {
-    const body = err.response ? err.response.data : null;
-    const isWrongRegion = body && (
-      (body.data && body.data.errorCode === 'URL_RULE_NOT_CONFIGURED') ||
-      (body.status && body.status.code === 404)
-    );
-    if (isWrongRegion) {
-      const newBase = await detectAndSaveApiBase(user, token);
-      const inbox2Res = await axios.get(`${newBase}/accounts/${accountId}/folders`, {
-        headers: { Authorization: `Zoho-oauthtoken ${token}` }
-      });
-      const inbox2 = (inbox2Res.data.data || []).find(f =>
-        (f.folderName || '').toLowerCase() === 'inbox' || (f.folderType || '').toLowerCase() === 'inbox'
-      );
-      const folderId2 = inbox2 ? (inbox2.folderId || inbox2.folderid) : folderId;
-      msgsRes = await axios.get(`${newBase}/accounts/${accountId}/folders/${folderId2}/messages/view`, {
-        params: { limit: 50, sortOrder: 'desc' },
-        headers: { Authorization: `Zoho-oauthtoken ${token}` }
-      });
-      // Update apiBase for rest of this call
-      Object.assign(user.zoho, { apiBase: newBase });
-    } else {
-      const detail = err.response ? JSON.stringify(err.response.data) : err.message;
-      throw new Error(`Zoho inbox fetch failed: ${detail}`);
-    }
-  }
+  const msgsRes = await axios.get(`${effectiveBase}/accounts/${accountId}/folders/${folderId}/messages/view`, {
+    params: { limit: 50, sortOrder: 'desc' },
+    headers: { Authorization: `Zoho-oauthtoken ${token}` }
+  }).catch(err => {
+    const detail = err.response ? JSON.stringify(err.response.data) : err.message;
+    throw new Error(`Zoho inbox fetch failed: ${detail}`);
+  });
 
   const messages = msgsRes.data.data || [];
   const results  = [];
@@ -302,7 +296,7 @@ async function fetchUnreadReplies(userId) {
 
       // Fetch full message content
       const fullRes = await axios.get(
-        `${apiBase}/accounts/${accountId}/folders/${folderId}/messages/${msg.messageId}`,
+        `${effectiveBase}/accounts/${accountId}/folders/${folderId}/messages/${msg.messageId}`,
         { headers: { Authorization: `Zoho-oauthtoken ${token}` } }
       );
       const full = fullRes.data.data || {};
@@ -320,7 +314,7 @@ async function fetchUnreadReplies(userId) {
 
       // Mark as read
       await axios.put(
-        `${apiBase}/accounts/${accountId}/updatemessage`,
+        `${effectiveBase}/accounts/${accountId}/updatemessage`,
         { mode: 'markAsRead', messageId: [String(msg.messageId)] },
         { headers: { Authorization: `Zoho-oauthtoken ${token}`, 'Content-Type': 'application/json' } }
       ).catch(e => console.error('Zoho markAsRead error:', e.message));
