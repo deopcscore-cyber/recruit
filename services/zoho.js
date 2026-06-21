@@ -322,17 +322,41 @@ async function fetchUnreadReplies(userId) {
     return [];
   }
 
-  const folderId = inbox.folderId || inbox.folderid;
+  let folderId = inbox.folderId || inbox.folderid;
 
   // Fetch recent messages — Zoho does not support status=unread as a query param;
-  // fetch last 50 and filter by isRead/readStatus client-side
-  const msgsRes = await axios.get(`${effectiveBase}/accounts/${accountId}/folders/${folderId}/messages/view`, {
-    params: { limit: 50, sortOrder: 'desc' },
-    headers: { Authorization: `Zoho-oauthtoken ${token}` }
-  }).catch(err => {
-    const detail = err.response ? JSON.stringify(err.response.data) : err.message;
-    throw new Error(`Zoho inbox fetch failed: ${detail}`);
-  });
+  // fetch last 50 and filter by isRead/readStatus client-side.
+  // NOTE: The /folders endpoint is globally routed (returns 200 from any region),
+  // so URL_RULE_NOT_CONFIGURED only surfaces here on the messages endpoint.
+  let msgsRes;
+  try {
+    msgsRes = await axios.get(`${effectiveBase}/accounts/${accountId}/folders/${folderId}/messages/view`, {
+      params: { limit: 50, sortOrder: 'desc' },
+      headers: { Authorization: `Zoho-oauthtoken ${token}` }
+    });
+  } catch (err) {
+    const bodyStr = JSON.stringify(err.response ? err.response.data : '');
+    const status  = err.response ? err.response.status : 0;
+    if (status >= 400 && status < 500 && bodyStr.includes('URL_RULE_NOT_CONFIGURED')) {
+      console.log(`Zoho: wrong region on messages fetch, detecting correct region…`);
+      effectiveBase = await detectAndSaveApiBase(user, token);
+      // Re-fetch folders from the correct region (folderId may differ)
+      const f2 = await axios.get(`${effectiveBase}/accounts/${accountId}/folders`, {
+        headers: { Authorization: `Zoho-oauthtoken ${token}` }
+      });
+      const inbox2 = (f2.data.data || []).find(f =>
+        (f.folderName || '').toLowerCase() === 'inbox' || (f.folderType || '').toLowerCase() === 'inbox'
+      );
+      folderId = inbox2 ? (inbox2.folderId || inbox2.folderid) : folderId;
+      msgsRes = await axios.get(`${effectiveBase}/accounts/${accountId}/folders/${folderId}/messages/view`, {
+        params: { limit: 50, sortOrder: 'desc' },
+        headers: { Authorization: `Zoho-oauthtoken ${token}` }
+      });
+    } else {
+      const detail = err.response ? JSON.stringify(err.response.data) : err.message;
+      throw new Error(`Zoho inbox fetch failed: ${detail}`);
+    }
+  }
 
   const messages = msgsRes.data.data || [];
   const results  = [];
