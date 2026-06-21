@@ -446,4 +446,4 @@ async function getSentAddresses(userId) {
   } catch { return []; }
 }
 
-module.exports = { getAuthUrl, exchangeCode, revokeTokens, sendEmail, fetchUnreadReplies, getSentAddresses };
+module.exports = { getAuthUrl, exchangeCode, revokeTokens, sendEmail, fetchUnreadReplies, getSentAddresses, getAccessToken };

@@ -650,5 +650,62 @@ function extractEmail(from) {
   return null;
 }
 
+// GET /api/email/zoho-debug — probe all regions and URL formats to diagnose fetch issues
+router.get('/zoho-debug', requireAuth, async (req, res) => {
+  try {
+    const user = await storage.getUserById(req.session.userId);
+    if (!user || !user.zoho?.connected) return res.status(400).json({ error: 'Zoho not connected' });
+
+    const axios = require('axios');
+    const token = await zohoService.getAccessToken(user);
+    const { accountId, apiBase, address } = user.zoho;
+
+    const results = { accountId, storedApiBase: apiBase, address, regions: [] };
+
+    // Step 1: get folders (globally routed — works anywhere)
+    const foldersRes = await axios.get(`${apiBase}/accounts/${accountId}/folders`, {
+      headers: { Authorization: `Zoho-oauthtoken ${token}` }
+    });
+    const folders = foldersRes.data.data || [];
+    results.folders = folders.map(f => ({ name: f.folderName, type: f.folderType, id: f.folderId || f.folderid }));
+    const inbox = folders.find(f =>
+      (f.folderName || '').toLowerCase() === 'inbox' || (f.folderType || '').toLowerCase() === 'inbox'
+    );
+    const folderId = inbox ? (inbox.folderId || inbox.folderid) : null;
+    results.inboxFolderId = folderId;
+
+    // Step 2: probe all regions with both URL formats
+    const BASES = [
+      'https://mail.zoho.com/api', 'https://mail.zoho.eu/api',
+      'https://mail.zoho.in/api', 'https://mail.zoho.com.au/api', 'https://mail.zoho.jp/api'
+    ];
+    const formats = folderId ? [
+      `{base}/accounts/${accountId}/messages?folderId=${folderId}&limit=1`,
+      `{base}/accounts/${accountId}/folders/${folderId}/messages/view?limit=1`
+    ] : [];
+
+    for (const base of BASES) {
+      const regionResult = { base, urls: [] };
+      for (const fmt of formats) {
+        const url = fmt.replace('{base}', base);
+        try {
+          const r = await axios.get(url, {
+            headers: { Authorization: `Zoho-oauthtoken ${token}` },
+            timeout: 8000
+          });
+          regionResult.urls.push({ url, status: r.status, dataKeys: Object.keys(r.data || {}) });
+        } catch (e) {
+          regionResult.urls.push({ url, status: e.response?.status, error: JSON.stringify(e.response?.data) });
+        }
+      }
+      results.regions.push(regionResult);
+    }
+
+    return res.json(results);
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;
 module.exports.gmailCallback = gmailCallback;
