@@ -124,6 +124,13 @@ async function refreshTokens(user) {
   if (!data.access_token) throw new Error('Zoho token refresh failed');
   user.zoho.accessToken = data.access_token;
   user.zoho.expiresAt   = Date.now() + (data.expires_in || 3600) * 1000;
+  // Zoho's token refresh response includes api_domain — use it to correct the region
+  if (data.api_domain) {
+    const refreshedBase = apiBaseFromDomain(data.api_domain);
+    if (refreshedBase !== API_BASE_DEFAULT || !user.zoho.apiBase) {
+      user.zoho.apiBase = refreshedBase;
+    }
+  }
   await storage.saveUser(user);
   return user.zoho.accessToken;
 }
@@ -246,16 +253,21 @@ async function fetchUnreadReplies(userId) {
       headers: { Authorization: `Zoho-oauthtoken ${token}` }
     });
   } catch (err) {
-    const body = err.response ? err.response.data : null;
-    const isWrongRegion = body && (
-      (body.data && body.data.errorCode === 'URL_RULE_NOT_CONFIGURED') ||
-      (err.response && err.response.status === 404)
-    );
-    if (isWrongRegion) {
+    const status = err.response ? err.response.status : 0;
+    const bodyStr = JSON.stringify(err.response ? err.response.data : '');
+    const isRegionError = status >= 400 && status < 500 &&
+      (bodyStr.includes('URL_RULE_NOT_CONFIGURED') || status === 404);
+    console.log(`Zoho folders fetch failed: status=${status} body=${bodyStr} isRegionError=${isRegionError}`);
+    if (isRegionError) {
       effectiveBase = await detectAndSaveApiBase(user, token);
-      foldersRes = await axios.get(`${effectiveBase}/accounts/${accountId}/folders`, {
-        headers: { Authorization: `Zoho-oauthtoken ${token}` }
-      });
+      try {
+        foldersRes = await axios.get(`${effectiveBase}/accounts/${accountId}/folders`, {
+          headers: { Authorization: `Zoho-oauthtoken ${token}` }
+        });
+      } catch (retryErr) {
+        const d = retryErr.response ? JSON.stringify(retryErr.response.data) : retryErr.message;
+        throw new Error(`Zoho inbox fetch failed after region probe: ${d}`);
+      }
     } else {
       const detail = err.response ? JSON.stringify(err.response.data) : err.message;
       throw new Error(`Zoho inbox fetch failed: ${detail}`);
