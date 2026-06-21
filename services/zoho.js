@@ -329,27 +329,31 @@ async function fetchUnreadReplies(userId) {
   // 5 Zoho regions directly on this same endpoint — no guesswork.
   let msgsRes;
   try {
-    msgsRes = await axios.get(`${effectiveBase}/accounts/${accountId}/folders/${folderId}/messages/view`, {
-      params: { limit: 50, sortOrder: 'desc' },
+    msgsRes = await axios.get(`${effectiveBase}/accounts/${accountId}/messages`, {
+      params: { folderId, limit: 50, sortorder: 'desc' },
       headers: { Authorization: `Zoho-oauthtoken ${token}` }
     });
   } catch (firstErr) {
     const firstBodyStr = JSON.stringify(firstErr.response ? firstErr.response.data : '');
     const firstStatus  = firstErr.response ? firstErr.response.status : 0;
+    console.log(`Zoho messages first attempt: status=${firstStatus} body=${firstBodyStr}`);
     if (firstStatus >= 400 && firstStatus < 500 && firstBodyStr.includes('URL_RULE_NOT_CONFIGURED')) {
       console.log(`Zoho: wrong region detected on messages fetch — probing all regions directly`);
       let foundBase = null;
       for (const base of ZOHO_API_BASES) {
-        if (base === effectiveBase) continue;
         try {
-          msgsRes = await axios.get(`${base}/accounts/${accountId}/folders/${folderId}/messages/view`, {
-            params: { limit: 50, sortOrder: 'desc' },
+          // Try alternative URL format too: /messages?folderId=X (some Zoho versions prefer this)
+          msgsRes = await axios.get(`${base}/accounts/${accountId}/messages`, {
+            params: { folderId, limit: 50, sortorder: 'desc' },
             headers: { Authorization: `Zoho-oauthtoken ${token}` },
             timeout: 8000
           });
           foundBase = base;
+          console.log(`Zoho probe ${base}: SUCCESS`);
           break;
-        } catch (_) {}
+        } catch (probeErr) {
+          console.log(`Zoho probe ${base}: ${probeErr.response?.status} ${JSON.stringify(probeErr.response?.data)}`);
+        }
       }
       if (foundBase) {
         effectiveBase = foundBase;
