@@ -324,36 +324,43 @@ async function fetchUnreadReplies(userId) {
 
   let folderId = inbox.folderId || inbox.folderid;
 
-  // Fetch recent messages — Zoho does not support status=unread as a query param;
-  // fetch last 50 and filter by isRead/readStatus client-side.
-  // NOTE: The /folders endpoint is globally routed (returns 200 from any region),
-  // so URL_RULE_NOT_CONFIGURED only surfaces here on the messages endpoint.
+  // Fetch recent messages. The /folders endpoint is globally routed (200 from any
+  // region), so URL_RULE_NOT_CONFIGURED only appears here. On failure we probe all
+  // 5 Zoho regions directly on this same endpoint — no guesswork.
   let msgsRes;
   try {
     msgsRes = await axios.get(`${effectiveBase}/accounts/${accountId}/folders/${folderId}/messages/view`, {
       params: { limit: 50, sortOrder: 'desc' },
       headers: { Authorization: `Zoho-oauthtoken ${token}` }
     });
-  } catch (err) {
-    const bodyStr = JSON.stringify(err.response ? err.response.data : '');
-    const status  = err.response ? err.response.status : 0;
-    if (status >= 400 && status < 500 && bodyStr.includes('URL_RULE_NOT_CONFIGURED')) {
-      console.log(`Zoho: wrong region on messages fetch, detecting correct region…`);
-      effectiveBase = await detectAndSaveApiBase(user, token);
-      // Re-fetch folders from the correct region (folderId may differ)
-      const f2 = await axios.get(`${effectiveBase}/accounts/${accountId}/folders`, {
-        headers: { Authorization: `Zoho-oauthtoken ${token}` }
-      });
-      const inbox2 = (f2.data.data || []).find(f =>
-        (f.folderName || '').toLowerCase() === 'inbox' || (f.folderType || '').toLowerCase() === 'inbox'
-      );
-      folderId = inbox2 ? (inbox2.folderId || inbox2.folderid) : folderId;
-      msgsRes = await axios.get(`${effectiveBase}/accounts/${accountId}/folders/${folderId}/messages/view`, {
-        params: { limit: 50, sortOrder: 'desc' },
-        headers: { Authorization: `Zoho-oauthtoken ${token}` }
-      });
+  } catch (firstErr) {
+    const firstBodyStr = JSON.stringify(firstErr.response ? firstErr.response.data : '');
+    const firstStatus  = firstErr.response ? firstErr.response.status : 0;
+    if (firstStatus >= 400 && firstStatus < 500 && firstBodyStr.includes('URL_RULE_NOT_CONFIGURED')) {
+      console.log(`Zoho: wrong region detected on messages fetch — probing all regions directly`);
+      let foundBase = null;
+      for (const base of ZOHO_API_BASES) {
+        if (base === effectiveBase) continue;
+        try {
+          msgsRes = await axios.get(`${base}/accounts/${accountId}/folders/${folderId}/messages/view`, {
+            params: { limit: 50, sortOrder: 'desc' },
+            headers: { Authorization: `Zoho-oauthtoken ${token}` },
+            timeout: 8000
+          });
+          foundBase = base;
+          break;
+        } catch (_) {}
+      }
+      if (foundBase) {
+        effectiveBase = foundBase;
+        user.zoho.apiBase = foundBase;
+        await storage.saveUser(user);
+        console.log(`Zoho: correct region found → ${foundBase} for user ${user.id}`);
+      } else {
+        throw new Error('Zoho inbox unreachable: no data center responded to messages endpoint');
+      }
     } else {
-      const detail = err.response ? JSON.stringify(err.response.data) : err.message;
+      const detail = firstErr.response ? JSON.stringify(firstErr.response.data) : firstErr.message;
       throw new Error(`Zoho inbox fetch failed: ${detail}`);
     }
   }
