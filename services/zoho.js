@@ -37,20 +37,23 @@ const ZOHO_API_BASES = [
 
 async function detectAndSaveApiBase(user, token) {
   const { accountId } = user.zoho;
+  console.log(`Zoho: probing regions for accountId=${accountId}`);
   for (const base of ZOHO_API_BASES) {
     try {
-      const res = await axios.get(`${base}/accounts/${accountId}/folders`, {
+      await axios.get(`${base}/accounts/${accountId}/folders`, {
         headers: { Authorization: `Zoho-oauthtoken ${token}` },
         timeout: 8000
       });
-      if (res.data && res.data.data) {
-        user.zoho.apiBase = base;
-        await storage.saveUser(user);
-        console.log(`Zoho: detected apiBase=${base} for user ${user.id}`);
-        return base;
-      }
-    } catch (_) {}
+      // Any non-throwing (2xx) response means this is the right region
+      user.zoho.apiBase = base;
+      await storage.saveUser(user);
+      console.log(`Zoho: detected apiBase=${base} for user ${user.id}`);
+      return base;
+    } catch (e) {
+      console.log(`Zoho: region ${base} rejected (${e.response?.status || e.message})`);
+    }
   }
+  console.error(`Zoho: no working region found for user ${user.id}, accountId=${accountId}`);
   return API_BASE_DEFAULT;
 }
 
