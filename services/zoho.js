@@ -36,21 +36,59 @@ const ZOHO_API_BASES = [
 ];
 
 async function detectAndSaveApiBase(user, token) {
+  // The most reliable source of the correct region is Zoho's token refresh response,
+  // which always includes api_domain for the user's data center.
+  if (user.zoho.refreshToken) {
+    try {
+      const params = new URLSearchParams({
+        grant_type:    'refresh_token',
+        client_id:     ZOHO_CLIENT_ID,
+        client_secret: ZOHO_CLIENT_SECRET,
+        refresh_token: user.zoho.refreshToken
+      });
+      const { data } = await axios.post(TOKEN_URL, params.toString(), {
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+      });
+      if (data.access_token && data.api_domain) {
+        const newBase = apiBaseFromDomain(data.api_domain);
+        user.zoho.accessToken  = data.access_token;
+        user.zoho.expiresAt    = Date.now() + (data.expires_in || 3600) * 1000;
+        user.zoho.apiBase      = newBase;
+        await storage.saveUser(user);
+        console.log(`Zoho: region corrected via token refresh → ${newBase} for user ${user.id}`);
+        return newBase;
+      }
+    } catch (e) {
+      console.error('Zoho: token refresh for region detection failed:', e.message);
+    }
+  }
+
+  // Fallback: probe all regions with the messages-specific path (strictly region-routed)
   const { accountId } = user.zoho;
-  console.log(`Zoho: probing regions for accountId=${accountId}`);
+  console.log(`Zoho: probing regions by messages endpoint for accountId=${accountId}`);
   for (const base of ZOHO_API_BASES) {
     try {
-      await axios.get(`${base}/accounts/${accountId}/folders`, {
+      // Deliberately probe a path that's strictly region-routed (not /folders which is global)
+      await axios.get(`${base}/accounts/${accountId}/messages/search`, {
+        params: { searchKey: '_detectregion_', limit: 1 },
         headers: { Authorization: `Zoho-oauthtoken ${token}` },
         timeout: 8000
       });
-      // Any non-throwing (2xx) response means this is the right region
       user.zoho.apiBase = base;
       await storage.saveUser(user);
       console.log(`Zoho: detected apiBase=${base} for user ${user.id}`);
       return base;
     } catch (e) {
-      console.log(`Zoho: region ${base} rejected (${e.response?.status || e.message})`);
+      const status = e.response?.status;
+      const code   = e.response?.data?.data?.errorCode;
+      console.log(`Zoho: region ${base} → status=${status} code=${code}`);
+      // Accept this region if it returned anything OTHER than URL_RULE_NOT_CONFIGURED
+      if (status && !(code === 'URL_RULE_NOT_CONFIGURED')) {
+        user.zoho.apiBase = base;
+        await storage.saveUser(user);
+        console.log(`Zoho: accepted region ${base} (non-routing error) for user ${user.id}`);
+        return base;
+      }
     }
   }
   console.error(`Zoho: no working region found for user ${user.id}, accountId=${accountId}`);
