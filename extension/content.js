@@ -191,15 +191,27 @@
   }
 
   // ── Auto-expand all "...more" / "Show more" buttons ────────────────────────
+  // Runs multiple passes because: (a) ContactOut needs time to render each
+  // expansion, and (b) expanding one card can reveal new "...more" buttons.
   async function expandAllMore() {
-    const btns = [...document.querySelectorAll('button, span, a, [role="button"]')]
-      .filter(el => {
-        const t = (el.textContent || '').trim().toLowerCase();
-        return t === '...more' || t === '…more' || t === 'show more' || t === 'see more'
+    const isExpandBtn = el => {
+      const t = (el.textContent || '').trim().toLowerCase();
+      return t === '...more' || t === '…more' || t === 'show more' || t === 'see more'
           || t === '... more' || t === 'more';
-      });
-    for (const btn of btns) { try { btn.click(); } catch (_) {} await sleep(20); }
-    if (btns.length > 0) await sleep(600);
+    };
+    let totalExpanded = 0;
+    for (let pass = 0; pass < 5; pass++) {
+      const btns = [...document.querySelectorAll('button, span, a, [role="button"]')]
+        .filter(isExpandBtn);
+      if (btns.length === 0) break;
+      for (const btn of btns) {
+        try { btn.click(); } catch (_) {}
+        await sleep(120); // give each card time to render before the next click
+      }
+      totalExpanded += btns.length;
+      await sleep(900); // wait for DOM updates before checking for new buttons
+    }
+    return totalExpanded;
   }
 
   // ── Floating button ────────────────────────────────────────────────────────
