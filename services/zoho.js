@@ -25,6 +25,35 @@ function userApiBase(user) {
   return (user.zoho && user.zoho.apiBase) || API_BASE_DEFAULT;
 }
 
+// When a user connected before apiBase was tracked, detect the right data center
+// by trying each region until one responds successfully.
+const ZOHO_API_BASES = [
+  'https://mail.zoho.com/api',
+  'https://mail.zoho.eu/api',
+  'https://mail.zoho.in/api',
+  'https://mail.zoho.com.au/api',
+  'https://mail.zoho.jp/api',
+];
+
+async function detectAndSaveApiBase(user, token) {
+  const { accountId } = user.zoho;
+  for (const base of ZOHO_API_BASES) {
+    try {
+      const res = await axios.get(`${base}/accounts/${accountId}/folders`, {
+        headers: { Authorization: `Zoho-oauthtoken ${token}` },
+        timeout: 8000
+      });
+      if (res.data && res.data.data) {
+        user.zoho.apiBase = base;
+        await storage.saveUser(user);
+        console.log(`Zoho: detected apiBase=${base} for user ${user.id}`);
+        return base;
+      }
+    } catch (_) {}
+  }
+  return API_BASE_DEFAULT;
+}
+
 // ── OAuth2 helpers ────────────────────────────────────────────────────────────
 // `state` is an opaque CSRF nonce verified against the session on callback —
 // never a user ID (that allowed account takeover).
@@ -168,16 +197,29 @@ async function sendEmail(userId, { to, subject, body, inReplyTo, references, tra
   };
   if (inReplyTo) payload.inReplyTo = inReplyTo;
 
-  const sendUrl = `${userApiBase(user)}/accounts/${accountId}/messages`;
+  let apiBase = userApiBase(user);
+  let sendUrl = `${apiBase}/accounts/${accountId}/messages`;
   console.log('Zoho send →', sendUrl, '| from:', fromAddr, '| to:', to);
   let resp;
   try {
     resp = await axios.post(sendUrl, payload,
       { headers: { Authorization: `Zoho-oauthtoken ${token}`, 'Content-Type': 'application/json' } });
   } catch (err) {
-    const body = err.response && JSON.stringify(err.response.data);
-    console.error('Zoho send error:', err.response?.status, body);
-    throw new Error(`Zoho send failed (${err.response?.status}): ${body || err.message}`);
+    const errBody = err.response ? err.response.data : null;
+    const isWrongRegion = errBody && (
+      (errBody.data && errBody.data.errorCode === 'URL_RULE_NOT_CONFIGURED') ||
+      (errBody.status && errBody.status.code === 404)
+    );
+    if (isWrongRegion) {
+      apiBase = await detectAndSaveApiBase(user, token);
+      sendUrl = `${apiBase}/accounts/${accountId}/messages`;
+      resp = await axios.post(sendUrl, payload,
+        { headers: { Authorization: `Zoho-oauthtoken ${token}`, 'Content-Type': 'application/json' } });
+    } else {
+      const detail = err.response && JSON.stringify(err.response.data);
+      console.error('Zoho send error:', err.response?.status, detail);
+      throw new Error(`Zoho send failed (${err.response?.status}): ${detail || err.message}`);
+    }
   }
 
   const msgId = (resp.data.data && resp.data.data.messageId) || uuidv4();
@@ -212,13 +254,38 @@ async function fetchUnreadReplies(userId) {
 
   // Fetch recent messages — Zoho does not support status=unread as a query param;
   // fetch last 50 and filter by isRead/readStatus client-side
-  const msgsRes = await axios.get(`${apiBase}/accounts/${accountId}/folders/${folderId}/messages/view`, {
-    params: { limit: 50, sortOrder: 'desc' },
-    headers: { Authorization: `Zoho-oauthtoken ${token}` }
-  }).catch(err => {
-    const detail = err.response ? JSON.stringify(err.response.data) : err.message;
-    throw new Error(`Zoho inbox fetch failed: ${detail}`);
-  });
+  let msgsRes;
+  try {
+    msgsRes = await axios.get(`${apiBase}/accounts/${accountId}/folders/${folderId}/messages/view`, {
+      params: { limit: 50, sortOrder: 'desc' },
+      headers: { Authorization: `Zoho-oauthtoken ${token}` }
+    });
+  } catch (err) {
+    const body = err.response ? err.response.data : null;
+    const isWrongRegion = body && (
+      (body.data && body.data.errorCode === 'URL_RULE_NOT_CONFIGURED') ||
+      (body.status && body.status.code === 404)
+    );
+    if (isWrongRegion) {
+      const newBase = await detectAndSaveApiBase(user, token);
+      const inbox2Res = await axios.get(`${newBase}/accounts/${accountId}/folders`, {
+        headers: { Authorization: `Zoho-oauthtoken ${token}` }
+      });
+      const inbox2 = (inbox2Res.data.data || []).find(f =>
+        (f.folderName || '').toLowerCase() === 'inbox' || (f.folderType || '').toLowerCase() === 'inbox'
+      );
+      const folderId2 = inbox2 ? (inbox2.folderId || inbox2.folderid) : folderId;
+      msgsRes = await axios.get(`${newBase}/accounts/${accountId}/folders/${folderId2}/messages/view`, {
+        params: { limit: 50, sortOrder: 'desc' },
+        headers: { Authorization: `Zoho-oauthtoken ${token}` }
+      });
+      // Update apiBase for rest of this call
+      Object.assign(user.zoho, { apiBase: newBase });
+    } else {
+      const detail = err.response ? JSON.stringify(err.response.data) : err.message;
+      throw new Error(`Zoho inbox fetch failed: ${detail}`);
+    }
+  }
 
   const messages = msgsRes.data.data || [];
   const results  = [];
