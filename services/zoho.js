@@ -191,20 +191,33 @@ async function fetchUnreadReplies(userId) {
 
   const token = await getAccessToken(user);
   const { accountId, address } = user.zoho;
+  const apiBase = userApiBase(user);
 
   // Fetch INBOX folder ID
-  const foldersRes = await axios.get(`${userApiBase(user)}/accounts/${accountId}/folders`, {
+  const foldersRes = await axios.get(`${apiBase}/accounts/${accountId}/folders`, {
     headers: { Authorization: `Zoho-oauthtoken ${token}` }
   });
-  const inbox = (foldersRes.data.data || []).find(f =>
-    f.folderName.toLowerCase() === 'inbox' || f.folderType === 'inbox'
-  );
-  if (!inbox) return [];
+  const folders = foldersRes.data.data || [];
+  const inbox = folders.find(f => {
+    const name = (f.folderName || f.folderid || '').toLowerCase();
+    const type = (f.folderType || f.foldertype || '').toLowerCase();
+    return name === 'inbox' || type === 'inbox';
+  });
+  if (!inbox) {
+    console.error('Zoho: could not find inbox. Folders:', JSON.stringify(folders.map(f => ({ name: f.folderName, type: f.folderType, id: f.folderId }))));
+    return [];
+  }
 
-  // Get unread messages
-  const msgsRes = await axios.get(`${userApiBase(user)}/accounts/${accountId}/folders/${inbox.folderId}/messages/view`, {
-    params: { status: 'unread', limit: 50 },
+  const folderId = inbox.folderId || inbox.folderid;
+
+  // Fetch recent messages — Zoho does not support status=unread as a query param;
+  // fetch last 50 and filter by isRead/readStatus client-side
+  const msgsRes = await axios.get(`${apiBase}/accounts/${accountId}/folders/${folderId}/messages/view`, {
+    params: { limit: 50, sortOrder: 'desc' },
     headers: { Authorization: `Zoho-oauthtoken ${token}` }
+  }).catch(err => {
+    const detail = err.response ? JSON.stringify(err.response.data) : err.message;
+    throw new Error(`Zoho inbox fetch failed: ${detail}`);
   });
 
   const messages = msgsRes.data.data || [];
@@ -216,9 +229,13 @@ async function fetchUnreadReplies(userId) {
       const fromEmail = (msg.fromAddress || '').toLowerCase();
       if (fromEmail === address.toLowerCase()) continue;
 
+      // Skip already-read messages (Zoho field is fReadStatus: "1" = read, "0" = unread)
+      const isRead = msg.fReadStatus === '1' || msg.status === 'read' || msg.isRead === true;
+      if (isRead) continue;
+
       // Fetch full message content
       const fullRes = await axios.get(
-        `${userApiBase(user)}/accounts/${accountId}/folders/${inbox.folderId}/messages/${msg.messageId}`,
+        `${apiBase}/accounts/${accountId}/folders/${folderId}/messages/${msg.messageId}`,
         { headers: { Authorization: `Zoho-oauthtoken ${token}` } }
       );
       const full = fullRes.data.data || {};
@@ -226,22 +243,22 @@ async function fetchUnreadReplies(userId) {
       results.push({
         from:           msg.fromAddress || '',
         subject:        msg.subject     || '',
-        body:           full.content    || msg.summary || '',
+        body:           full.content    || full.htmlContent || msg.summary || '',
         gmailMessageId: String(msg.messageId),
         gmailThreadId:  null,
         timestamp:      msg.receivedTime ? new Date(Number(msg.receivedTime)).toISOString() : new Date().toISOString(),
-        messageId:      String(msg.messageId),
+        messageId:      msg.inReplyTo || msg['message-id'] || String(msg.messageId),
         resumeAttachment: null
       });
 
       // Mark as read
       await axios.put(
-        `${userApiBase(user)}/accounts/${accountId}/updatemessage`,
+        `${apiBase}/accounts/${accountId}/updatemessage`,
         { mode: 'markAsRead', messageId: [String(msg.messageId)] },
         { headers: { Authorization: `Zoho-oauthtoken ${token}`, 'Content-Type': 'application/json' } }
-      ).catch(() => {});
+      ).catch(e => console.error('Zoho markAsRead error:', e.message));
     } catch (e) {
-      console.error('Zoho fetch message error:', e.message);
+      console.error('Zoho fetch message error:', e.response ? JSON.stringify(e.response.data) : e.message);
     }
   }
 
