@@ -520,20 +520,24 @@ function clearDraft(candidateId, fieldId) {
 }
 
 function initDraftTextareas(body, candidateId) {
-  body.querySelectorAll('textarea.draft-textarea').forEach(ta => {
-    if (!ta.id) return;
-    const key = draftStorageKey(candidateId, ta.id);
+  // Handle both <textarea class="draft-textarea"> and <input class="draft-input">
+  body.querySelectorAll('textarea.draft-textarea, input.draft-input').forEach(el => {
+    if (!el.id) return;
+    const key = draftStorageKey(candidateId, el.id);
     const saved = localStorage.getItem(key);
-    if (saved && !ta.value) {
-      ta.value = saved;
+    if (saved && !el.value) {
+      el.value = saved;
+      // Show the draft area if it's hidden
+      const draftArea = el.closest('.draft-area');
+      if (draftArea) draftArea.style.display = '';
       const badge = document.createElement('span');
       badge.textContent = '• Draft restored';
       badge.style.cssText = 'font-size:0.73rem;color:#d97706;margin-left:8px;display:inline-block';
-      const label = ta.closest('.form-group')?.querySelector('label');
+      const label = el.closest('.form-group')?.querySelector('label');
       if (label) label.appendChild(badge);
       setTimeout(() => badge.remove(), 4000);
     }
-    ta.addEventListener('input', () => localStorage.setItem(key, ta.value));
+    el.addEventListener('input', () => localStorage.setItem(key, el.value));
   });
 }
 
@@ -1614,6 +1618,17 @@ function wireAIDraft(body, { genBtnId, draftAreaId, subjectId, bodyId, regenBtnI
   const draftArea = body.querySelector('#' + draftAreaId);
   if (!genBtn || !draftArea) return;
 
+  // Wire up subject input for draft persistence (not covered by initDraftTextareas)
+  if (subjectId) {
+    const subjectEl = body.querySelector('#' + subjectId);
+    if (subjectEl) {
+      const subjectKey = draftStorageKey(c.id, subjectId);
+      const savedSubject = localStorage.getItem(subjectKey);
+      if (savedSubject && !subjectEl.value) subjectEl.value = savedSubject;
+      subjectEl.addEventListener('input', () => localStorage.setItem(subjectKey, subjectEl.value));
+    }
+  }
+
   async function doGenerate() {
     const orig = genBtn.textContent;
     genBtn.disabled = true; genBtn.textContent = '✦ Generating…';
@@ -1622,10 +1637,13 @@ function wireAIDraft(body, { genBtnId, draftAreaId, subjectId, bodyId, regenBtnI
       const draft = result.draft || result.text || result;
       const subjectEl = body.querySelector('#' + subjectId);
       const bodyEl = body.querySelector('#' + bodyId);
-      if (bodyEl) bodyEl.value = typeof draft === 'string' ? draft : JSON.stringify(draft);
+      if (bodyEl) {
+        bodyEl.value = typeof draft === 'string' ? draft : JSON.stringify(draft);
+        bodyEl.dispatchEvent(new Event('input'));
+      }
       if (subjectEl) {
-        // Use AI-generated subject if provided, otherwise fall back to default
         subjectEl.value = (result.subject && result.subject.trim()) || subjectEl.value || defaultSubject;
+        subjectEl.dispatchEvent(new Event('input'));
       }
       draftArea.style.display = '';
       bodyEl && bodyEl.focus();
