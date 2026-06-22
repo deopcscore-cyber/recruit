@@ -185,7 +185,7 @@ function stripToPlainText(body) {
     .trim();
 }
 
-function buildRawEmail({ from, to, subject, body, signatureHtml = '', signaturePlain = '', threadId, inReplyTo, references, trackingId, baseUrl }) {
+function buildRawEmail({ from, to, cc, subject, body, signatureHtml = '', signaturePlain = '', threadId, inReplyTo, references, trackingId, baseUrl }) {
   const boundary = `_wt_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
 
   // ── Plain-text part ───────────────────────────────────────────────────────────
@@ -216,6 +216,7 @@ function buildRawEmail({ from, to, subject, body, signatureHtml = '', signatureP
   const headers = [
     `From: ${from}`,
     `To: ${to}`,
+    ...(cc ? [`Cc: ${cc}`] : []),
     `Date: ${new Date().toUTCString()}`,
     `Subject: ${subject}`,
     'MIME-Version: 1.0',
@@ -259,7 +260,7 @@ function buildRawEmail({ from, to, subject, body, signatureHtml = '', signatureP
     .replace(/=+$/, '');
 }
 
-async function sendEmail(userId, { to, subject, body, threadId, inReplyTo, references, trackingId }) {
+async function sendEmail(userId, { to, cc, subject, body, threadId, inReplyTo, references, trackingId }) {
   const user = await storage.getUserById(userId);
   if (!user) throw new Error('User not found');
 
@@ -285,7 +286,7 @@ async function sendEmail(userId, { to, subject, body, threadId, inReplyTo, refer
   const signatureHtml  = buildSignatureHtml(user);
   const signaturePlain = buildSignaturePlainText(user);
 
-  const raw = buildRawEmail({ from, to, subject, body, signatureHtml, signaturePlain, threadId, inReplyTo, references, trackingId, baseUrl: BASE_URL });
+  const raw = buildRawEmail({ from, to, cc, subject, body, signatureHtml, signaturePlain, threadId, inReplyTo, references, trackingId, baseUrl: BASE_URL });
 
   const requestBody = { raw };
   if (threadId) requestBody.threadId = threadId;

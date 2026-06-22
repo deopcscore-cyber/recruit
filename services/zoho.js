@@ -222,7 +222,7 @@ async function fetchAccountInfo(accessToken, apiBase = API_BASE_DEFAULT) {
 }
 
 // ── Send email via Zoho REST API ──────────────────────────────────────────────
-async function sendEmail(userId, { to, subject, body, inReplyTo, references, trackingId }) {
+async function sendEmail(userId, { to, cc, subject, body, inReplyTo, references, trackingId }) {
   const user = await storage.getUserById(userId);
   if (!user) throw new Error('User not found');
 
@@ -243,6 +243,7 @@ async function sendEmail(userId, { to, subject, body, inReplyTo, references, tra
     content:     htmlBody,
     mailFormat:  'html'
   };
+  if (cc) payload.ccAddress = cc;
   if (inReplyTo) payload.inReplyTo = inReplyTo;
 
   let apiBase = userApiBase(user);

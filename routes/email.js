@@ -78,7 +78,7 @@ const gmailCallback = async (req, res) => {
 // POST /api/email/send
 router.post('/send', requireAuth, async (req, res) => {
   try {
-    const { candidateId, subject, body, isReply } = req.body;
+    const { candidateId, subject, body, isReply, cc } = req.body;
 
     if (!candidateId || !subject || !body) {
       return res.status(400).json({ error: 'candidateId, subject, and body are required' });
@@ -103,7 +103,8 @@ router.post('/send', requireAuth, async (req, res) => {
       to: candidate.email,
       subject,
       body,
-      trackingId: candidate.trackingId
+      trackingId: candidate.trackingId,
+      ...(cc ? { cc } : {})
     };
 
     // Threading — pass threadId AND the correct SMTP Message-ID for In-Reply-To

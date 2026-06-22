@@ -1353,7 +1353,7 @@ function renderVictoryTab(body) {
       <div class="draft-area" id="victory-draft-area" style="display:none">
         <div class="tab-section">
           <div class="draft-label"><h4>Draft — Introduction Email</h4><span class="text-xs text-muted">Edit before sending</span></div>
-          ${partnerEmail ? `<p style="font-size:0.78rem;color:var(--text-muted);margin:0 0 10px">Remember to CC <strong>${escapeHtml(partnerEmail)}</strong> when you send this.</p>` : ''}
+          ${partnerEmail ? `<p style="font-size:0.78rem;color:#14532d;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:6px;padding:6px 12px;margin:0 0 10px;display:inline-block">✓ Will CC <strong>${escapeHtml(partnerEmail)}</strong> automatically</p>` : ''}
           <div class="form-group"><label>Subject Line</label><input type="text" id="victory-subject" value="Someone I think you should connect with, ${escapeHtml(firstName)}" /></div>
           <div class="form-group"><label>Message</label><textarea id="victory-body" class="draft-textarea" style="min-height:260px"></textarea></div>
           <div class="draft-actions">
@@ -1375,6 +1375,7 @@ function renderVictoryTab(body) {
     defaultSubject: `Someone I think you should connect with, ${firstName}`,
     stepKey: 'victorySent',
     stageTo: null,
+    cc: partnerEmail || null,
     generate: () => API.ai.victory(c.id)
   });
 }
@@ -1606,7 +1607,7 @@ function renderThreadTab(body) {
 // SHARED: AI Draft Wire-up
 // ================================================================
 
-function wireAIDraft(body, { genBtnId, draftAreaId, subjectId, bodyId, regenBtnId, sendBtnId, defaultSubject, stepKey, stageTo, generate }) {
+function wireAIDraft(body, { genBtnId, draftAreaId, subjectId, bodyId, regenBtnId, sendBtnId, defaultSubject, stepKey, stageTo, cc, generate }) {
   const c = _modalCandidate;
 
   const genBtn = body.querySelector('#' + genBtnId);
@@ -1649,7 +1650,7 @@ function wireAIDraft(body, { genBtnId, draftAreaId, subjectId, bodyId, regenBtnI
       sendBtn.disabled = true; sendBtn.textContent = 'Sending…';
       try {
         const isReply = (c.thread||[]).some(m => m.direction === 'outbound');
-        const result = await API.email.send({ candidateId: c.id, subject, body: msgBody, isReply });
+        const result = await API.email.send({ candidateId: c.id, subject, body: msgBody, isReply, ...(cc ? { cc } : {}) });
         if (result.candidate) Object.assign(_modalCandidate, result.candidate);
 
         // Mark step complete
