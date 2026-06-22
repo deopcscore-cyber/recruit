@@ -327,7 +327,7 @@ async function fetchUnreadReplies(userId) {
   // Correct Zoho endpoint: GET /accounts/{accountId}/messages/view?folderId={folderId}
   // folderId is a QUERY PARAM, not part of the URL path.
   const msgsRes = await axios.get(`${effectiveBase}/accounts/${accountId}/messages/view`, {
-    params: { folderId, limit: 50, sortorder: 'desc' },
+    params: { folderId, limit: 50 },
     headers: { Authorization: `Zoho-oauthtoken ${token}` }
   }).catch(err => {
     const detail = err.response ? JSON.stringify(err.response.data) : err.message;
