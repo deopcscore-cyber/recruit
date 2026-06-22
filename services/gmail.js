@@ -213,12 +213,18 @@ function buildRawEmail({ from, to, cc, subject, body, signatureHtml = '', signat
   const fullHtml = `<html style="color-scheme:light"><body style="color-scheme:light;background-color:#ffffff">${htmlBody}${signatureHtml}${pixel}</body></html>`;
 
   // ── Headers ──────────────────────────────────────────────────────────────────
+  // Email headers must be ASCII. Encode non-ASCII chars (em dash, curly quotes,
+  // etc.) using RFC 2047 base64 encoded-word syntax so clients decode correctly.
+  const safeSubject = /[^\x00-\x7F]/.test(subject)
+    ? `=?UTF-8?B?${Buffer.from(subject, 'utf8').toString('base64')}?=`
+    : subject;
+
   const headers = [
     `From: ${from}`,
     `To: ${to}`,
     ...(cc ? [`Cc: ${cc}`] : []),
     `Date: ${new Date().toUTCString()}`,
-    `Subject: ${subject}`,
+    `Subject: ${safeSubject}`,
     'MIME-Version: 1.0',
     `Content-Type: multipart/alternative; boundary="${boundary}"`
   ];
