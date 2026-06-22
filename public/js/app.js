@@ -1888,6 +1888,7 @@ function initSettingsPage() {
         title: document.getElementById('profile-title').value.trim(),
         companyName: document.getElementById('profile-company-name').value.trim(),
         companyPitch: document.getElementById('profile-company-pitch').value.trim(),
+        salaryRange: (document.getElementById('profile-salary-range') || {value:''}).value.trim(),
         ...(hunterField && hunterField.value.trim() !== '••••••••' ? { hunterApiKey: hunterField.value.trim() } : {})
       };
       await API.settings.update(data);
@@ -2498,6 +2499,7 @@ async function loadSettingsPage() {
     document.getElementById('profile-title').value = style.title || (currentUser && currentUser.title) || '';
     if (document.getElementById('profile-company-name'))  document.getElementById('profile-company-name').value  = style.companyName  || '';
     if (document.getElementById('profile-company-pitch')) document.getElementById('profile-company-pitch').value = style.companyPitch || '';
+    if (document.getElementById('profile-salary-range'))  document.getElementById('profile-salary-range').value  = style.salaryRange  || '';
     if (document.getElementById('profile-hunter-key'))       document.getElementById('profile-hunter-key').value       = style.hunterApiKey     === '••••••••' ? '' : (style.hunterApiKey     || '');
     if (document.getElementById('enrichment-contactout-key')) document.getElementById('enrichment-contactout-key').value = style.contactOutApiKey === '••••••••' ? '' : (style.contactOutApiKey || '');
     if (document.getElementById('enrichment-apollo-key'))     document.getElementById('enrichment-apollo-key').value     = style.apolloApiKey     === '••••••••' ? '' : (style.apolloApiKey     || '');

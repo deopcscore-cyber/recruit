@@ -50,6 +50,7 @@ router.get('/', async (req, res) => {
       title: user.title || '',
       companyName: user.companyName || '',
       companyPitch: user.companyPitch || '',
+      salaryRange: user.salaryRange || '',
       signature: user.signature || { enabled: false, photoUrl: '', website: '', location: '', linkedin: '', facebook: '', twitter: '', disclaimer: '' },
       secondaryTestEmail:  user.secondaryTestEmail  || '',
       hunterApiKey:        user.hunterApiKey        ? '••••••••' : '',
@@ -76,7 +77,7 @@ router.put('/', async (req, res) => {
     const user = await storage.getUserById(req.session.userId);
     if (!user) return res.status(404).json({ error: 'User not found' });
 
-    const { tone, notes, use, avoid, name, title, companyName, companyPitch, hunterApiKey, contactOutApiKey, apolloApiKey, signature, secondaryTestEmail, userType, resumeConsultantName, resumeConsultantEmail } = req.body;
+    const { tone, notes, use, avoid, name, title, companyName, companyPitch, salaryRange, hunterApiKey, contactOutApiKey, apolloApiKey, signature, secondaryTestEmail, userType, resumeConsultantName, resumeConsultantEmail } = req.body;
     const VALID_TYPES = ['recruiter_company', 'recruiter_independent', 'career_consultant'];
     if (userType && VALID_TYPES.includes(userType)) user.userType = userType;
 
@@ -91,6 +92,7 @@ router.put('/', async (req, res) => {
     if (title !== undefined) user.title = title.trim();
     if (companyName  !== undefined) user.companyName  = companyName.trim();
     if (companyPitch !== undefined) user.companyPitch = companyPitch.trim();
+    if (salaryRange  !== undefined) user.salaryRange  = salaryRange.trim();
     if (hunterApiKey     !== undefined) user.hunterApiKey     = hunterApiKey.trim();
     if (contactOutApiKey !== undefined) user.contactOutApiKey = contactOutApiKey.trim();
     if (apolloApiKey     !== undefined) user.apolloApiKey     = apolloApiKey.trim();

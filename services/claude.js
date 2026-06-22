@@ -19,10 +19,11 @@ function calcCostCents(usage) {
 // These replace every hardcoded "Welltower Inc." reference in the AI prompts,
 // making the platform work for any recruiter at any company.
 function getCompanyContext(user) {
-  const name  = (user.companyName  || '').trim() || 'our company';
-  const pitch = (user.companyPitch || '').trim() ||
+  const name        = (user.companyName  || '').trim() || 'our company';
+  const pitch       = (user.companyPitch || '').trim() ||
     `I'm reaching out on behalf of ${name} — we're looking for experienced professionals who can make an impact at the leadership level.`;
-  return { name, pitch };
+  const salaryRange = (user.salaryRange  || '').trim();
+  return { name, pitch, salaryRange };
 }
 
 function formatCandidateContext(candidate) {
@@ -425,7 +426,7 @@ Create a detailed, personalized role description that feels written specifically
 
 ## What ${company.name} Offers
 
-**Compensation:** Describe a compelling compensation structure appropriate for an executive-level role — include base salary range, performance bonus, equity/long-term incentives, and full benefits package. Make it feel premium but don't invent specific numbers unless you know them.
+**Compensation:** ${company.salaryRange ? `Base salary range: **${company.salaryRange}**. Also include` : 'Include'} performance bonus, equity/long-term incentives, and full benefits package. Make it feel premium and specific.
 
 **Mission:** 2-3 sentences on ${company.name}'s unique position and why it matters. Draw from: "${company.pitch}"
 
