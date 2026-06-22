@@ -680,8 +680,10 @@ router.get('/zoho-debug', requireAuth, async (req, res) => {
       'https://mail.zoho.in/api', 'https://mail.zoho.com.au/api', 'https://mail.zoho.jp/api'
     ];
     const formats = folderId ? [
+      `{base}/accounts/${accountId}/messages/view?folderId=${folderId}&limit=1`,
       `{base}/accounts/${accountId}/messages?folderId=${folderId}&limit=1`,
-      `{base}/accounts/${accountId}/folders/${folderId}/messages/view?limit=1`
+      `{base}/accounts/${accountId}/folders/${folderId}/messages/view?limit=1`,
+      `{base}/accounts/${accountId}/folders/${folderId}/messages?limit=1`
     ] : [];
 
     for (const base of BASES) {
