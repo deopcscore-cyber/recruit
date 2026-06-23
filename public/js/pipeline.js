@@ -140,7 +140,47 @@ function preview55(text) {
   return clean.length > 55 ? clean.substring(0, 55) + '…' : clean;
 }
 
-// Strip the quoted original / reply history that mail clients append to replies
+// Returns true if string looks like HTML
+function looksLikeHtml(str) {
+  return /<[a-z][\s\S]*>/i.test(str || '');
+}
+
+// Strip quoted reply history from an HTML email body using DOM parsing.
+// Removes Gmail quote divs, blockquotes, and Outlook reply headers.
+// Returns { html, trimmed } — trimmed=true if anything was removed.
+function stripHtmlQuotes(html) {
+  const wrap = document.createElement('div');
+  wrap.innerHTML = html;
+
+  const before = wrap.innerHTML.length;
+
+  // Gmail / Google Workspace quote containers
+  wrap.querySelectorAll('[class*="gmail_quote"], [class*="gmail_attr"]').forEach(el => el.remove());
+  // Blockquote with cite attr (Apple Mail, Thunderbird)
+  wrap.querySelectorAll('blockquote[type="cite"]').forEach(el => el.remove());
+  // Outlook reply header + blockquote pairs
+  wrap.querySelectorAll('[class*="OutlookMessageHeader"], [class*="ms-outlook"]').forEach(el => el.remove());
+  // Common Outlook/Exchange class patterns
+  wrap.querySelectorAll('[class*="WordSection"], [class*="MsoNormal"]').forEach(el => {
+    // Only remove if they contain "From:" / "Sent:" attribution markers
+    if (/\b(From|Sent|To|Subject):/i.test(el.innerText || el.textContent || '')) el.remove();
+  });
+  // Any remaining plain <blockquote> elements that are likely quote wrappers
+  wrap.querySelectorAll('blockquote').forEach(el => el.remove());
+
+  // Remove trailing empty nodes left behind
+  while (wrap.lastChild && (wrap.lastChild.nodeType === 3
+    ? !wrap.lastChild.textContent.trim()
+    : !wrap.lastChild.textContent.trim())) {
+    wrap.removeChild(wrap.lastChild);
+  }
+
+  const after  = wrap.innerHTML.length;
+  const result = wrap.innerHTML.trim();
+  return { html: result || html, trimmed: after < before && !!result };
+}
+
+// Strip the quoted original / reply history that mail clients append to plain-text replies.
 // (Gmail "On … wrote:", Outlook "From:/Sent:/-----Original Message-----",
 // ">" quote markers, divider rules). Returns just the new content. Falls back
 // to the full text if stripping would leave nothing.
@@ -1392,13 +1432,26 @@ function renderThreadTab(body) {
   const c = _modalCandidate;
   const thread = c.thread || [];
 
+  const toBr   = s => escapeHtml(s).replace(/\n/g, '<br>');
   const threadHtml = thread.length === 0
     ? `<div class="thread-empty">No messages yet. Send an outreach to start the conversation.</div>`
     : thread.map((msg, i) => {
-        const full    = msg.body || '';
-        const visible = msg.direction === 'inbound' ? stripQuotedText(full) : full;
-        const trimmed = visible.length < full.length;
-        const toBr = s => escapeHtml(s).replace(/\n/g, '<br>');
+        const full = msg.body || '';
+        const isHtml = looksLikeHtml(full);
+
+        let visibleHtml, fullHtml, trimmed;
+        if (isHtml) {
+          const stripped = msg.direction === 'inbound' ? stripHtmlQuotes(full) : { html: full, trimmed: false };
+          visibleHtml = stripped.html;
+          fullHtml    = full;
+          trimmed     = stripped.trimmed;
+        } else {
+          const visibleTxt = msg.direction === 'inbound' ? stripQuotedText(full) : full;
+          visibleHtml = toBr(visibleTxt);
+          fullHtml    = toBr(full);
+          trimmed     = visibleTxt.length < full.length;
+        }
+
         return `
       <div class="thread-msg ${msg.direction||'outbound'}">
         <div class="thread-msg-header">
@@ -1406,10 +1459,10 @@ function renderThreadTab(body) {
           <span class="thread-time">${formatRelative(msg.timestamp)}</span>
         </div>
         ${msg.subject ? `<div class="thread-subject">${escapeHtml(msg.subject)}</div>` : ''}
-        <div class="thread-body">${toBr(visible)}</div>
+        <div class="thread-body">${visibleHtml}</div>
         ${trimmed ? `
           <button class="thread-quote-toggle" data-qi="${i}" style="background:none;border:none;color:var(--text-muted);font-size:0.74rem;cursor:pointer;padding:4px 0;margin-top:2px">··· show quoted text</button>
-          <div class="thread-quoted" data-qi="${i}" style="display:none;border-left:2px solid var(--border);padding-left:10px;margin-top:6px;color:var(--text-muted);font-size:0.82rem">${toBr(full)}</div>
+          <div class="thread-quoted" data-qi="${i}" style="display:none;border-left:2px solid var(--border);padding-left:10px;margin-top:6px;color:var(--text-muted);font-size:0.82rem">${fullHtml}</div>
         ` : ''}
       </div>`;
       }).join('');
