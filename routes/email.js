@@ -241,6 +241,10 @@ router.post('/fetch', requireAuth, async (req, res) => {
           candidate = candidates.find(c => c.email && c.email.toLowerCase() === fromEmail.toLowerCase());
         }
       }
+      // Fallback: scan reply body for tracking pixel URL — catches replies from a different address
+      if (!candidate && reply.body) {
+        candidate = candidates.find(c => c.trackingId && reply.body.includes(`/track/${c.trackingId}`));
+      }
       if (!candidate) continue;
 
       // Avoid adding duplicate messages — match on message ID or SMTP ID
