@@ -98,6 +98,13 @@ document.addEventListener('DOMContentLoaded', async () => {
     window.location.href = '/login';
   });
 
+  // Credit history modal
+  document.getElementById('sidebar-credits').addEventListener('click', openCreditHistoryModal);
+  document.getElementById('credit-history-close').addEventListener('click', closeCreditHistoryModal);
+  document.getElementById('credit-history-modal').addEventListener('click', e => {
+    if (e.target === e.currentTarget) closeCreditHistoryModal();
+  });
+
   // Dark mode toggle
   document.getElementById('dark-toggle-btn').addEventListener('click', () => {
     const current = document.documentElement.getAttribute('data-theme') || 'light';
@@ -2551,22 +2558,40 @@ async function loadSettingsPage() {
     await updateGmailStatus();
     await updateZohoStatus();
     await updateOutlookStatus();
-    await loadCreditHistory();
   } catch (err) {
     Toast.error('Failed to load settings');
   }
 }
 
+function openCreditHistoryModal() {
+  const modal = document.getElementById('credit-history-modal');
+  if (!modal) return;
+  modal.style.display = 'flex';
+  loadCreditHistory();
+}
+
+function closeCreditHistoryModal() {
+  const modal = document.getElementById('credit-history-modal');
+  if (modal) modal.style.display = 'none';
+}
+
 async function loadCreditHistory() {
+  const balEl   = document.getElementById('ch-balance');
+  const spentEl = document.getElementById('ch-spent');
+  const tbody   = document.getElementById('ch-tbody');
+  const empty   = document.getElementById('ch-empty');
+  const wrap    = document.getElementById('ch-table-wrap');
+  const capped  = document.getElementById('ch-capped');
+  const loading = document.getElementById('ch-loading');
+  if (!balEl) return;
+
+  if (loading) loading.style.display = '';
+  if (empty)   empty.style.display   = 'none';
+  if (wrap)    wrap.style.display    = 'none';
+
   try {
     const data = await fetch('/api/settings/credit-history').then(r => r.json());
-    const balEl   = document.getElementById('ch-balance');
-    const spentEl = document.getElementById('ch-spent');
-    const tbody   = document.getElementById('ch-tbody');
-    const empty   = document.getElementById('ch-empty');
-    const wrap    = document.getElementById('ch-table-wrap');
-    const capped  = document.getElementById('ch-capped');
-    if (!balEl) return;
+    if (loading) loading.style.display = 'none';
 
     const fmt = c => '$' + (c / 100).toFixed(2);
     balEl.textContent   = fmt(data.credits    || 0);
@@ -2575,25 +2600,24 @@ async function loadCreditHistory() {
     const history = data.history || [];
     if (!history.length) {
       empty.style.display = '';
-      wrap.style.display  = 'none';
       return;
     }
-    empty.style.display = 'none';
-    wrap.style.display  = '';
+    wrap.style.display = '';
     if (history.length >= 200) capped.style.display = '';
 
     tbody.innerHTML = history.map(e => {
-      const d   = new Date(e.ts);
+      const d    = new Date(e.ts);
       const date = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
       const time = d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
       return `<tr style="border-bottom:1px solid var(--border)">
-        <td style="padding:7px 10px;color:var(--text-muted);white-space:nowrap">${date} <span style="font-size:0.78rem">${time}</span></td>
-        <td style="padding:7px 10px;font-weight:500">${e.action || '—'}</td>
-        <td style="padding:7px 10px;color:var(--text-muted)">${e.candidate || '—'}</td>
-        <td style="padding:7px 10px;text-align:right;font-family:monospace;color:var(--text)">${fmt(e.cost || 0)}</td>
+        <td style="padding:7px 8px;color:var(--text-muted);white-space:nowrap">${date} <span style="font-size:0.78rem">${time}</span></td>
+        <td style="padding:7px 8px;font-weight:500">${e.action || '—'}</td>
+        <td style="padding:7px 8px;color:var(--text-muted)">${e.candidate || '—'}</td>
+        <td style="padding:7px 8px;text-align:right;font-family:monospace;color:var(--text)">${fmt(e.cost || 0)}</td>
       </tr>`;
     }).join('');
   } catch (e) {
+    if (loading) loading.style.display = 'none';
     console.error('Credit history load failed:', e);
   }
 }
