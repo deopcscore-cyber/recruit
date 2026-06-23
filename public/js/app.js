@@ -2551,8 +2551,50 @@ async function loadSettingsPage() {
     await updateGmailStatus();
     await updateZohoStatus();
     await updateOutlookStatus();
+    await loadCreditHistory();
   } catch (err) {
     Toast.error('Failed to load settings');
+  }
+}
+
+async function loadCreditHistory() {
+  try {
+    const data = await fetch('/api/settings/credit-history').then(r => r.json());
+    const balEl   = document.getElementById('ch-balance');
+    const spentEl = document.getElementById('ch-spent');
+    const tbody   = document.getElementById('ch-tbody');
+    const empty   = document.getElementById('ch-empty');
+    const wrap    = document.getElementById('ch-table-wrap');
+    const capped  = document.getElementById('ch-capped');
+    if (!balEl) return;
+
+    const fmt = c => '$' + (c / 100).toFixed(2);
+    balEl.textContent   = fmt(data.credits    || 0);
+    spentEl.textContent = fmt(data.totalSpent || 0);
+
+    const history = data.history || [];
+    if (!history.length) {
+      empty.style.display = '';
+      wrap.style.display  = 'none';
+      return;
+    }
+    empty.style.display = 'none';
+    wrap.style.display  = '';
+    if (history.length >= 200) capped.style.display = '';
+
+    tbody.innerHTML = history.map(e => {
+      const d   = new Date(e.ts);
+      const date = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+      const time = d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+      return `<tr style="border-bottom:1px solid var(--border)">
+        <td style="padding:7px 10px;color:var(--text-muted);white-space:nowrap">${date} <span style="font-size:0.78rem">${time}</span></td>
+        <td style="padding:7px 10px;font-weight:500">${e.action || '—'}</td>
+        <td style="padding:7px 10px;color:var(--text-muted)">${e.candidate || '—'}</td>
+        <td style="padding:7px 10px;text-align:right;font-family:monospace;color:var(--text)">${fmt(e.cost || 0)}</td>
+      </tr>`;
+    }).join('');
+  } catch (e) {
+    console.error('Credit history load failed:', e);
   }
 }
 

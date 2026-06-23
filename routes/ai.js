@@ -20,10 +20,20 @@ async function checkCredits(user, res) {
   return true;
 }
 
-async function deductCredits(user, costCents) {
+async function deductCredits(user, costCents, action, candidateName) {
   if (!costCents || costCents <= 0) return;
   user.credits    = Math.max(0, (user.credits    || 0) - costCents);
   user.totalSpent = (user.totalSpent || 0) + costCents;
+
+  if (!user.creditHistory) user.creditHistory = [];
+  user.creditHistory.unshift({
+    ts:        new Date().toISOString(),
+    action:    action || 'AI generation',
+    candidate: candidateName || null,
+    cost:      costCents
+  });
+  if (user.creditHistory.length > 500) user.creditHistory = user.creditHistory.slice(0, 500);
+
   await storage.saveUser(user);
 }
 
@@ -53,7 +63,7 @@ router.post('/outreach', async (req, res) => {
     if (!await checkCredits(ctx.user, res)) return;
 
     const result = await claude.generateOutreach(ctx.candidate, ctx.user);
-    await deductCredits(ctx.user, result.costCents);
+    await deductCredits(ctx.user, result.costCents, 'Outreach email', ctx.candidate.name);
     return res.json({ draft: result.text, creditsRemaining: ctx.user.credits });
   } catch (err) {
     console.error('AI outreach error:', err);
@@ -69,7 +79,7 @@ router.post('/role-jd', async (req, res) => {
     if (!await checkCredits(ctx.user, res)) return;
 
     const result = await claude.generateRoleJD(ctx.candidate, ctx.user);
-    await deductCredits(ctx.user, result.costCents);
+    await deductCredits(ctx.user, result.costCents, 'Role & JD', ctx.candidate.name);
     return res.json({ draft: result.text, creditsRemaining: ctx.user.credits });
   } catch (err) {
     console.error('AI role JD error:', err);
@@ -89,7 +99,7 @@ router.post('/resume-review', async (req, res) => {
     }
 
     const result = await claude.generateResumeFeedback(ctx.candidate, ctx.user);
-    await deductCredits(ctx.user, result.costCents);
+    await deductCredits(ctx.user, result.costCents, 'Resume review', ctx.candidate.name);
     return res.json({ gaps: result.gaps, draft: result.email, creditsRemaining: ctx.user.credits });
   } catch (err) {
     console.error('AI resume review error:', err);
@@ -105,7 +115,7 @@ router.post('/victory', async (req, res) => {
     if (!await checkCredits(ctx.user, res)) return;
 
     const result = await claude.generateVictoryEmail(ctx.candidate, ctx.user);
-    await deductCredits(ctx.user, result.costCents);
+    await deductCredits(ctx.user, result.costCents, 'Intro email', ctx.candidate.name);
     return res.json({ draft: result.text, creditsRemaining: ctx.user.credits });
   } catch (err) {
     console.error('AI victory error:', err);
@@ -121,7 +131,7 @@ router.post('/score', async (req, res) => {
     if (!await checkCredits(ctx.user, res)) return;
 
     const scoreData = await claude.scoreCandidate(ctx.candidate, ctx.user);
-    await deductCredits(ctx.user, scoreData.costCents);
+    await deductCredits(ctx.user, scoreData.costCents, 'Candidate score', ctx.candidate.name);
 
     ctx.candidate.score = scoreData.score;
     ctx.candidate.scoreDetails = { ...scoreData, scoredAt: new Date().toISOString() };
@@ -143,7 +153,7 @@ router.post('/followup', async (req, res) => {
     if (!await checkCredits(ctx.user, res)) return;
 
     const result = await claude.generateFollowUp(ctx.candidate, ctx.user);
-    await deductCredits(ctx.user, result.costCents);
+    await deductCredits(ctx.user, result.costCents, 'Follow-up email', ctx.candidate.name);
     return res.json({ draft: result.text, creditsRemaining: ctx.user.credits });
   } catch (err) {
     console.error('AI followup error:', err);
@@ -159,7 +169,7 @@ router.post('/proposal', async (req, res) => {
     if (!await checkCredits(ctx.user, res)) return;
 
     const result = await claude.generateProposal(ctx.candidate, ctx.user);
-    await deductCredits(ctx.user, result.costCents);
+    await deductCredits(ctx.user, result.costCents, 'Proposal', ctx.candidate.name);
     return res.json({ draft: result.text, creditsRemaining: ctx.user.credits });
   } catch (err) {
     console.error('AI proposal error:', err);
@@ -176,7 +186,7 @@ router.post('/reply', async (req, res) => {
 
     const { lastMessage } = req.body;
     const result = await claude.generateReply(ctx.candidate, ctx.user, lastMessage || null);
-    await deductCredits(ctx.user, result.costCents);
+    await deductCredits(ctx.user, result.costCents, 'Reply draft', ctx.candidate.name);
     return res.json({ draft: result.text, creditsRemaining: ctx.user.credits });
   } catch (err) {
     console.error('AI reply error:', err);
@@ -195,7 +205,7 @@ router.post('/rewrite-resume', async (req, res) => {
     }
 
     const result = await claude.rewriteResume(ctx.candidate, ctx.user);
-    await deductCredits(ctx.user, result.costCents);
+    await deductCredits(ctx.user, result.costCents, 'Resume rewrite', ctx.candidate.name);
 
     // Persist so it can be re-opened without paying to regenerate
     ctx.candidate.resumeRewrite = {

@@ -849,6 +849,41 @@ I came across your work leading...&#10;&#10;[Paste a full example email here —
 
         </div><!-- /deliverability panel -->
 
+          <!-- Credit History -->
+          <div class="settings-card" id="credit-history-card">
+            <div class="settings-card-header">
+              <h3>Credit Usage History</h3>
+              <span class="settings-card-hint">Every AI action charged to your account</span>
+            </div>
+            <div class="settings-card-body">
+              <div style="display:flex;gap:24px;margin-bottom:18px">
+                <div style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:12px 18px;flex:1;text-align:center">
+                  <div style="font-size:0.75rem;color:var(--text-muted);margin-bottom:4px;text-transform:uppercase;letter-spacing:.05em">Balance</div>
+                  <div id="ch-balance" style="font-size:1.4rem;font-weight:700;color:var(--blue)">—</div>
+                </div>
+                <div style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:12px 18px;flex:1;text-align:center">
+                  <div style="font-size:0.75rem;color:var(--text-muted);margin-bottom:4px;text-transform:uppercase;letter-spacing:.05em">Total Spent</div>
+                  <div id="ch-spent" style="font-size:1.4rem;font-weight:700;color:var(--text)">—</div>
+                </div>
+              </div>
+              <div id="ch-empty" style="display:none;text-align:center;padding:32px;color:var(--text-muted);font-size:0.87rem">No usage yet — generate your first AI draft to see it here.</div>
+              <div id="ch-table-wrap" style="display:none;overflow-x:auto">
+                <table style="width:100%;border-collapse:collapse;font-size:0.83rem">
+                  <thead>
+                    <tr style="border-bottom:1px solid var(--border);color:var(--text-muted);text-align:left">
+                      <th style="padding:6px 10px;font-weight:500">Date</th>
+                      <th style="padding:6px 10px;font-weight:500">Action</th>
+                      <th style="padding:6px 10px;font-weight:500">Candidate</th>
+                      <th style="padding:6px 10px;font-weight:500;text-align:right">Credits</th>
+                    </tr>
+                  </thead>
+                  <tbody id="ch-tbody"></tbody>
+                </table>
+                <div id="ch-capped" style="display:none;text-align:center;padding:10px;font-size:0.78rem;color:var(--text-muted)">Showing last 200 entries</div>
+              </div>
+            </div>
+          </div>
+
       </div><!-- /.settings-scroll -->
     </div><!-- /page-settings -->
 

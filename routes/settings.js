@@ -594,4 +594,16 @@ router.get('/credits', async (req, res) => {
   }
 });
 
+// GET /api/settings/credit-history — return usage log
+router.get('/credit-history', async (req, res) => {
+  try {
+    const user = await storage.getUserById(req.session.userId);
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    const history = (user.creditHistory || []).slice(0, 200);
+    return res.json({ history, credits: user.credits || 0, totalSpent: user.totalSpent || 0 });
+  } catch (err) {
+    return res.status(500).json({ error: 'Failed to get credit history' });
+  }
+});
+
 module.exports = router;
