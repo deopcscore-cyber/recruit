@@ -164,6 +164,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   document.getElementById('transfer-cancel-btn').addEventListener('click', closeTransferModal);
   document.getElementById('transfer-modal').addEventListener('click', e => { if (e.target === e.currentTarget) closeTransferModal(); });
   document.getElementById('transfer-confirm-btn').addEventListener('click', handleTransfer);
+  document.getElementById('transfer-email').addEventListener('keydown', e => { if (e.key === 'Enter') handleTransfer(); });
 
   // Export CSV
   document.getElementById('export-csv-btn').addEventListener('click', exportCSV);
@@ -778,27 +779,26 @@ async function handleFetchEmails() {
 }
 
 // ---- Transfer candidates ----
-async function openTransferModal() {
-  const checked = document.querySelectorAll('.row-cb:checked');
-  if (!checked.length) { Toast.warning('Select candidates first (use list view)'); return; }
+// Collects IDs from list-view checkboxes; falls back to all Imported candidates
+// when in board view (where there are no checkboxes).
+function getTransferCandidateIds() {
+  const checked = Array.from(document.querySelectorAll('.row-cb:checked')).map(cb => cb.dataset.id);
+  if (checked.length) return checked;
+  // Board view — use all uncontacted candidates
+  return allCandidates
+    .filter(c => !c.stepsCompleted?.outreach && !(c.thread||[]).some(m => m.direction === 'outbound'))
+    .map(c => c.id);
+}
 
-  const modal = document.getElementById('transfer-modal');
-  const sel   = document.getElementById('transfer-to-user');
-  document.getElementById('transfer-count').textContent = checked.length;
-  sel.innerHTML = '<option value="">Loading…</option>';
-  modal.style.display = 'flex';
+function openTransferModal() {
+  const ids = getTransferCandidateIds();
+  if (!ids.length) { Toast.warning('No imported candidates to transfer'); return; }
 
-  try {
-    const { accounts } = await API.candidates.getAccounts();
-    if (!accounts.length) {
-      sel.innerHTML = '<option value="">No other accounts found</option>';
-      return;
-    }
-    sel.innerHTML = '<option value="">Select account…</option>' +
-      accounts.map(a => `<option value="${a.id}">${a.name || a.email}${a.name && a.email ? ` — ${a.email}` : ''}</option>`).join('');
-  } catch (e) {
-    sel.innerHTML = '<option value="">Failed to load accounts</option>';
-  }
+  document.getElementById('transfer-count').textContent = ids.length;
+  document.getElementById('transfer-email').value = '';
+  document.getElementById('transfer-email-error').textContent = '';
+  document.getElementById('transfer-modal').style.display = 'flex';
+  document.getElementById('transfer-email').focus();
 }
 
 function closeTransferModal() {
@@ -806,16 +806,22 @@ function closeTransferModal() {
 }
 
 async function handleTransfer() {
-  const toUserId = document.getElementById('transfer-to-user').value;
-  if (!toUserId) { Toast.warning('Select a destination account'); return; }
+  const email = (document.getElementById('transfer-email').value || '').trim().toLowerCase();
+  const errEl = document.getElementById('transfer-email-error');
+  errEl.textContent = '';
 
-  const ids = Array.from(document.querySelectorAll('.row-cb:checked')).map(cb => cb.dataset.id);
+  if (!email || !email.includes('@')) {
+    errEl.textContent = 'Enter a valid email address.';
+    return;
+  }
+
+  const ids = getTransferCandidateIds();
   if (!ids.length) { closeTransferModal(); return; }
 
   const btn = document.getElementById('transfer-confirm-btn');
   btn.disabled = true; btn.textContent = 'Transferring…';
   try {
-    const result = await API.candidates.transfer(ids, toUserId);
+    const result = await API.candidates.transfer(ids, null, email);
     closeTransferModal();
     const msg = result.skipped
       ? `${result.moved} transferred to ${result.toUser} (${result.skipped} skipped — already contacted)`
@@ -823,7 +829,7 @@ async function handleTransfer() {
     Toast.success(msg);
     await loadCandidates();
   } catch (err) {
-    Toast.error(err.message);
+    errEl.textContent = err.message;
   } finally {
     btn.disabled = false; btn.textContent = 'Transfer';
   }

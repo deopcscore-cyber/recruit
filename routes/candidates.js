@@ -629,14 +629,24 @@ router.get('/accounts', requireAuth, async (req, res) => {
 });
 
 // POST /api/candidates/transfer — move Imported candidates to another user's account
+// Accepts toUserId (admin path) or toEmail (user-facing path)
 router.post('/transfer', requireAuth, async (req, res) => {
   try {
-    const { candidateIds, toUserId } = req.body;
+    const { candidateIds, toUserId, toEmail } = req.body;
     if (!Array.isArray(candidateIds) || !candidateIds.length) return res.status(400).json({ error: 'candidateIds required' });
-    if (!toUserId) return res.status(400).json({ error: 'toUserId required' });
 
-    const toUser = await storage.getUserById(toUserId);
-    if (!toUser) return res.status(404).json({ error: 'Target account not found' });
+    let toUser;
+    if (toEmail) {
+      const users = await storage.getAllUsers();
+      toUser = users.find(u => (u.email || '').toLowerCase() === toEmail.toLowerCase());
+      if (!toUser) return res.status(404).json({ error: 'No account found with that email address' });
+    } else if (toUserId) {
+      toUser = await storage.getUserById(toUserId);
+      if (!toUser) return res.status(404).json({ error: 'Target account not found' });
+    } else {
+      return res.status(400).json({ error: 'toEmail or toUserId required' });
+    }
+    if (toUser.id === req.session.userId) return res.status(400).json({ error: 'Cannot transfer to your own account' });
 
     const all = await storage.getAllCandidates();
     const ids = new Set(candidateIds);

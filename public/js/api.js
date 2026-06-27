@@ -53,7 +53,7 @@ const API = {
     addThread(id, data) { return API.post(`/api/candidates/${id}/thread`, data); },
     bulkStage(ids, stage)           { return API.post('/api/candidates/bulk-update', { ids, stage }); },
     getAccounts()                    { return API.get('/api/candidates/accounts'); },
-    transfer(candidateIds, toUserId) { return API.post('/api/candidates/transfer', { candidateIds, toUserId }); }
+    transfer(candidateIds, toUserId, toEmail) { return API.post('/api/candidates/transfer', { candidateIds, ...(toEmail ? { toEmail } : { toUserId }) }); }
   },
 
   // Email
