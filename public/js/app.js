@@ -158,14 +158,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Bulk stage
   document.getElementById('bulk-stage-btn').addEventListener('click', handleBulkStage);
 
-  // Transfer candidates
-  document.getElementById('transfer-btn').addEventListener('click', openTransferModal);
-  document.getElementById('transfer-modal-close').addEventListener('click', closeTransferModal);
-  document.getElementById('transfer-cancel-btn').addEventListener('click', closeTransferModal);
-  document.getElementById('transfer-modal').addEventListener('click', e => { if (e.target === e.currentTarget) closeTransferModal(); });
-  document.getElementById('transfer-confirm-btn').addEventListener('click', handleTransfer);
-  document.getElementById('transfer-email').addEventListener('keydown', e => { if (e.key === 'Enter') handleTransfer(); });
-
   // Export CSV
   document.getElementById('export-csv-btn').addEventListener('click', exportCSV);
 
@@ -775,63 +767,6 @@ async function handleFetchEmails() {
     if (!handleReauthError(err)) Toast.error('Failed to fetch emails: ' + err.message);
   } finally {
     btn.disabled = false; btn.textContent = '↓ Replies';
-  }
-}
-
-// ---- Transfer candidates ----
-// Collects IDs from list-view checkboxes; falls back to all Imported candidates
-// when in board view (where there are no checkboxes).
-function getTransferCandidateIds() {
-  const checked = Array.from(document.querySelectorAll('.row-cb:checked')).map(cb => cb.dataset.id);
-  if (checked.length) return checked;
-  // Board view — use all uncontacted candidates
-  return allCandidates
-    .filter(c => !c.stepsCompleted?.outreach && !(c.thread||[]).some(m => m.direction === 'outbound'))
-    .map(c => c.id);
-}
-
-function openTransferModal() {
-  const ids = getTransferCandidateIds();
-  if (!ids.length) { Toast.warning('No imported candidates to transfer'); return; }
-
-  document.getElementById('transfer-count').textContent = ids.length;
-  document.getElementById('transfer-email').value = '';
-  document.getElementById('transfer-email-error').textContent = '';
-  document.getElementById('transfer-modal').style.display = 'flex';
-  document.getElementById('transfer-email').focus();
-}
-
-function closeTransferModal() {
-  document.getElementById('transfer-modal').style.display = 'none';
-}
-
-async function handleTransfer() {
-  const email = (document.getElementById('transfer-email').value || '').trim().toLowerCase();
-  const errEl = document.getElementById('transfer-email-error');
-  errEl.textContent = '';
-
-  if (!email || !email.includes('@')) {
-    errEl.textContent = 'Enter a valid email address.';
-    return;
-  }
-
-  const ids = getTransferCandidateIds();
-  if (!ids.length) { closeTransferModal(); return; }
-
-  const btn = document.getElementById('transfer-confirm-btn');
-  btn.disabled = true; btn.textContent = 'Transferring…';
-  try {
-    const result = await API.candidates.transfer(ids, null, email);
-    closeTransferModal();
-    const msg = result.skipped
-      ? `${result.moved} transferred to ${result.toUser} (${result.skipped} skipped — already contacted)`
-      : `${result.moved} candidate${result.moved !== 1 ? 's' : ''} transferred to ${result.toUser}`;
-    Toast.success(msg);
-    await loadCandidates();
-  } catch (err) {
-    errEl.textContent = err.message;
-  } finally {
-    btn.disabled = false; btn.textContent = 'Transfer';
   }
 }
 

@@ -420,7 +420,7 @@
   function populateMoveSelects() {
     const fromSel = document.getElementById('move-from-user');
     const toSel   = document.getElementById('move-to-user');
-    const opts    = allUsers.map(u => `<option value="${u.id}">${u.name || u.email} (${u.candidateCount} candidates)</option>`).join('');
+    const opts    = allUsers.map(u => `<option value="${u.id}">${u.email} (${u.candidateCount} candidates)</option>`).join('');
     fromSel.innerHTML = '<option value="">Select user…</option>' + opts;
     toSel.innerHTML   = '<option value="">Select user…</option>' + opts;
   }

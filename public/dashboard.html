@@ -117,8 +117,7 @@
           <input type="text" class="search-box" id="search-input" placeholder="Search…" />
           <button class="btn btn-secondary btn-sm" id="fetch-email-btn" title="Fetch unread replies">↓ Replies</button>
           <button class="btn btn-secondary btn-sm" id="bulk-outreach-btn" title="Bulk outreach">⚡ Bulk Outreach</button>
-          <button class="btn btn-secondary btn-sm" id="transfer-btn" title="Transfer imported candidates to another account">→ Transfer</button>
-          <button class="btn btn-secondary btn-sm" id="linkedin-import-btn" title="Import from LinkedIn">in Import</button>
+<button class="btn btn-secondary btn-sm" id="linkedin-import-btn" title="Import from LinkedIn">in Import</button>
           <button class="btn btn-secondary btn-sm" id="import-btn">Import CSV</button>
           <button class="btn btn-primary btn-sm" id="add-candidate-btn" title="Add candidate (N)">+ Add</button>
         </div>
@@ -1139,28 +1138,6 @@ I came across your work leading...&#10;&#10;[Paste a full example email here —
     <div class="modal-footer">
       <button class="btn btn-secondary" id="template-editor-cancel">Cancel</button>
       <button class="btn btn-primary" id="template-editor-save">Save Template</button>
-    </div>
-  </div>
-</div>
-
-<!-- Transfer Candidates Modal -->
-<div class="modal-overlay" id="transfer-modal" style="display:none;align-items:center;justify-content:center">
-  <div class="modal" style="width:420px;max-width:95vw">
-    <div class="modal-header" style="display:flex;align-items:center;justify-content:space-between;padding:18px 20px;border-bottom:1px solid var(--border)">
-      <h2 style="margin:0;font-size:1rem;font-weight:600">Transfer Candidates</h2>
-      <button id="transfer-modal-close" style="background:none;border:none;font-size:1.3rem;cursor:pointer;color:var(--text-muted);line-height:1">×</button>
-    </div>
-    <div style="padding:20px;display:flex;flex-direction:column;gap:16px">
-      <p style="margin:0;font-size:0.85rem;color:var(--text-muted)">Transfer <strong id="transfer-count"></strong> imported candidate(s) to another account.</p>
-      <div>
-        <label style="display:block;font-size:0.8rem;font-weight:600;margin-bottom:6px;color:var(--text-muted)">Destination account email</label>
-        <input type="email" id="transfer-email" placeholder="user@example.com" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:var(--radius);font-size:0.88rem;background:var(--surface);color:var(--text);box-sizing:border-box" />
-        <div id="transfer-email-error" style="color:#ef4444;font-size:0.78rem;margin-top:4px"></div>
-      </div>
-      <div style="display:flex;gap:10px;justify-content:flex-end">
-        <button id="transfer-cancel-btn" class="btn btn-secondary btn-sm">Cancel</button>
-        <button id="transfer-confirm-btn" class="btn btn-primary btn-sm">Transfer</button>
-      </div>
     </div>
   </div>
 </div>
