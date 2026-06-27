@@ -111,7 +111,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     applyTheme(current === 'dark' ? 'light' : 'dark');
   });
 
-  // View toggle
+  // View toggle — default to list view on mobile
+  if (window.innerWidth <= 768) switchView('list');
   document.getElementById('view-pipeline-btn').addEventListener('click', () => switchView('pipeline'));
   document.getElementById('view-list-btn').addEventListener('click', () => switchView('list'));
 
@@ -275,12 +276,22 @@ function applyTheme(theme) {
 // ---- Navigation ----
 function navigateTo(page) {
   document.querySelectorAll('.nav-item').forEach(i => i.classList.toggle('active', i.dataset.page === page));
+  document.querySelectorAll('.bottom-nav-item').forEach(i => i.classList.toggle('active', i.dataset.page === page));
   document.querySelectorAll('.page').forEach(p => p.classList.toggle('active', p.id === `page-${page}`));
   if (page === 'today')     loadTodayPage();
   if (page === 'settings')  loadSettingsPage();
   if (page === 'followups') loadFollowUpPage();
   if (page === 'hotleads')  loadHotLeadsPage();
   if (page === 'templates') loadTemplatesPage();
+}
+
+function openMobileMore() {
+  const m = document.getElementById('mobile-more-modal');
+  if (m) { m.style.display = 'flex'; }
+}
+function closeMobileMore() {
+  const m = document.getElementById('mobile-more-modal');
+  if (m) { m.style.display = 'none'; }
 }
 
 // ---- View switching ----

@@ -120,6 +120,7 @@
 <button class="btn btn-secondary btn-sm" id="linkedin-import-btn" title="Import from LinkedIn">in Import</button>
           <button class="btn btn-secondary btn-sm" id="import-btn">Import CSV</button>
           <button class="btn btn-primary btn-sm" id="add-candidate-btn" title="Add candidate (N)">+ Add</button>
+          <button class="btn btn-secondary btn-sm" id="mobile-more-btn" onclick="openMobileMore()" style="display:none" title="More actions">⋯</button>
         </div>
       </div>
 
@@ -1177,6 +1178,44 @@ I came across your work leading...&#10;&#10;[Paste a full example email here —
         <div id="ch-capped" style="display:none;text-align:center;padding:10px;font-size:0.78rem;color:var(--text-muted)">Showing last 200 entries</div>
       </div>
     </div>
+  </div>
+</div>
+
+<!-- ===== BOTTOM NAV (mobile only) ===== -->
+<nav class="bottom-nav" id="bottom-nav">
+  <button class="bottom-nav-item" data-page="today" onclick="navigateTo('today')">
+    <span class="nav-icon">🏠</span>
+    <span>Today</span>
+  </button>
+  <button class="bottom-nav-item" data-page="candidates" onclick="navigateTo('candidates')">
+    <span class="nav-icon">👥</span>
+    <span>Pipeline</span>
+  </button>
+  <button class="bottom-nav-item" data-page="followups" onclick="navigateTo('followups')">
+    <span class="nav-icon">📅</span>
+    <span>Follow-ups</span>
+  </button>
+  <button class="bottom-nav-item" data-page="analytics" onclick="navigateTo('analytics')">
+    <span class="nav-icon">📊</span>
+    <span>Analytics</span>
+  </button>
+  <button class="bottom-nav-item" data-page="settings" onclick="navigateTo('settings')">
+    <span class="nav-icon">⚙️</span>
+    <span>Settings</span>
+  </button>
+</nav>
+
+<!-- ===== MOBILE MORE MENU ===== -->
+<div class="modal-overlay" id="mobile-more-modal" onclick="if(event.target===this)closeMobileMore()" style="display:none;z-index:1200">
+  <div style="background:var(--card-bg);border-radius:16px 16px 0 0;padding:20px 16px 32px;width:100%;max-width:100%;position:absolute;bottom:0;left:0">
+    <div style="font-size:0.7rem;font-weight:600;color:var(--text-muted);letter-spacing:0.1em;text-transform:uppercase;margin-bottom:14px">Candidate Actions</div>
+    <div style="display:flex;flex-direction:column;gap:8px">
+      <button class="btn btn-secondary" onclick="closeMobileMore();document.getElementById('fetch-email-btn')?.click()" style="justify-content:flex-start;font-size:0.88rem">↓ Fetch Replies</button>
+      <button class="btn btn-secondary" onclick="closeMobileMore();document.getElementById('bulk-outreach-btn')?.click()" style="justify-content:flex-start;font-size:0.88rem">⚡ Bulk Outreach</button>
+      <button class="btn btn-secondary" onclick="closeMobileMore();document.getElementById('linkedin-import-btn')?.click()" style="justify-content:flex-start;font-size:0.88rem">in LinkedIn Import</button>
+      <button class="btn btn-secondary" onclick="closeMobileMore();document.getElementById('import-btn')?.click()" style="justify-content:flex-start;font-size:0.88rem">⬆ Import CSV</button>
+    </div>
+    <button class="btn btn-secondary" onclick="closeMobileMore()" style="margin-top:14px;width:100%">Cancel</button>
   </div>
 </div>
 

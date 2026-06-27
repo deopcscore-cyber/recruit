@@ -1278,22 +1278,142 @@ select { appearance: auto; }
 .analytics-card .a-sub   { font-size: 0.76rem; color: var(--text-muted); margin-top: 4px; }
 
 /* ════════════════════════════════════════════════════════════
+   BOTTOM NAV (mobile only)
+   ════════════════════════════════════════════════════════════ */
+.bottom-nav {
+  display: none;
+}
+@media (max-width: 768px) {
+  .bottom-nav {
+    display: flex;
+    position: fixed;
+    bottom: 0; left: 0; right: 0;
+    height: 60px;
+    background: var(--sidebar-bg);
+    border-top: 1px solid rgba(255,255,255,0.07);
+    z-index: 800;
+    align-items: stretch;
+  }
+  .bottom-nav-item {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    color: var(--sidebar-muted);
+    font-size: 0.6rem;
+    font-weight: 500;
+    cursor: pointer;
+    letter-spacing: 0.02em;
+    border: none;
+    background: none;
+    transition: color var(--transition), background var(--transition);
+    padding: 6px 4px;
+    -webkit-tap-highlight-color: transparent;
+    position: relative;
+  }
+  .bottom-nav-item .nav-icon { font-size: 1.2rem; line-height: 1; }
+  .bottom-nav-item.active { color: #fff; }
+  .bottom-nav-item.active::after {
+    content: '';
+    position: absolute;
+    top: 0; left: 20%; right: 20%;
+    height: 2px;
+    background: linear-gradient(90deg, #74a8ff, #5c8bff);
+    border-radius: 0 0 3px 3px;
+  }
+  .bottom-nav-item .badge {
+    position: absolute;
+    top: 4px; right: calc(50% - 22px);
+    background: #e03131;
+    color: #fff;
+    font-size: 0.55rem;
+    font-weight: 700;
+    padding: 0px 4px;
+    border-radius: 999px;
+    min-width: 14px;
+    text-align: center;
+    line-height: 1.6;
+  }
+}
+
+/* ════════════════════════════════════════════════════════════
    MOBILE
    ════════════════════════════════════════════════════════════ */
 @media (max-width: 768px) {
   :root { --sidebar-w: 0px; }
   .sidebar { display: none; }
-  .main-content { width: 100%; }
-  .topbar { padding: 10px 14px; min-height: 50px; }
-  .search-box { width: 130px; }
+  .main-content { width: 100%; padding-bottom: 60px; } /* room for bottom nav */
+
+  /* Topbar */
+  .topbar { padding: 10px 14px; min-height: 50px; gap: 6px; }
+  .topbar-title { font-size: 0.92rem; }
+  .topbar-actions { gap: 5px; }
+  .topbar-actions .btn-sm { padding: 5px 9px; font-size: 0.75rem; }
+
+  /* Hide less-critical topbar buttons on mobile — keep only the essentials */
+  #fetch-email-btn, #bulk-outreach-btn, #linkedin-import-btn, #import-btn {
+    display: none;
+  }
+  /* Show a compact "⋯" more menu button instead */
+  #mobile-more-btn { display: inline-flex !important; }
+
+  /* Search shrinks */
+  .search-box { width: 120px; font-size: 0.8rem; padding: 6px 10px 6px 30px; }
+
+  /* Metrics bar */
+  .metrics-bar { padding: 6px 14px; }
+  .metric-pill { padding: 3px 9px; font-size: 0.74rem; }
+
+  /* Filter bar */
+  .filter-bar { padding: 6px 14px; gap: 6px; }
+  #bulk-actions { display: none !important; } /* bulk actions hidden on mobile */
+  .view-toggle { display: none; } /* force list view on mobile */
+
+  /* Pipeline board — allow horizontal scroll but hint at it */
   .pipeline-wrapper { padding: 10px; }
-  .tab-scroll { padding: 14px; gap: 14px; }
-  .compose-area { padding: 12px 14px; }
-  .cmodal { border-radius: var(--radius-xl) var(--radius-xl) 0 0; }
-  .metrics-bar { padding: 7px 14px; }
-  .filter-bar  { padding: 7px 14px; }
+
+  /* Candidate modal — full-screen sheet from bottom */
+  .cmodal { border-radius: var(--radius-xl) var(--radius-xl) 0 0; max-height: 96vh; }
+  .cmodal-header { padding: 16px 16px 12px; }
+  .cmodal-avatar { width: 42px; height: 42px; font-size: 0.95rem; border-radius: 10px; }
+  .cmodal-name { font-size: 0.98rem; }
+  .cmodal-tab { padding: 9px 11px; font-size: 0.77rem; }
+
+  /* Tab content */
+  .tab-scroll { padding: 14px; gap: 12px; }
+
+  /* Thread compose */
+  .compose-area { padding: 10px 14px 14px; }
+  .compose-textarea { min-height: 80px; font-size: 0.855rem; }
+  .compose-ai-btns { gap: 3px; }
+  .compose-ai-btns .btn-sm { padding: 4px 7px; font-size: 0.72rem; }
+  .compose-footer { flex-wrap: wrap; gap: 6px; }
+
+  /* Thread messages */
+  .thread-msg { max-width: 95%; }
+  .thread-messages { padding: 12px 14px; }
+
+  /* Settings */
+  .settings-card-header { flex-wrap: wrap; }
+  .settings-card-body { padding: 14px; }
+  .settings-scroll { padding: 14px; }
+
+  /* Buttons — minimum 44px touch target */
   .btn { min-height: 44px; }
-  .btn-sm { min-height: 32px; }
+  .btn-sm { min-height: 36px; }
+
+  /* Generic modals */
+  .modal-overlay { padding: 0; align-items: flex-end; }
+  .modal { border-radius: var(--radius-xl) var(--radius-xl) 0 0; max-height: 92vh; max-width: 100%; }
+
+  /* Toast — bottom centre on mobile, above bottom nav */
+  .toast-container { bottom: 70px; right: 14px; left: 14px; align-items: center; }
+  .toast { max-width: 100%; }
+
+  /* Settings tabs — scrollable */
+  .settings-tabs { padding: 0 14px; }
 }
 
 /* ════════════════════════════════════════════════════════════
