@@ -479,10 +479,14 @@ async function _processFollowUpJob(job) {
 
   if (!user || !candidate) { queueSvc.updateJob(job.id, { status: 'cancelled', reason: 'missing' }); return; }
 
-  // Skip if the candidate has replied or moved past the waiting stage — the
-  // sequence exists only to nudge non-responders.
+  // Skip if bounced, replied, or moved past the waiting stage
   const hasReplied = (candidate.thread || []).some(m => m.direction === 'inbound');
   const movedOn = !['Outreach Sent'].includes(candidate.stage || '');
+  if (candidate.bounced) {
+    queueSvc.updateJob(job.id, { status: 'cancelled', reason: 'bounced' });
+    console.log(`Queue: follow-up skipped (bounced) → ${candidate.name}`);
+    return;
+  }
   if (hasReplied || movedOn) {
     queueSvc.updateJob(job.id, { status: 'cancelled', reason: 'candidate_responded' });
     console.log(`Queue: follow-up skipped (candidate responded) → ${candidate.name}`);

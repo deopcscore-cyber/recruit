@@ -247,6 +247,20 @@ router.post('/fetch', requireAuth, async (req, res) => {
       }
       if (!candidate) continue;
 
+      // Bounce detection — sender is MAILER-DAEMON/postmaster, or subject signals NDR
+      const fromAddr = (reply.from || '').toLowerCase();
+      const subj     = (reply.subject || '').toLowerCase();
+      const isBounce = /mailer-daemon|postmaster@|mail delivery subsystem|delivery subsystem/i.test(fromAddr)
+        || /undeliverable|delivery (has )?fail|delivery status notification|returned mail|address not found|user unknown|no such user/i.test(subj);
+      if (isBounce) {
+        candidate.bounced   = true;
+        candidate.bouncedAt = new Date().toISOString();
+        await storage.saveCandidate(candidate);
+        try { require('../services/followups').cancelSequence(candidate.id); } catch (e) {}
+        console.log(`Bounce detected for ${candidate.name} <${candidate.email}> — follow-ups cancelled`);
+        continue;
+      }
+
       // Avoid adding duplicate messages — match on message ID or SMTP ID
       const alreadyExists = (candidate.thread || []).some(t =>
         (reply.gmailMessageId && t.gmailMessageId === reply.gmailMessageId) ||

@@ -173,6 +173,38 @@
       <div class="loading">Loading users…</div>
     </div>
   </div>
+
+  <!-- Move Candidates -->
+  <div class="card" style="margin-top:24px">
+    <div class="card-header">
+      <h2>Move Candidates</h2>
+    </div>
+    <div style="padding:20px;display:flex;flex-direction:column;gap:16px">
+      <div style="display:flex;gap:16px;align-items:flex-end;flex-wrap:wrap">
+        <div style="flex:1;min-width:200px">
+          <label style="display:block;font-size:0.8rem;font-weight:600;margin-bottom:6px;color:#64748b">From account</label>
+          <select id="move-from-user" style="width:100%;padding:8px 10px;border:1px solid #e2e8f0;border-radius:6px;font-size:0.88rem" onchange="loadMoveCandidates()">
+            <option value="">Select user…</option>
+          </select>
+        </div>
+        <div style="flex:1;min-width:200px">
+          <label style="display:block;font-size:0.8rem;font-weight:600;margin-bottom:6px;color:#64748b">To account</label>
+          <select id="move-to-user" style="width:100%;padding:8px 10px;border:1px solid #e2e8f0;border-radius:6px;font-size:0.88rem">
+            <option value="">Select user…</option>
+          </select>
+        </div>
+        <button class="btn" style="background:#6366f1;color:#fff;padding:8px 18px;border:none;border-radius:6px;font-size:0.88rem;cursor:pointer;height:38px" onclick="moveCandidates()">Move Selected</button>
+      </div>
+      <div id="move-candidates-list" style="display:none">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+          <label style="font-size:0.8rem;color:#64748b;cursor:pointer"><input type="checkbox" id="move-select-all" onchange="toggleSelectAll(this.checked)" style="margin-right:5px">Select all</label>
+          <span id="move-selected-count" style="font-size:0.8rem;color:#64748b"></span>
+        </div>
+        <div id="move-candidates-rows" style="max-height:300px;overflow-y:auto;border:1px solid #e2e8f0;border-radius:6px"></div>
+      </div>
+      <div id="move-candidates-empty" style="display:none;font-size:0.85rem;color:#94a3b8;padding:8px 0">No candidates found for this user.</div>
+    </div>
+  </div>
 </div>
 
 <!-- Add Credits Modal -->
@@ -236,6 +268,7 @@
   async function loadUsers() {
     const data = await apiGet('/api/admin/users');
     allUsers = data.users || [];
+    populateMoveSelects();
     updateStats();
     renderTable();
   }
@@ -380,6 +413,68 @@
       updateStats();
       renderTable();
       showToast(`${name} deleted`);
+    } catch (err) { showToast(err.message, true); }
+  }
+
+  // ── Move Candidates ───────────────────────────────────────────────────────
+  function populateMoveSelects() {
+    const fromSel = document.getElementById('move-from-user');
+    const toSel   = document.getElementById('move-to-user');
+    const opts    = allUsers.map(u => `<option value="${u.id}">${u.name || u.email} (${u.candidateCount} candidates)</option>`).join('');
+    fromSel.innerHTML = '<option value="">Select user…</option>' + opts;
+    toSel.innerHTML   = '<option value="">Select user…</option>' + opts;
+  }
+
+  async function loadMoveCandidates() {
+    const userId = document.getElementById('move-from-user').value;
+    const list   = document.getElementById('move-candidates-list');
+    const empty  = document.getElementById('move-candidates-empty');
+    const rows   = document.getElementById('move-candidates-rows');
+    list.style.display = 'none';
+    empty.style.display = 'none';
+    if (!userId) return;
+
+    try {
+      const data = await apiGet(`/api/admin/candidates?userId=${userId}`);
+      const candidates = data.candidates || [];
+      if (!candidates.length) { empty.style.display = ''; return; }
+
+      rows.innerHTML = candidates.map(c => `
+        <label style="display:flex;align-items:center;gap:10px;padding:8px 12px;border-bottom:1px solid #f1f5f9;cursor:pointer;font-size:0.85rem">
+          <input type="checkbox" class="move-chk" value="${c.id}" onchange="updateMoveCount()">
+          <span style="flex:1;font-weight:500">${c.name || '—'}</span>
+          <span style="color:#94a3b8;font-size:0.78rem">${c.email || ''}</span>
+          <span style="color:#94a3b8;font-size:0.78rem;min-width:80px;text-align:right">${c.stage}</span>
+        </label>`).join('');
+      list.style.display = '';
+      updateMoveCount();
+    } catch (err) { showToast(err.message, true); }
+  }
+
+  function toggleSelectAll(checked) {
+    document.querySelectorAll('.move-chk').forEach(c => c.checked = checked);
+    updateMoveCount();
+  }
+
+  function updateMoveCount() {
+    const n = document.querySelectorAll('.move-chk:checked').length;
+    document.getElementById('move-selected-count').textContent = n ? `${n} selected` : '';
+  }
+
+  async function moveCandidates() {
+    const toUserId = document.getElementById('move-to-user').value;
+    const ids = [...document.querySelectorAll('.move-chk:checked')].map(c => c.value);
+    if (!ids.length)   { showToast('Select at least one candidate', true); return; }
+    if (!toUserId)     { showToast('Select a destination account', true); return; }
+    const fromUserId = document.getElementById('move-from-user').value;
+    if (toUserId === fromUserId) { showToast('Source and destination are the same', true); return; }
+
+    try {
+      const result = await apiPost('/api/admin/candidates/move', { candidateIds: ids, toUserId });
+      showToast(`${result.moved} candidate${result.moved !== 1 ? 's' : ''} moved to ${result.toUser}`);
+      await loadUsers();
+      populateMoveSelects();
+      await loadMoveCandidates();
     } catch (err) { showToast(err.message, true); }
   }
 

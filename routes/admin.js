@@ -118,4 +118,42 @@ router.delete('/users/:id', async (req, res) => {
   }
 });
 
+// GET /api/admin/candidates?userId=<id> — list candidates for a user
+router.get('/candidates', async (req, res) => {
+  try {
+    const { userId } = req.query;
+    if (!userId) return res.status(400).json({ error: 'userId required' });
+    const all = await storage.getAllCandidates();
+    const candidates = all
+      .filter(c => c.userId === userId)
+      .map(c => ({ id: c.id, name: c.name, email: c.email, stage: c.stage || 'Imported', createdAt: c.createdAt }));
+    res.json({ candidates });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/admin/candidates/move  { candidateIds: [...], toUserId: <id> }
+router.post('/candidates/move', async (req, res) => {
+  try {
+    const { candidateIds, toUserId } = req.body;
+    if (!Array.isArray(candidateIds) || !candidateIds.length) return res.status(400).json({ error: 'candidateIds required' });
+    if (!toUserId) return res.status(400).json({ error: 'toUserId required' });
+
+    const toUser = await storage.getUserById(toUserId);
+    if (!toUser) return res.status(404).json({ error: 'Target user not found' });
+
+    const all = await storage.getAllCandidates();
+    const ids = new Set(candidateIds);
+    let moved = 0;
+    for (const c of all) {
+      if (ids.has(c.id)) { c.userId = toUserId; moved++; }
+    }
+    await storage.saveAllCandidates(all);
+    res.json({ moved, toUser: toUser.name || toUser.email });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;
