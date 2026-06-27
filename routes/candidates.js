@@ -615,4 +615,46 @@ router.post('/bulk-stage', async (req, res) => {
   }
 });
 
+// GET /api/candidates/accounts — other users on the platform (for transfer picker)
+router.get('/accounts', requireAuth, async (req, res) => {
+  try {
+    const users = await storage.getAllUsers();
+    const accounts = users
+      .filter(u => u.id !== req.session.userId)
+      .map(u => ({ id: u.id, name: u.name || '', email: u.email || '' }));
+    return res.json({ accounts });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/candidates/transfer — move Imported candidates to another user's account
+router.post('/transfer', requireAuth, async (req, res) => {
+  try {
+    const { candidateIds, toUserId } = req.body;
+    if (!Array.isArray(candidateIds) || !candidateIds.length) return res.status(400).json({ error: 'candidateIds required' });
+    if (!toUserId) return res.status(400).json({ error: 'toUserId required' });
+
+    const toUser = await storage.getUserById(toUserId);
+    if (!toUser) return res.status(404).json({ error: 'Target account not found' });
+
+    const all = await storage.getAllCandidates();
+    const ids = new Set(candidateIds);
+    let moved = 0, skipped = 0;
+    for (const c of all) {
+      if (!ids.has(c.id) || c.userId !== req.session.userId) continue;
+      if ((c.stepsCompleted || {}).outreach || (c.thread || []).some(m => m.direction === 'outbound')) {
+        skipped++; continue; // only allow moving uncontacted candidates
+      }
+      c.userId = toUserId;
+      c.updatedAt = new Date().toISOString();
+      moved++;
+    }
+    await storage.saveAllCandidates(all);
+    return res.json({ moved, skipped, toUser: toUser.name || toUser.email });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;

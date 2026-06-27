@@ -158,6 +158,13 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Bulk stage
   document.getElementById('bulk-stage-btn').addEventListener('click', handleBulkStage);
 
+  // Transfer candidates
+  document.getElementById('transfer-btn').addEventListener('click', openTransferModal);
+  document.getElementById('transfer-modal-close').addEventListener('click', closeTransferModal);
+  document.getElementById('transfer-cancel-btn').addEventListener('click', closeTransferModal);
+  document.getElementById('transfer-modal').addEventListener('click', e => { if (e.target === e.currentTarget) closeTransferModal(); });
+  document.getElementById('transfer-confirm-btn').addEventListener('click', handleTransfer);
+
   // Export CSV
   document.getElementById('export-csv-btn').addEventListener('click', exportCSV);
 
@@ -767,6 +774,58 @@ async function handleFetchEmails() {
     if (!handleReauthError(err)) Toast.error('Failed to fetch emails: ' + err.message);
   } finally {
     btn.disabled = false; btn.textContent = '↓ Replies';
+  }
+}
+
+// ---- Transfer candidates ----
+async function openTransferModal() {
+  const checked = document.querySelectorAll('.row-cb:checked');
+  if (!checked.length) { Toast.warning('Select candidates first (use list view)'); return; }
+
+  const modal = document.getElementById('transfer-modal');
+  const sel   = document.getElementById('transfer-to-user');
+  document.getElementById('transfer-count').textContent = checked.length;
+  sel.innerHTML = '<option value="">Loading…</option>';
+  modal.style.display = 'flex';
+
+  try {
+    const { accounts } = await API.candidates.getAccounts();
+    if (!accounts.length) {
+      sel.innerHTML = '<option value="">No other accounts found</option>';
+      return;
+    }
+    sel.innerHTML = '<option value="">Select account…</option>' +
+      accounts.map(a => `<option value="${a.id}">${a.name || a.email}${a.name && a.email ? ` — ${a.email}` : ''}</option>`).join('');
+  } catch (e) {
+    sel.innerHTML = '<option value="">Failed to load accounts</option>';
+  }
+}
+
+function closeTransferModal() {
+  document.getElementById('transfer-modal').style.display = 'none';
+}
+
+async function handleTransfer() {
+  const toUserId = document.getElementById('transfer-to-user').value;
+  if (!toUserId) { Toast.warning('Select a destination account'); return; }
+
+  const ids = Array.from(document.querySelectorAll('.row-cb:checked')).map(cb => cb.dataset.id);
+  if (!ids.length) { closeTransferModal(); return; }
+
+  const btn = document.getElementById('transfer-confirm-btn');
+  btn.disabled = true; btn.textContent = 'Transferring…';
+  try {
+    const result = await API.candidates.transfer(ids, toUserId);
+    closeTransferModal();
+    const msg = result.skipped
+      ? `${result.moved} transferred to ${result.toUser} (${result.skipped} skipped — already contacted)`
+      : `${result.moved} candidate${result.moved !== 1 ? 's' : ''} transferred to ${result.toUser}`;
+    Toast.success(msg);
+    await loadCandidates();
+  } catch (err) {
+    Toast.error(err.message);
+  } finally {
+    btn.disabled = false; btn.textContent = 'Transfer';
   }
 }
 

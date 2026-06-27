@@ -51,7 +51,9 @@ const API = {
     uploadResume(id, formData) { return API.postForm(`/api/candidates/${id}/resume`, formData); },
     downloadResume(id) { window.open(`/api/candidates/${id}/resume/download`, '_blank'); },
     addThread(id, data) { return API.post(`/api/candidates/${id}/thread`, data); },
-    bulkStage(ids, stage) { return API.post('/api/candidates/bulk-update', { ids, stage }); }
+    bulkStage(ids, stage)           { return API.post('/api/candidates/bulk-update', { ids, stage }); },
+    getAccounts()                    { return API.get('/api/candidates/accounts'); },
+    transfer(candidateIds, toUserId) { return API.post('/api/candidates/transfer', { candidateIds, toUserId }); }
   },
 
   // Email

@@ -176,6 +176,7 @@
             <option>Closed</option>
           </select>
           <button class="btn btn-secondary btn-sm" id="bulk-stage-btn">Apply</button>
+          <button class="btn btn-secondary btn-sm" id="transfer-btn" title="Move selected candidates to another account">→ Transfer</button>
           <button class="btn btn-secondary btn-sm" id="export-csv-btn">Export CSV</button>
         </div>
       </div>
@@ -1138,6 +1139,29 @@ I came across your work leading...&#10;&#10;[Paste a full example email here —
     <div class="modal-footer">
       <button class="btn btn-secondary" id="template-editor-cancel">Cancel</button>
       <button class="btn btn-primary" id="template-editor-save">Save Template</button>
+    </div>
+  </div>
+</div>
+
+<!-- Transfer Candidates Modal -->
+<div class="modal-overlay" id="transfer-modal" style="display:none;align-items:center;justify-content:center">
+  <div class="modal" style="width:420px;max-width:95vw">
+    <div class="modal-header" style="display:flex;align-items:center;justify-content:space-between;padding:18px 20px;border-bottom:1px solid var(--border)">
+      <h2 style="margin:0;font-size:1rem;font-weight:600">Transfer Candidates</h2>
+      <button id="transfer-modal-close" style="background:none;border:none;font-size:1.3rem;cursor:pointer;color:var(--text-muted);line-height:1">×</button>
+    </div>
+    <div style="padding:20px;display:flex;flex-direction:column;gap:16px">
+      <p style="margin:0;font-size:0.85rem;color:var(--text-muted)">Select the account to transfer <strong id="transfer-count"></strong> imported candidate(s) to.</p>
+      <div>
+        <label style="display:block;font-size:0.8rem;font-weight:600;margin-bottom:6px;color:var(--text-muted)">Destination account</label>
+        <select id="transfer-to-user" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:var(--radius);font-size:0.88rem;background:var(--surface);color:var(--text)">
+          <option value="">Loading accounts…</option>
+        </select>
+      </div>
+      <div style="display:flex;gap:10px;justify-content:flex-end">
+        <button id="transfer-cancel-btn" class="btn btn-secondary btn-sm">Cancel</button>
+        <button id="transfer-confirm-btn" class="btn btn-primary btn-sm">Transfer</button>
+      </div>
     </div>
   </div>
 </div>
