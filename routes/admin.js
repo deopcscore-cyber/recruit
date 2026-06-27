@@ -125,8 +125,11 @@ router.get('/candidates', async (req, res) => {
     if (!userId) return res.status(400).json({ error: 'userId required' });
     const all = await storage.getAllCandidates();
     const candidates = all
-      .filter(c => c.userId === userId)
-      .map(c => ({ id: c.id, name: c.name, email: c.email, stage: c.stage || 'Imported', createdAt: c.createdAt }));
+      .filter(c => c.userId === userId
+        && (c.stage || 'Imported') === 'Imported'
+        && !(c.stepsCompleted || {}).outreach
+        && !(c.thread || []).some(m => m.direction === 'outbound'))
+      .map(c => ({ id: c.id, name: c.name, email: c.email, createdAt: c.createdAt }));
     res.json({ candidates });
   } catch (err) {
     res.status(500).json({ error: err.message });
