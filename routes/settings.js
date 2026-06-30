@@ -606,4 +606,13 @@ router.get('/credit-history', async (req, res) => {
   }
 });
 
+// GET /api/settings/ai-status — which AI provider is active
+router.get('/ai-status', (req, res) => {
+  const hasAnthropic = !!process.env.ANTHROPIC_API_KEY;
+  const hasOpenAI    = !!process.env.OPENAI_API_KEY;
+  const primary   = hasAnthropic ? 'Claude (claude-sonnet-4-6)' : hasOpenAI ? 'GPT-4o-mini' : 'None';
+  const fallback  = hasAnthropic && hasOpenAI ? 'GPT-4o-mini (auto-switches when Claude credits run out)' : null;
+  res.json({ primary, fallback, hasAnthropic, hasOpenAI });
+});
+
 module.exports = router;

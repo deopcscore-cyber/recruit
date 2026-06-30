@@ -538,6 +538,8 @@ async function _processFollowUpJob(job) {
   console.log(`Queue: follow-up #${(job.followUpIndex || 0) + 1} sent → ${candidate.name}`);
 }
 
+queueSvc.resetStuckJobs(); // recover any jobs frozen mid-send by a server crash
+
 // Check for due jobs every 30 seconds
 setInterval(processQueueJob, 30 * 1000);
 // Prune old completed jobs every 6 hours

@@ -84,6 +84,16 @@ function updateJob(jobId, updates) {
   if (job) { Object.assign(job, updates); write(queue); }
 }
 
+// On server start, reset any jobs that got stuck in 'sending' (server crashed mid-job)
+function resetStuckJobs() {
+  const queue = read();
+  let changed = false;
+  queue.forEach(j => {
+    if (j.status === 'sending') { j.status = 'pending'; changed = true; }
+  });
+  if (changed) { write(queue); console.log('[Queue] Reset stuck "sending" jobs back to pending'); }
+}
+
 // Remove jobs older than 48 h that are done/failed/cancelled (keep pending)
 function pruneOld() {
   const cutoff = Date.now() - 48 * 60 * 60 * 1000;
@@ -96,5 +106,5 @@ function pruneOld() {
 
 module.exports = {
   addJobs, getJobsForUser, cancelPendingForUser, cancelPendingForCandidate,
-  pendingFollowUpCount, getNextDueJob, updateJob, pruneOld
+  pendingFollowUpCount, getNextDueJob, updateJob, pruneOld, resetStuckJobs
 };

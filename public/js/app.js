@@ -2569,6 +2569,7 @@ async function loadSettingsPage() {
     await updateGmailStatus();
     await updateZohoStatus();
     await updateOutlookStatus();
+    await updateAIModelStatus();
   } catch (err) {
     Toast.error('Failed to load settings');
   }
@@ -2946,5 +2947,15 @@ async function updateOutlookStatus() {
       form.style.display = 'block';
       acts.style.display = 'none';
     }
+  } catch { /* ignore */ }
+}
+
+async function updateAIModelStatus() {
+  try {
+    const el = document.getElementById('ai-model-status');
+    if (!el) return;
+    const s = await fetch('/api/settings/ai-status').then(r => r.json());
+    el.innerHTML = `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${s.hasAnthropic || s.hasOpenAI ? '#22c55e' : '#ef4444'};margin-right:6px;vertical-align:middle"></span>
+      <strong>Active model:</strong> ${s.primary}${s.fallback ? `<br><span style="font-size:0.8rem;color:var(--text-muted);margin-left:14px">Fallback: ${s.fallback}</span>` : ''}`;
   } catch { /* ignore */ }
 }
