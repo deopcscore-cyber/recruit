@@ -556,7 +556,13 @@ router.post('/autopilot/run-now', async (req, res) => {
       return res.json({ queued: 0, reason: plan.reason, message: `Nothing to send (${plan.reason}).` });
     }
     if (!plan.jobs || !plan.jobs.length) {
-      return res.json({ queued: 0, reason: plan.reason || 'no_jobs', message: 'No eligible candidates to email right now.' });
+      // Check if they're already queued (most common reason)
+      const alreadyQueued = queueSvc.getJobsForUser(req.session.userId)
+        .filter(j => j.status === 'pending' && (j.type || 'outreach') === 'outreach').length;
+      const msg = alreadyQueued > 0
+        ? `${alreadyQueued} candidate${alreadyQueued > 1 ? 's' : ''} already queued and scheduled — they'll send automatically.`
+        : 'No uncontacted imported candidates left to email.';
+      return res.json({ queued: 0, reason: plan.reason || 'no_jobs', message: msg });
     }
 
     // Clear any existing pending outreach so we don't double-queue
