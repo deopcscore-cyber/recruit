@@ -1,8 +1,16 @@
 const Anthropic = require('@anthropic-ai/sdk');
-const OpenAI    = require('openai');
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-const openai    = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+
+// Lazy-init OpenAI so a missing key doesn't crash the server at startup
+let _openai = null;
+function getOpenAI() {
+  if (!_openai) {
+    const { default: OpenAI } = require('openai');
+    _openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+  }
+  return _openai;
+}
 
 const CLAUDE_MODEL = 'claude-sonnet-4-6';
 const OPENAI_MODEL = 'gpt-4o-mini';
@@ -40,7 +48,7 @@ async function callAI(prompt, maxTokens) {
   }
 
   // OpenAI fallback — normalize response shape to match Anthropic's
-  const res = await openai.chat.completions.create({
+  const res = await getOpenAI().chat.completions.create({
     model: OPENAI_MODEL, max_tokens: maxTokens,
     messages: [{ role: 'user', content: prompt }]
   });
