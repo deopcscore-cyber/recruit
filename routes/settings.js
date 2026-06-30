@@ -556,13 +556,14 @@ router.post('/autopilot/run-now', async (req, res) => {
       return res.json({ queued: 0, reason: plan.reason, message: `Nothing to send (${plan.reason}).` });
     }
     if (!plan.jobs || !plan.jobs.length) {
-      // Check if they're already queued (most common reason)
+      // If jobs are already pending, advance them to fire now instead of their old scheduled time
       const alreadyQueued = queueSvc.getJobsForUser(req.session.userId)
         .filter(j => j.status === 'pending' && (j.type || 'outreach') === 'outreach').length;
-      const msg = alreadyQueued > 0
-        ? `${alreadyQueued} candidate${alreadyQueued > 1 ? 's' : ''} already queued and scheduled — they'll send automatically.`
-        : 'No uncontacted imported candidates left to email.';
-      return res.json({ queued: 0, reason: plan.reason || 'no_jobs', message: msg });
+      if (alreadyQueued > 0) {
+        queueSvc.advancePendingNow(req.session.userId);
+        return res.json({ queued: alreadyQueued, message: `${alreadyQueued} queued email${alreadyQueued > 1 ? 's' : ''} moved up — sending starts in ~1 minute.` });
+      }
+      return res.json({ queued: 0, reason: plan.reason || 'no_jobs', message: 'No uncontacted imported candidates left to email.' });
     }
 
     // Clear any existing pending outreach so we don't double-queue

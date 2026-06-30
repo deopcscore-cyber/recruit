@@ -84,6 +84,22 @@ function updateJob(jobId, updates) {
   if (job) { Object.assign(job, updates); write(queue); }
 }
 
+// Advance all pending outreach jobs for a user to fire within the next few minutes
+function advancePendingNow(userId) {
+  const queue = read();
+  let changed = false;
+  const now = Date.now();
+  queue
+    .filter(j => j.userId === userId && j.status === 'pending' && (j.type || 'outreach') === 'outreach')
+    .sort((a, b) => new Date(a.scheduledAt) - new Date(b.scheduledAt))
+    .forEach((j, i) => {
+      j.scheduledAt = new Date(now + i * 60 * 1000).toISOString(); // stagger 1 min apart
+      changed = true;
+    });
+  if (changed) write(queue);
+  return queue.filter(j => j.userId === userId && j.status === 'pending' && (j.type || 'outreach') === 'outreach').length;
+}
+
 // On server start, reset any jobs that got stuck in 'sending' (server crashed mid-job)
 function resetStuckJobs() {
   const queue = read();
@@ -106,5 +122,5 @@ function pruneOld() {
 
 module.exports = {
   addJobs, getJobsForUser, cancelPendingForUser, cancelPendingForCandidate,
-  pendingFollowUpCount, getNextDueJob, updateJob, pruneOld, resetStuckJobs
+  pendingFollowUpCount, getNextDueJob, updateJob, pruneOld, resetStuckJobs, advancePendingNow
 };
