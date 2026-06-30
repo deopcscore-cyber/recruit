@@ -1,17 +1,54 @@
 const Anthropic = require('@anthropic-ai/sdk');
-const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+const OpenAI    = require('openai');
 
-const MODEL = 'claude-sonnet-4-6';
+const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+const openai    = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-// Cost per million tokens in cents (claude-sonnet-4 pricing)
-const COST_INPUT_PER_M  = 300;  // $3.00 / MTok = 300 cents
-const COST_OUTPUT_PER_M = 1500; // $15.00 / MTok = 1500 cents
+const CLAUDE_MODEL = 'claude-sonnet-4-6';
+const OPENAI_MODEL = 'gpt-4o-mini';
 
-function calcCostCents(usage) {
+// Cost per million tokens in cents
+const CLAUDE_IN  = 300;   // $3.00
+const CLAUDE_OUT = 1500;  // $15.00
+const OPENAI_IN  = 15;    // $0.15
+const OPENAI_OUT = 60;    // $0.60
+
+function calcCostCents(usage, provider) {
   if (!usage) return 0;
   const inp = usage.input_tokens  || 0;
   const out = usage.output_tokens || 0;
-  return Math.ceil((inp * COST_INPUT_PER_M + out * COST_OUTPUT_PER_M) / 1_000_000);
+  const inRate  = provider === 'openai' ? OPENAI_IN  : CLAUDE_IN;
+  const outRate = provider === 'openai' ? OPENAI_OUT : CLAUDE_OUT;
+  return Math.ceil((inp * inRate + out * outRate) / 1_000_000);
+}
+
+// Try Claude first; on billing/credit exhaustion fall back to OpenAI
+async function callAI(prompt, maxTokens) {
+  if (process.env.ANTHROPIC_API_KEY) {
+    try {
+      const res = await anthropic.messages.create({
+        model: CLAUDE_MODEL, max_tokens: maxTokens,
+        messages: [{ role: 'user', content: prompt }]
+      });
+      return { content: res.content, usage: res.usage, provider: 'claude' };
+    } catch (err) {
+      const billing = err.status === 402
+        || /credit|billing|quota|insufficien|overloaded/i.test(err.message || '');
+      if (!billing) throw err;
+      console.warn('[AI] Claude unavailable, switching to OpenAI:', err.message);
+    }
+  }
+
+  // OpenAI fallback — normalize response shape to match Anthropic's
+  const res = await openai.chat.completions.create({
+    model: OPENAI_MODEL, max_tokens: maxTokens,
+    messages: [{ role: 'user', content: prompt }]
+  });
+  return {
+    content: [{ text: res.choices[0].message.content }],
+    usage: { input_tokens: res.usage.prompt_tokens, output_tokens: res.usage.completion_tokens },
+    provider: 'openai'
+  };
 }
 
 // ─── Company context helper ───────────────────────────────────────────────────
@@ -141,12 +178,9 @@ RULES:
 
 Output ONLY valid JSON. No markdown, no commentary.`;
 
-  const response = await client.messages.create({
-    model: MODEL, max_tokens: 1000,
-    messages: [{ role: 'user', content: prompt }]
-  });
+  const response = await callAI(prompt, 1000);
   const raw = response.content[0].text.trim();
-  const costCents = calcCostCents(response.usage);
+  const costCents = calcCostCents(response.usage, response.provider);
   try {
     const clean = raw.replace(/^```json\s*/i, '').replace(/```\s*$/, '').trim();
     const parsed = JSON.parse(clean);
@@ -223,12 +257,9 @@ Output ONLY valid JSON. No markdown, no extra text.
 
 Write the email now:`;
 
-  const response = await client.messages.create({
-    model: MODEL, max_tokens: 900,
-    messages: [{ role: 'user', content: prompt }]
-  });
+  const response = await callAI(prompt, 900);
   const raw = response.content[0].text.trim();
-  const costCents = calcCostCents(response.usage);
+  const costCents = calcCostCents(response.usage, response.provider);
   try {
     const clean = raw.replace(/^```json\s*/i, '').replace(/```\s*$/, '').trim();
     const parsed = JSON.parse(clean);
@@ -294,11 +325,8 @@ RULES:
 
 Write the email now:`;
 
-  const response = await client.messages.create({
-    model: MODEL, max_tokens: 800,
-    messages: [{ role: 'user', content: prompt }]
-  });
-  return { text: response.content[0].text.trim(), costCents: calcCostCents(response.usage) };
+  const response = await callAI(prompt, 800);
+  return { text: response.content[0].text.trim(), costCents: calcCostCents(response.usage, response.provider) };
 }
 
 // ── Company Recruiter outreach (original) ─────────────────────────────────────
@@ -370,13 +398,9 @@ CRITICAL RULES:
 
 Write the outreach email now:`;
 
-  const response = await client.messages.create({
-    model: MODEL,
-    max_tokens: 800,
-    messages: [{ role: 'user', content: prompt }]
-  });
+  const response = await callAI(prompt, 800);
 
-  return { text: response.content[0].text.trim(), costCents: calcCostCents(response.usage) };
+  return { text: response.content[0].text.trim(), costCents: calcCostCents(response.usage, response.provider) };
 }
 
 async function generateRoleJD(candidate, user) {
@@ -442,13 +466,9 @@ Make every section compelling and specific — not generic boilerplate. Referenc
 
 Write the role description now:`;
 
-  const response = await client.messages.create({
-    model: MODEL,
-    max_tokens: 3000,
-    messages: [{ role: 'user', content: prompt }]
-  });
+  const response = await callAI(prompt, 3000);
 
-  return { text: response.content[0].text.trim(), costCents: calcCostCents(response.usage) };
+  return { text: response.content[0].text.trim(), costCents: calcCostCents(response.usage, response.provider) };
 }
 
 async function _generateRecruiterResumeFeedback(candidate, user) {
@@ -526,14 +546,10 @@ Also return a brief internal gaps analysis. Output as valid JSON:
 
 Return ONLY the JSON object, no markdown, no extra text.`;
 
-  const response = await client.messages.create({
-    model: MODEL,
-    max_tokens: 2500,
-    messages: [{ role: 'user', content: prompt }]
-  });
+  const response = await callAI(prompt, 2500);
 
   const text = response.content[0].text.trim();
-  const costCents = calcCostCents(response.usage);
+  const costCents = calcCostCents(response.usage, response.provider);
   try {
     const clean = text.replace(/^```json\s*/i, '').replace(/```\s*$/, '').trim();
     return { ...JSON.parse(clean), costCents };
@@ -603,13 +619,9 @@ Output ONLY the email body (starting with "Dear ${firstName},"). No subject line
 
 Write the introduction email now:`;
 
-  const response = await client.messages.create({
-    model: MODEL,
-    max_tokens: 800,
-    messages: [{ role: 'user', content: prompt }]
-  });
+  const response = await callAI(prompt, 800);
 
-  return { text: response.content[0].text.trim(), costCents: calcCostCents(response.usage) };
+  return { text: response.content[0].text.trim(), costCents: calcCostCents(response.usage, response.provider) };
 }
 
 // ── Route by userType ─────────────────────────────────────────────────────────
@@ -679,11 +691,8 @@ RULES:
 
 Write the proposal email now:`;
 
-  const response = await client.messages.create({
-    model: MODEL, max_tokens: 900,
-    messages: [{ role: 'user', content: prompt }]
-  });
-  return { text: response.content[0].text.trim(), costCents: calcCostCents(response.usage) };
+  const response = await callAI(prompt, 900);
+  return { text: response.content[0].text.trim(), costCents: calcCostCents(response.usage, response.provider) };
 }
 
 // ── Career Consultant Reply ───────────────────────────────────────────────────
@@ -783,11 +792,8 @@ CRITICAL RULES:
 
 Write the reply now:`;
 
-  const response = await client.messages.create({
-    model: MODEL, max_tokens: 900,
-    messages: [{ role: 'user', content: prompt }]
-  });
-  return { text: response.content[0].text.trim(), costCents: calcCostCents(response.usage) };
+  const response = await callAI(prompt, 900);
+  return { text: response.content[0].text.trim(), costCents: calcCostCents(response.usage, response.provider) };
 }
 
 // ── Career Consultant Resume Feedback ────────────────────────────────────────
@@ -840,13 +846,10 @@ Also return a brief internal analysis. Output as valid JSON:
 
 Return ONLY the JSON. No markdown, no extra text.`;
 
-  const response = await client.messages.create({
-    model: MODEL, max_tokens: 2000,
-    messages: [{ role: 'user', content: prompt }]
-  });
+  const response = await callAI(prompt, 2000);
 
   const text = response.content[0].text.trim();
-  const costCents = calcCostCents(response.usage);
+  const costCents = calcCostCents(response.usage, response.provider);
   try {
     const clean = text.replace(/^```json\s*/i, '').replace(/```\s*$/, '').trim();
     return { ...JSON.parse(clean), costCents };
@@ -956,13 +959,9 @@ CRITICAL RULES:
 
 Write the reply now:`;
 
-  const response = await client.messages.create({
-    model: MODEL,
-    max_tokens: 900,
-    messages: [{ role: 'user', content: prompt }]
-  });
+  const response = await callAI(prompt, 900);
 
-  return { text: response.content[0].text.trim(), costCents: calcCostCents(response.usage) };
+  return { text: response.content[0].text.trim(), costCents: calcCostCents(response.usage, response.provider) };
 }
 
 async function generateFollowUp(candidate, user) {
@@ -1057,13 +1056,9 @@ CRITICAL RULES:
 
 Write the follow-up email now:`;
 
-  const response = await client.messages.create({
-    model: MODEL,
-    max_tokens: 600,
-    messages: [{ role: 'user', content: prompt }]
-  });
+  const response = await callAI(prompt, 600);
 
-  return { text: response.content[0].text.trim(), costCents: calcCostCents(response.usage) };
+  return { text: response.content[0].text.trim(), costCents: calcCostCents(response.usage, response.provider) };
 }
 
 async function scoreCandidate(candidate, user) {
@@ -1088,14 +1083,10 @@ Score them 1-10 on overall executive fit for ${company.name} and return ONLY a v
 Score 8-10: exceptional fit (deep relevant experience + strategic + executive). 5-7: solid fit with gaps. 1-4: significant gaps.
 Return ONLY the JSON.`;
 
-  const response = await client.messages.create({
-    model: MODEL,
-    max_tokens: 400,
-    messages: [{ role: 'user', content: prompt }]
-  });
+  const response = await callAI(prompt, 400);
 
   const text = response.content[0].text.trim();
-  const costCents = calcCostCents(response.usage);
+  const costCents = calcCostCents(response.usage, response.provider);
   const clean = text.replace(/^```json\s*/i, '').replace(/```\s*$/, '').trim();
   try {
     return { ...JSON.parse(clean), costCents };
@@ -1125,12 +1116,9 @@ ${(replyText || '').substring(0, 1500)}
 
 Return ONLY valid JSON: {"label":"<one of the four>","reason":"<5-10 word justification>"}`;
 
-  const response = await client.messages.create({
-    model: MODEL, max_tokens: 120,
-    messages: [{ role: 'user', content: prompt }]
-  });
+  const response = await callAI(prompt, 120);
   const text = response.content[0].text.trim();
-  const costCents = calcCostCents(response.usage);
+  const costCents = calcCostCents(response.usage, response.provider);
   const VALID = ['interested', 'question', 'not_now', 'not_interested'];
   try {
     const clean = text.replace(/^```json\s*/i, '').replace(/```\s*$/, '').trim();
@@ -1169,12 +1157,9 @@ Return ONLY valid JSON:
   "rewritten": "the full repositioned resume as plain text"
 }`;
 
-  const response = await client.messages.create({
-    model: MODEL, max_tokens: 4000,
-    messages: [{ role: 'user', content: prompt }]
-  });
+  const response = await callAI(prompt, 4000);
   const text = response.content[0].text.trim();
-  const costCents = calcCostCents(response.usage);
+  const costCents = calcCostCents(response.usage, response.provider);
   try {
     const clean = text.replace(/^```json\s*/i, '').replace(/```\s*$/, '').trim();
     const parsed = JSON.parse(clean.match(/\{[\s\S]*\}/)[0]);
