@@ -309,12 +309,10 @@ router.post('/fetch', requireAuth, async (req, res) => {
         candidate = candidates.find(c => c.trackingId && reply.body.includes(`/track/${c.trackingId}`));
       }
       if (!candidate) {
-        // Collect unknown senders from SMTP as potential new leads
+        // Collect unknown senders from SMTP as potential new leads (user will dismiss what they don't want)
         if (reply.matched === false) {
           const fromAddr2 = extractEmail(reply.from);
-          const isBounceSender = /mailer-daemon|postmaster@|mail delivery subsystem|delivery subsystem/i.test(reply.from || '');
-          const isBounceSubject = /undeliverable|delivery (has )?fail|delivery status notification|returned mail|address not found|user unknown|no such user/i.test(reply.subject || '');
-          if (!isBounceSender && !isBounceSubject && fromAddr2) {
+          if (fromAddr2) {
             newUnknownLeads.push({
               id: uuidv4(),
               from: reply.from || '',

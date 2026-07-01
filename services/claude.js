@@ -481,7 +481,7 @@ Write the role description now:`;
   return { text: response.content[0].text.trim(), costCents: calcCostCents(response.usage, response.provider) };
 }
 
-async function _generateRecruiterResumeFeedback(candidate, user) {
+async function _generateRecruiterResumeFeedback(candidate, user, instructions) {
   const candidateInfo = formatCandidateContext(candidate);
   const styleInfo = formatUserStyle(user);
   const company = getCompanyContext(user);
@@ -556,7 +556,7 @@ Also return a brief internal gaps analysis. Output as valid JSON:
 
 Return ONLY the JSON object, no markdown, no extra text.`;
 
-  const response = await callAI(prompt, 2500);
+  const response = await callAI(appendInstructions(prompt, instructions), 2500);
 
   const text = response.content[0].text.trim();
   const costCents = calcCostCents(response.usage, response.provider);
@@ -641,10 +641,10 @@ async function generateReply(candidate, user, lastMessage, instructions) {
   return _generateRecruiterReply(candidate, user, lastMessage, instructions);
 }
 
-async function generateResumeFeedback(candidate, user) {
+async function generateResumeFeedback(candidate, user, instructions) {
   const type = user.userType || 'recruiter_company';
-  if (type === 'career_consultant') return _generateCareerConsultantResumeFeedback(candidate, user);
-  return _generateRecruiterResumeFeedback(candidate, user);
+  if (type === 'career_consultant') return _generateCareerConsultantResumeFeedback(candidate, user, instructions);
+  return _generateRecruiterResumeFeedback(candidate, user, instructions);
 }
 
 async function generateProposal(candidate, user, instructions) {
@@ -807,8 +807,9 @@ Write the reply now:`;
 }
 
 // ── Career Consultant Resume Feedback ────────────────────────────────────────
-async function _generateCareerConsultantResumeFeedback(candidate, user) {
+async function _generateCareerConsultantResumeFeedback(candidate, user, instructions) {
   const candidateInfo   = formatCandidateContext(candidate);
+  const styleInfo       = formatUserStyle(user);
   const consultantName  = user.name || 'Career Consultant';
   const consultantTitle = (user.title && user.title.trim()) || 'Career Strategist';
   const practiseName    = (user.companyName || '').trim() || '';
@@ -822,7 +823,7 @@ async function _generateCareerConsultantResumeFeedback(candidate, user) {
 
 YOUR SERVICE:
 ${servicePitch}
-
+${styleInfo ? '\nSTYLE GUIDANCE:\n' + styleInfo : ''}
 CANDIDATE INFORMATION:
 ${candidateInfo}
 
@@ -856,7 +857,7 @@ Also return a brief internal analysis. Output as valid JSON:
 
 Return ONLY the JSON. No markdown, no extra text.`;
 
-  const response = await callAI(prompt, 2000);
+  const response = await callAI(appendInstructions(prompt, instructions), 2000);
 
   const text = response.content[0].text.trim();
   const costCents = calcCostCents(response.usage, response.provider);

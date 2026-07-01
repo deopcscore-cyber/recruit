@@ -62,7 +62,7 @@ router.post('/outreach', async (req, res) => {
     if (!ctx) return;
     if (!await checkCredits(ctx.user, res)) return;
 
-    const result = await claude.generateOutreach(ctx.candidate, ctx.user);
+    const result = await claude.generateOutreach(ctx.candidate, ctx.user, req.body.instructions);
     await deductCredits(ctx.user, result.costCents, 'Outreach email', ctx.candidate.name);
     return res.json({ draft: result.text, creditsRemaining: ctx.user.credits });
   } catch (err) {
@@ -78,7 +78,7 @@ router.post('/role-jd', async (req, res) => {
     if (!ctx) return;
     if (!await checkCredits(ctx.user, res)) return;
 
-    const result = await claude.generateRoleJD(ctx.candidate, ctx.user);
+    const result = await claude.generateRoleJD(ctx.candidate, ctx.user, req.body.instructions);
     await deductCredits(ctx.user, result.costCents, 'Role & JD', ctx.candidate.name);
     return res.json({ draft: result.text, creditsRemaining: ctx.user.credits });
   } catch (err) {
@@ -98,7 +98,7 @@ router.post('/resume-review', async (req, res) => {
       return res.status(400).json({ error: 'No resume on file for this candidate' });
     }
 
-    const result = await claude.generateResumeFeedback(ctx.candidate, ctx.user);
+    const result = await claude.generateResumeFeedback(ctx.candidate, ctx.user, req.body.instructions);
     await deductCredits(ctx.user, result.costCents, 'Resume review', ctx.candidate.name);
     return res.json({ gaps: result.gaps, draft: result.email, creditsRemaining: ctx.user.credits });
   } catch (err) {
@@ -114,7 +114,7 @@ router.post('/victory', async (req, res) => {
     if (!ctx) return;
     if (!await checkCredits(ctx.user, res)) return;
 
-    const result = await claude.generateVictoryEmail(ctx.candidate, ctx.user);
+    const result = await claude.generateVictoryEmail(ctx.candidate, ctx.user, req.body.instructions);
     await deductCredits(ctx.user, result.costCents, 'Intro email', ctx.candidate.name);
     return res.json({ draft: result.text, creditsRemaining: ctx.user.credits });
   } catch (err) {
@@ -152,7 +152,7 @@ router.post('/followup', async (req, res) => {
     if (!ctx) return;
     if (!await checkCredits(ctx.user, res)) return;
 
-    const result = await claude.generateFollowUp(ctx.candidate, ctx.user);
+    const result = await claude.generateFollowUp(ctx.candidate, ctx.user, req.body.instructions);
     await deductCredits(ctx.user, result.costCents, 'Follow-up email', ctx.candidate.name);
     return res.json({ draft: result.text, creditsRemaining: ctx.user.credits });
   } catch (err) {
@@ -168,7 +168,7 @@ router.post('/proposal', async (req, res) => {
     if (!ctx) return;
     if (!await checkCredits(ctx.user, res)) return;
 
-    const result = await claude.generateProposal(ctx.candidate, ctx.user);
+    const result = await claude.generateProposal(ctx.candidate, ctx.user, req.body.instructions);
     await deductCredits(ctx.user, result.costCents, 'Proposal', ctx.candidate.name);
     return res.json({ draft: result.text, creditsRemaining: ctx.user.credits });
   } catch (err) {
@@ -184,8 +184,8 @@ router.post('/reply', async (req, res) => {
     if (!ctx) return;
     if (!await checkCredits(ctx.user, res)) return;
 
-    const { lastMessage } = req.body;
-    const result = await claude.generateReply(ctx.candidate, ctx.user, lastMessage || null);
+    const { lastMessage, instructions } = req.body;
+    const result = await claude.generateReply(ctx.candidate, ctx.user, lastMessage || null, instructions);
     await deductCredits(ctx.user, result.costCents, 'Reply draft', ctx.candidate.name);
     return res.json({ draft: result.text, creditsRemaining: ctx.user.credits });
   } catch (err) {
