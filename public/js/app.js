@@ -1907,6 +1907,7 @@ function initSettingsPage() {
         companyName: document.getElementById('profile-company-name').value.trim(),
         companyPitch: document.getElementById('profile-company-pitch').value.trim(),
         salaryRange: (document.getElementById('profile-salary-range') || {value:''}).value.trim(),
+        tzOffset: Number(document.getElementById('profile-tz-offset').value),
         ...(hunterField && hunterField.value.trim() !== '••••••••' ? { hunterApiKey: hunterField.value.trim() } : {})
       };
       await API.settings.update(data);
@@ -2518,6 +2519,17 @@ async function loadSettingsPage() {
     if (document.getElementById('profile-company-name'))  document.getElementById('profile-company-name').value  = style.companyName  || '';
     if (document.getElementById('profile-company-pitch')) document.getElementById('profile-company-pitch').value = style.companyPitch || '';
     if (document.getElementById('profile-salary-range'))  document.getElementById('profile-salary-range').value  = style.salaryRange  || '';
+    if (document.getElementById('profile-tz-offset')) {
+      const saved = style.tzOffset ?? (-new Date().getTimezoneOffset() / 60);
+      const sel = document.getElementById('profile-tz-offset');
+      // Pick closest option
+      let best = null, bestDiff = Infinity;
+      for (const opt of sel.options) {
+        const diff = Math.abs(Number(opt.value) - saved);
+        if (diff < bestDiff) { bestDiff = diff; best = opt.value; }
+      }
+      if (best !== null) sel.value = best;
+    }
     if (document.getElementById('profile-hunter-key'))       document.getElementById('profile-hunter-key').value       = style.hunterApiKey     === '••••••••' ? '' : (style.hunterApiKey     || '');
     if (document.getElementById('enrichment-contactout-key')) document.getElementById('enrichment-contactout-key').value = style.contactOutApiKey === '••••••••' ? '' : (style.contactOutApiKey || '');
     if (document.getElementById('enrichment-apollo-key'))     document.getElementById('enrichment-apollo-key').value     = style.apolloApiKey     === '••••••••' ? '' : (style.apolloApiKey     || '');
