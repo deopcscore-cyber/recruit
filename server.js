@@ -413,6 +413,20 @@ async function _processOutreachJob(job) {
   if (!_isEmailConnected(user)) throw new Error('No email provider connected');
   if ((user.credits || 0) <= 0) throw new Error('Insufficient credits');
 
+  // For autopilot jobs, enforce the send window — reschedule if we're outside it
+  if (job.source === 'autopilot' && user.autopilot) {
+    const { windowBounds } = require('./services/autopilot');
+    const schedulingSvc = require('./services/scheduling');
+    const offset = schedulingSvc.userOffset(user);
+    const { startMs, endMs } = windowBounds(user.autopilot, new Date(), offset);
+    const now = Date.now();
+    if (now < startMs || now > endMs) {
+      // Outside window — push to next window start instead of sending now
+      queueSvc.updateJob(job.id, { status: 'pending', scheduledAt: new Date(startMs).toISOString() });
+      return;
+    }
+  }
+
   // Generate personalised outreach (deduct credits)
   const outreachResult = await claudeSvc.generateOutreach(candidate, user);
   const draft = outreachResult.text;
