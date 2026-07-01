@@ -856,7 +856,13 @@ function renderOutreachTab(body) {
         <h4>Personalized Outreach Email</h4>
         <p class="tab-desc">AI crafts a deep personalized email referencing <strong>${escapeHtml(c.name||'this candidate')}'s</strong> specific career arc. Review and approve before anything sends.</p>
 
-        ${!done ? `<button class="btn btn-secondary btn-sm" id="gen-outreach-btn">✦ Generate Outreach</button>` : ''}
+        ${!done ? `<button class="btn btn-secondary btn-sm" id="gen-outreach-btn">✦ Generate Outreach</button>
+        <div style="margin-top:8px">
+          <button type="button" onclick="(function(){var w=document.getElementById('outreach-instructions-wrap');w.style.display=w.style.display==='none'?'':'none'})()" class="btn btn-ghost btn-sm" style="font-size:0.75rem;padding:2px 8px;color:var(--text-muted)">✎ Add instructions</button>
+          <div id="outreach-instructions-wrap" style="display:none;margin-top:6px">
+            <textarea id="outreach-instructions" placeholder="e.g. mention our relocation package, keep it under 3 sentences, more formal tone…" style="width:100%;height:56px;font-size:0.82rem;resize:vertical;border:1px solid var(--border);border-radius:6px;padding:8px"></textarea>
+          </div>
+        </div>` : ''}
       </div>
 
       <div class="draft-area" id="outreach-draft-area" style="display:none">
@@ -914,7 +920,8 @@ function renderOutreachTab(body) {
       : `Something Worth a Few Minutes of Your Time, ${c.name ? c.name.trim().split(/\s+/)[0] : ''}`,
     stepKey: 'outreach',
     stageTo: 'Outreach Sent',
-    generate: () => API.ai.outreach(c.id)
+    instructionsId: 'outreach-instructions',
+    generate: (instructions) => API.ai.outreach(c.id, instructions)
   });
 }
 
@@ -933,6 +940,12 @@ function renderRoleJDTab(body) {
         <h4>Tailored Leadership Role Description</h4>
         <p class="tab-desc">AI builds a customized JD for <strong>${escapeHtml(c.name||'this candidate')}</strong> — references their actual companies, mirrors their experience. Review and approve before sending.</p>
         <button class="btn btn-secondary btn-sm" id="gen-jd-btn">✦ ${done?'Regenerate Role JD':'Generate Role JD'}</button>
+        <div style="margin-top:8px">
+          <button type="button" onclick="(function(){var w=document.getElementById('jd-instructions-wrap');w.style.display=w.style.display==='none'?'':'none'})()" class="btn btn-ghost btn-sm" style="font-size:0.75rem;padding:2px 8px;color:var(--text-muted)">✎ Add instructions</button>
+          <div id="jd-instructions-wrap" style="display:none;margin-top:6px">
+            <textarea id="jd-instructions" placeholder="e.g. emphasize the remote work option, highlight equity compensation…" style="width:100%;height:56px;font-size:0.82rem;resize:vertical;border:1px solid var(--border);border-radius:6px;padding:8px"></textarea>
+          </div>
+        </div>
       </div>
       <div class="draft-area" id="jd-draft-area" style="display:none">
         <div class="tab-section">
@@ -993,7 +1006,8 @@ function renderRoleJDTab(body) {
     defaultSubject: `The Welltower opportunity — created with you in mind`,
     stepKey: 'roleJD',
     stageTo: null,
-    generate: () => API.ai.roleJD(c.id)
+    instructionsId: 'jd-instructions',
+    generate: (instructions) => API.ai.roleJD(c.id, instructions)
   });
 }
 
@@ -1013,7 +1027,13 @@ function renderResumeTab(body) {
         <p class="tab-desc">Send a request for their resume. Once received, upload it here.</p>
         ${(c.stepsCompleted||{}).resumeRequested
           ? `<div class="step-done-banner">✓ Resume request sent</div>`
-          : `<button class="btn btn-secondary btn-sm" id="gen-resume-req-btn">✦ Generate Resume Request Email</button>`
+          : `<button class="btn btn-secondary btn-sm" id="gen-resume-req-btn">✦ Generate Resume Request Email</button>
+          <div style="margin-top:8px">
+            <button type="button" onclick="(function(){var w=document.getElementById('resume-req-instructions-wrap');w.style.display=w.style.display==='none'?'':'none'})()" class="btn btn-ghost btn-sm" style="font-size:0.75rem;padding:2px 8px;color:var(--text-muted)">✎ Add instructions</button>
+            <div id="resume-req-instructions-wrap" style="display:none;margin-top:6px">
+              <textarea id="resume-req-instructions" placeholder="e.g. they mentioned being busy this week, keep it very short…" style="width:100%;height:56px;font-size:0.82rem;resize:vertical;border:1px solid var(--border);border-radius:6px;padding:8px"></textarea>
+            </div>
+          </div>`
         }
       </div>
 
@@ -1085,8 +1105,9 @@ function renderResumeTab(body) {
       defaultSubject: 'Quick question about next steps',
       stepKey: 'resumeRequested',
       stageTo: 'Resume Requested',
-      generate: async () => {
-        const draft = await API.ai.reply(c.id);
+      instructionsId: 'resume-req-instructions',
+      generate: async (instructions) => {
+        const draft = await API.ai.reply(c.id, null, instructions);
         return { draft: draft.draft };
       }
     });
@@ -1241,6 +1262,12 @@ function renderReviewTab(body) {
         <h4>${tabTitle}</h4>
         <p class="tab-desc">${tabDesc}</p>
         <button class="btn btn-secondary btn-sm" id="gen-review-btn">✦ ${done ? 'Regenerate' : isConsultant ? 'Write Feedback Email' : 'Run Resume Review'}</button>
+        <div style="margin-top:8px">
+          <button type="button" onclick="(function(){var w=document.getElementById('review-instructions-wrap');w.style.display=w.style.display==='none'?'':'none'})()" class="btn btn-ghost btn-sm" style="font-size:0.75rem;padding:2px 8px;color:var(--text-muted)">✎ Add instructions</button>
+          <div id="review-instructions-wrap" style="display:none;margin-top:6px">
+            <textarea id="review-instructions" placeholder="e.g. be more encouraging in tone, focus on their finance background…" style="width:100%;height:56px;font-size:0.82rem;resize:vertical;border:1px solid var(--border);border-radius:6px;padding:8px"></textarea>
+          </div>
+        </div>
       </div>
 
       <div id="gaps-display" style="display:none" class="tab-section">
@@ -1268,7 +1295,8 @@ function renderReviewTab(body) {
     const btn = body.querySelector('#gen-review-btn');
     btn.disabled = true; btn.textContent = '✦ Analyzing…';
     try {
-      const result = await API.ai.resumeReview(c.id);
+      const reviewInstructions = (body.querySelector('#review-instructions')?.value || '').trim() || undefined;
+      const result = await API.ai.resumeReview(c.id, reviewInstructions);
       // Show gaps
       const gapsDiv = body.querySelector('#gaps-display');
       const gapsText = body.querySelector('#gaps-text');
@@ -1341,6 +1369,12 @@ function renderVictoryTab(body) {
             to their background, and a low-friction next step — just a reply, no call required.
           </p>
           <button class="btn btn-secondary btn-sm" id="gen-victory-btn">✦ ${done ? 'Regenerate Proposal' : 'Generate Proposal'}</button>
+          <div style="margin-top:8px">
+            <button type="button" onclick="(function(){var w=document.getElementById('victory-instructions-wrap');w.style.display=w.style.display==='none'?'':'none'})()" class="btn btn-ghost btn-sm" style="font-size:0.75rem;padding:2px 8px;color:var(--text-muted)">✎ Add instructions</button>
+            <div id="victory-instructions-wrap" style="display:none;margin-top:6px">
+              <textarea id="victory-instructions" placeholder="e.g. emphasize the LinkedIn rewrite deliverable, keep it under 200 words…" style="width:100%;height:56px;font-size:0.82rem;resize:vertical;border:1px solid var(--border);border-radius:6px;padding:8px"></textarea>
+            </div>
+          </div>
         </div>
         <div class="draft-area" id="victory-draft-area" style="display:none">
           <div class="tab-section">
@@ -1365,7 +1399,8 @@ function renderVictoryTab(body) {
       defaultSubject: `What working together would look like, ${firstName}`,
       stepKey: 'victorySent',
       stageTo: null,
-      generate: () => API.ai.proposal(c.id)
+      instructionsId: 'victory-instructions',
+      generate: (instructions) => API.ai.proposal(c.id, instructions)
     });
     return;
   }
@@ -1393,6 +1428,12 @@ function renderVictoryTab(body) {
         ${partnerBanner}
         <p class="tab-desc">AI drafts a warm introduction email addressed to ${escapeHtml(firstName)} and CC'd to your resume consultant. The email summarises the candidate's background, highlights why their resume needs stronger positioning, and hands them off — feels like a genuine recommendation, not a sales pitch.</p>
         <button class="btn btn-secondary btn-sm" id="gen-victory-btn">✦ ${done ? 'Regenerate Introduction' : 'Generate Introduction Email'}</button>
+        <div style="margin-top:8px">
+          <button type="button" onclick="(function(){var w=document.getElementById('victory-instructions-wrap');w.style.display=w.style.display==='none'?'':'none'})()" class="btn btn-ghost btn-sm" style="font-size:0.75rem;padding:2px 8px;color:var(--text-muted)">✎ Add instructions</button>
+          <div id="victory-instructions-wrap" style="display:none;margin-top:6px">
+            <textarea id="victory-instructions" placeholder="e.g. mention they're a strong fit for VP-level roles, add urgency…" style="width:100%;height:56px;font-size:0.82rem;resize:vertical;border:1px solid var(--border);border-radius:6px;padding:8px"></textarea>
+          </div>
+        </div>
       </div>
       <div class="draft-area" id="victory-draft-area" style="display:none">
         <div class="tab-section">
@@ -1420,7 +1461,8 @@ function renderVictoryTab(body) {
     stepKey: 'victorySent',
     stageTo: null,
     cc: partnerEmail || null,
-    generate: () => API.ai.victory(c.id)
+    instructionsId: 'victory-instructions',
+    generate: (instructions) => API.ai.victory(c.id, instructions)
   });
 }
 
@@ -1483,6 +1525,12 @@ function renderThreadTab(body) {
             <button class="btn btn-ghost btn-sm" id="th-set-followup" title="Set a reminder to follow up later">⏰ Remind me</button>
           </div>
         </div>
+        <div id="th-instructions-row" style="margin-bottom:6px">
+          <button onclick="(function(){var w=document.getElementById('th-instructions-wrap');w.style.display=w.style.display==='none'?'':'none'})()" class="btn btn-ghost btn-sm" style="font-size:0.75rem;padding:2px 8px;color:var(--text-muted)">✎ Add instructions</button>
+          <div id="th-instructions-wrap" style="display:none;margin-top:6px">
+            <textarea id="th-instructions" placeholder="e.g. mention our relocation package, keep it under 3 sentences, more formal tone…" style="width:100%;height:56px;font-size:0.82rem;resize:vertical"></textarea>
+          </div>
+        </div>
         <div class="form-group" style="margin-bottom:8px">
           <input type="text" id="th-subject" placeholder="Subject line…" value="${escapeHtml(c.lastSubject ? 'Re: ' + c.lastSubject.replace(/^Re:\s*/i,'') : '')}" />
         </div>
@@ -1536,17 +1584,18 @@ function renderThreadTab(body) {
     const btn = body.querySelector(`#th-gen-${type}`);
     const origText = btn.textContent;
     btn.disabled = true; btn.textContent = '…';
+    const instructions = (body.querySelector('#th-instructions')?.value || '').trim();
     try {
       let result;
       if (type === 'reply') {
         const lastInbound = [...thread].reverse().find(m => m.direction === 'inbound');
-        result = await API.ai.reply(c.id, lastInbound ? stripQuotedText(lastInbound.body) : null);
+        result = await API.ai.reply(c.id, lastInbound ? stripQuotedText(lastInbound.body) : null, instructions);
       } else if (type === 'outreach') {
-        result = await API.ai.outreach(c.id);
+        result = await API.ai.outreach(c.id, instructions);
       } else if (type === 'jd') {
         result = await API.ai.roleJD(c.id);
       } else if (type === 'followup') {
-        result = await API.ai.followup(c.id);
+        result = await API.ai.followup(c.id, instructions);
       }
       if (result && result.draft) {
         body.querySelector('#th-body').value = result.draft;
@@ -1664,7 +1713,7 @@ function renderThreadTab(body) {
 // SHARED: AI Draft Wire-up
 // ================================================================
 
-function wireAIDraft(body, { genBtnId, draftAreaId, subjectId, bodyId, regenBtnId, sendBtnId, defaultSubject, stepKey, stageTo, cc, generate }) {
+function wireAIDraft(body, { genBtnId, draftAreaId, subjectId, bodyId, regenBtnId, sendBtnId, defaultSubject, stepKey, stageTo, cc, instructionsId, generate }) {
   const c = _modalCandidate;
 
   const genBtn = body.querySelector('#' + genBtnId);
@@ -1686,7 +1735,9 @@ function wireAIDraft(body, { genBtnId, draftAreaId, subjectId, bodyId, regenBtnI
     const orig = genBtn.textContent;
     genBtn.disabled = true; genBtn.textContent = '✦ Generating…';
     try {
-      const result = await generate();
+      const instructionsEl = instructionsId ? body.querySelector('#' + instructionsId) : null;
+      const instructions = (instructionsEl?.value || '').trim() || undefined;
+      const result = await generate(instructions);
       const draft = result.draft || result.text || result;
       const subjectEl = body.querySelector('#' + subjectId);
       const bodyEl = body.querySelector('#' + bodyId);
