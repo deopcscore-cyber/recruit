@@ -2581,7 +2581,9 @@ async function loadSettingsPage() {
     await updateGmailStatus();
     await updateZohoStatus();
     await updateOutlookStatus();
+    await updateSmtpStatus();
     await updateAIModelStatus();
+    wireSmtpSettings();
   } catch (err) {
     Toast.error('Failed to load settings');
   }
@@ -2960,6 +2962,78 @@ async function updateOutlookStatus() {
       acts.style.display = 'none';
     }
   } catch { /* ignore */ }
+}
+
+async function updateSmtpStatus() {
+  try {
+    const cfg  = await API.settings.smtpStatus();
+    const dot  = document.getElementById('smtp-status-dot');
+    const text = document.getElementById('smtp-status-text');
+    const form = document.getElementById('smtp-connect-form');
+    const acts = document.getElementById('smtp-connected-actions');
+    if (!dot) return;
+
+    if (cfg.connected) {
+      dot.style.background  = '#22c55e';
+      text.textContent      = `Connected — sending as ${cfg.fromEmail || cfg.username}`;
+      text.style.color      = 'var(--text-primary)';
+      form.style.display    = 'none';
+      acts.style.display    = 'flex';
+      // Pre-fill form with saved (non-password) values for editing
+      document.getElementById('smtp-host').value       = cfg.host || '';
+      document.getElementById('smtp-port').value       = cfg.port || 587;
+      document.getElementById('smtp-username').value   = cfg.username || '';
+      document.getElementById('smtp-from-name').value  = cfg.fromName || '';
+      document.getElementById('smtp-from-email').value = cfg.fromEmail || '';
+      document.getElementById('smtp-imap-host').value  = cfg.imapHost || '';
+      document.getElementById('smtp-imap-port').value  = cfg.imapPort || 993;
+    } else {
+      dot.style.background  = 'var(--text-faint)';
+      text.textContent      = 'Not connected';
+      text.style.color      = 'var(--text-muted)';
+      form.style.display    = 'block';
+      acts.style.display    = 'none';
+    }
+  } catch { /* ignore */ }
+}
+
+function wireSmtpSettings() {
+  const connectBtn    = document.getElementById('connect-smtp-btn');
+  const disconnectBtn = document.getElementById('disconnect-smtp-btn');
+  if (!connectBtn) return;
+
+  connectBtn.addEventListener('click', async () => {
+    const data = {
+      host:      document.getElementById('smtp-host').value.trim(),
+      port:      parseInt(document.getElementById('smtp-port').value) || 587,
+      username:  document.getElementById('smtp-username').value.trim(),
+      password:  document.getElementById('smtp-password').value,
+      fromName:  document.getElementById('smtp-from-name').value.trim(),
+      fromEmail: document.getElementById('smtp-from-email').value.trim(),
+      imapHost:  document.getElementById('smtp-imap-host').value.trim(),
+      imapPort:  parseInt(document.getElementById('smtp-imap-port').value) || 993
+    };
+    if (!data.host || !data.username || !data.password) {
+      Toast.warning('Host, username and password are required'); return;
+    }
+    connectBtn.disabled = true; connectBtn.textContent = 'Testing connection…';
+    try {
+      await API.settings.smtpConnect(data);
+      Toast.success('SMTP/IMAP connected successfully');
+      updateSmtpStatus();
+    } catch (err) { Toast.error(err.message); }
+    finally { connectBtn.disabled = false; connectBtn.textContent = 'Connect & Test'; }
+  });
+
+  disconnectBtn && disconnectBtn.addEventListener('click', async () => {
+    if (!confirm('Disconnect SMTP/IMAP? You will need to use Gmail or Outlook to send emails.')) return;
+    try {
+      await API.settings.smtpDisconnect();
+      Toast.success('SMTP disconnected');
+      document.getElementById('smtp-password').value = '';
+      updateSmtpStatus();
+    } catch (err) { Toast.error(err.message); }
+  });
 }
 
 async function updateAIModelStatus() {

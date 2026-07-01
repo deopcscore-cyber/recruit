@@ -71,15 +71,15 @@ const API = {
 
   // AI
   ai: {
-    outreach(candidateId) { return API.post('/api/ai/outreach', { candidateId }); },
-    roleJD(candidateId) { return API.post('/api/ai/role-jd', { candidateId }); },
-    resumeReview(candidateId) { return API.post('/api/ai/resume-review', { candidateId }); },
-    victory(candidateId) { return API.post('/api/ai/victory', { candidateId }); },
-    reply(candidateId, lastMessage) { return API.post('/api/ai/reply', { candidateId, lastMessage }); },
-    followup(candidateId) { return API.post('/api/ai/followup', { candidateId }); },
+    outreach(candidateId, instructions) { return API.post('/api/ai/outreach', { candidateId, instructions }); },
+    roleJD(candidateId, instructions) { return API.post('/api/ai/role-jd', { candidateId, instructions }); },
+    resumeReview(candidateId, instructions) { return API.post('/api/ai/resume-review', { candidateId, instructions }); },
+    victory(candidateId, instructions) { return API.post('/api/ai/victory', { candidateId, instructions }); },
+    reply(candidateId, lastMessage, instructions) { return API.post('/api/ai/reply', { candidateId, lastMessage, instructions }); },
+    followup(candidateId, instructions) { return API.post('/api/ai/followup', { candidateId, instructions }); },
     score(candidateId)    { return API.post('/api/ai/score',    { candidateId }); },
-    proposal(candidateId) { return API.post('/api/ai/proposal', { candidateId }); },
-    rewriteResume(candidateId) { return API.post('/api/ai/rewrite-resume', { candidateId }); }
+    proposal(candidateId, instructions) { return API.post('/api/ai/proposal', { candidateId, instructions }); },
+    rewriteResume(candidateId, instructions) { return API.post('/api/ai/rewrite-resume', { candidateId, instructions }); }
   },
 
   // Bulk outreach queue (server-side)
@@ -111,7 +111,10 @@ const API = {
     outlookStatus() { return API.get('/api/settings/outlook-status'); },
     credits() { return API.get('/api/settings/credits'); },
     autopilotStatus() { return API.get('/api/settings/autopilot-status'); },
-    autopilotRunNow() { return API.post('/api/settings/autopilot/run-now'); }
+    autopilotRunNow() { return API.post('/api/settings/autopilot/run-now'); },
+    smtpStatus()      { return API.get('/api/settings/smtp'); },
+    smtpConnect(data) { return API.post('/api/settings/smtp', data); },
+    smtpDisconnect()  { return API.delete('/api/settings/smtp'); }
   },
 
   // Admin

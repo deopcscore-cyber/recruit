@@ -561,6 +561,68 @@
             </div>
           </div>
 
+          <!-- SMTP / IMAP (custom domain) -->
+          <div class="settings-card">
+            <div class="settings-card-header">
+              <h3>Custom Domain Email (SMTP / IMAP)</h3>
+              <span class="settings-card-hint">Use your own domain email — victory@yourdomain.com, info@firm.com, etc.</span>
+            </div>
+            <div class="settings-card-body">
+              <div id="smtp-status-indicator" style="display:flex;align-items:center;gap:8px;font-size:0.875rem;font-weight:500;margin-bottom:14px">
+                <span id="smtp-status-dot" style="width:8px;height:8px;border-radius:50%;background:var(--text-faint);display:inline-block;flex-shrink:0"></span>
+                <span id="smtp-status-text" style="color:var(--text-muted)">Not connected</span>
+              </div>
+
+              <div id="smtp-connect-form">
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
+                  <div class="form-group" style="margin:0">
+                    <label>SMTP Host</label>
+                    <input type="text" id="smtp-host" placeholder="smtp.yourdomain.com" />
+                  </div>
+                  <div class="form-group" style="margin:0">
+                    <label>SMTP Port</label>
+                    <input type="number" id="smtp-port" value="587" style="width:100%" />
+                  </div>
+                  <div class="form-group" style="margin:0">
+                    <label>Username / Email</label>
+                    <input type="text" id="smtp-username" placeholder="you@yourdomain.com" />
+                  </div>
+                  <div class="form-group" style="margin:0">
+                    <label>Password / App Password</label>
+                    <input type="password" id="smtp-password" placeholder="••••••••" />
+                  </div>
+                  <div class="form-group" style="margin:0">
+                    <label>From Name <span class="text-muted text-xs">(optional)</span></label>
+                    <input type="text" id="smtp-from-name" placeholder="Victory Akande" />
+                  </div>
+                  <div class="form-group" style="margin:0">
+                    <label>From Email <span class="text-muted text-xs">(if different from username)</span></label>
+                    <input type="text" id="smtp-from-email" placeholder="victory@firm.com" />
+                  </div>
+                </div>
+                <details style="margin-bottom:12px">
+                  <summary style="cursor:pointer;font-size:0.82rem;color:var(--text-muted)">IMAP settings (for receiving replies)</summary>
+                  <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px">
+                    <div class="form-group" style="margin:0">
+                      <label>IMAP Host <span class="text-muted text-xs">(defaults to SMTP host)</span></label>
+                      <input type="text" id="smtp-imap-host" placeholder="imap.yourdomain.com" />
+                    </div>
+                    <div class="form-group" style="margin:0">
+                      <label>IMAP Port</label>
+                      <input type="number" id="smtp-imap-port" value="993" style="width:100%" />
+                    </div>
+                  </div>
+                </details>
+                <button class="btn btn-primary btn-sm" id="connect-smtp-btn">Connect & Test</button>
+              </div>
+
+              <div id="smtp-connected-actions" style="display:none;gap:8px;flex-wrap:wrap;margin-bottom:10px">
+                <button class="btn btn-secondary btn-sm" id="disconnect-smtp-btn">Disconnect</button>
+              </div>
+              <p style="margin:8px 0 0;font-size:0.78rem;color:var(--text-muted);line-height:1.6">Works with any provider — Namecheap, GoDaddy, Hostinger, ProtonMail Bridge, Fastmail, etc. Uses SMTP to send and IMAP to receive replies.</p>
+            </div>
+          </div>
+
         </div><!-- /email panel -->
 
         <!-- ═══ SIGNATURE TAB ════════════════════════════════════════════════ -->

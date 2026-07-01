@@ -619,4 +619,85 @@ router.get('/ai-status', (req, res) => {
   res.json({ primary, fallback, hasAnthropic, hasOpenAI });
 });
 
+// ── SMTP / IMAP ───────────────────────────────────────────────────────────────
+
+// GET /api/settings/smtp
+router.get('/smtp', async (req, res) => {
+  try {
+    const user = await storage.getUserById(req.session.userId);
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    const cfg = user.smtp || {};
+    // Never return the password
+    res.json({
+      connected:  cfg.connected  || false,
+      host:       cfg.host       || '',
+      port:       cfg.port       || 587,
+      secure:     cfg.secure     || false,
+      username:   cfg.username   || '',
+      fromName:   cfg.fromName   || '',
+      fromEmail:  cfg.fromEmail  || '',
+      imapHost:   cfg.imapHost   || '',
+      imapPort:   cfg.imapPort   || 993,
+      imapSecure: cfg.imapSecure !== false
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/settings/smtp — save and test
+router.post('/smtp', async (req, res) => {
+  try {
+    const user = await storage.getUserById(req.session.userId);
+    if (!user) return res.status(404).json({ error: 'User not found' });
+
+    const { host, port, username, password, fromName, fromEmail, imapHost, imapPort } = req.body;
+    if (!host || !username || !password) {
+      return res.status(400).json({ error: 'host, username, and password are required' });
+    }
+
+    const smtpSvc = require('../services/smtp');
+    const cfg = {
+      host: host.trim(),
+      port: parseInt(port) || 587,
+      secure: parseInt(port) === 465,
+      username: username.trim(),
+      password,
+      fromName: (fromName || '').trim() || user.name || '',
+      fromEmail: (fromEmail || '').trim() || username.trim(),
+      imapHost: (imapHost || '').trim() || host.trim(),
+      imapPort: parseInt(imapPort) || 993,
+      imapSecure: true
+    };
+
+    // Test SMTP first
+    try { await smtpSvc.testSmtp(cfg); } catch (e) {
+      return res.status(400).json({ error: 'SMTP connection failed: ' + e.message });
+    }
+    // Test IMAP
+    try { await smtpSvc.testImap(cfg); } catch (e) {
+      return res.status(400).json({ error: 'IMAP connection failed: ' + e.message });
+    }
+
+    user.smtp = { ...cfg, connected: true };
+    await storage.saveUser(user);
+    res.json({ success: true, fromEmail: cfg.fromEmail });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// DELETE /api/settings/smtp
+router.delete('/smtp', async (req, res) => {
+  try {
+    const user = await storage.getUserById(req.session.userId);
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    delete user.smtp;
+    await storage.saveUser(user);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;

@@ -7,6 +7,7 @@ const { google } = require('googleapis');
 const gmailService   = require('../services/gmail');
 const zohoService    = require('../services/zoho');
 const outlookService = require('../services/outlook');
+const smtpService    = require('../services/smtp');
 
 function isZohoOAuthReady(user) {
   return !!(user.zoho?.connected && user.zoho.accessToken);
@@ -14,13 +15,17 @@ function isZohoOAuthReady(user) {
 function isOutlookReady(user) {
   return !!(user.outlook?.connected && user.outlook.accessToken);
 }
+function isSmtpReady(user) {
+  return !!(user.smtp?.connected && user.smtp.host && user.smtp.username && user.smtp.password);
+}
 function getEmailService(user) {
   if (isOutlookReady(user)) return outlookService;
   if (isZohoOAuthReady(user))  return zohoService;
+  if (isSmtpReady(user))    return smtpService;
   return gmailService;
 }
 function isEmailConnected(user) {
-  return !!(user.gmail?.connected) || isZohoOAuthReady(user) || isOutlookReady(user);
+  return !!(user.gmail?.connected) || isZohoOAuthReady(user) || isOutlookReady(user) || isSmtpReady(user);
 }
 const storage = require('../services/storage');
 const requireAuth = require('../middleware/auth');
@@ -197,6 +202,63 @@ router.post('/send', requireAuth, async (req, res) => {
       }
     } catch (fuErr) {
       console.error('Follow-up scheduling error:', fuErr.message);
+    }
+
+    // ── CC-to-auto-appear: if email CC's a consultant user, mirror candidate to their account ──
+    if (cc) {
+      try {
+        const ccEmail = cc.trim().toLowerCase();
+        const consultantUser = await storage.getUserByEmail(ccEmail);
+        if (consultantUser && consultantUser.id !== req.session.userId) {
+          const existing = await storage.getUserCandidates(consultantUser.id);
+          const alreadyThere = existing.some(c =>
+            (c.email || '').toLowerCase() === (candidate.email || '').toLowerCase() ||
+            c.referredFromId === candidate.id
+          );
+          if (!alreadyThere) {
+            const mirror = {
+              id: uuidv4(),
+              userId: consultantUser.id,
+              name: candidate.name,
+              email: candidate.email,
+              title: candidate.title,
+              company: candidate.company,
+              location: candidate.location,
+              summary: candidate.summary,
+              background: candidate.background,
+              career: candidate.career || [],
+              education: candidate.education || [],
+              linkedin: candidate.linkedin || '',
+              resume: candidate.resume || null,
+              stage: 'Introduced',
+              stepsCompleted: { introduced: true },
+              consultantPipeline: true,
+              referredFromId: candidate.id,
+              referredBy: {
+                userId: req.session.userId,
+                name: user.name || '',
+                email: user.email || '',
+                company: user.companyName || ''
+              },
+              thread: [{
+                id: uuidv4(),
+                direction: 'context',
+                subject: subject,
+                body: `[Referred by ${user.name || user.email}]\n\n${body}`,
+                timestamp: new Date().toISOString(),
+                read: true,
+                isIntroContext: true
+              }],
+              createdAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString()
+            };
+            await storage.saveCandidate(mirror);
+            console.log(`[CC] Mirrored ${candidate.name} → consultant ${consultantUser.email}`);
+          }
+        }
+      } catch (ccErr) {
+        console.error('[CC] Mirror failed:', ccErr.message);
+      }
     }
 
     return res.json({ success: true, gmailMessageId, gmailThreadId, candidate });
