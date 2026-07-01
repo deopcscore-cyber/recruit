@@ -2,18 +2,30 @@ const nodemailer = require('nodemailer');
 const { ImapFlow } = require('imapflow');
 const { simpleParser } = require('mailparser');
 const { v4: uuidv4 } = require('uuid');
+const dns = require('dns');
 const storage = require('./storage');
 const { buildRawEmailParts, buildSignatureHtml, buildSignaturePlainText } = require('./gmail');
 
+// Resolve hostname to IPv4 — Railway can't route IPv6 outbound
+async function resolveIPv4(hostname) {
+  // Skip resolution if it's already an IP address
+  if (/^\d+\.\d+\.\d+\.\d+$/.test(hostname)) return hostname;
+  try {
+    const addresses = await dns.promises.resolve4(hostname);
+    return addresses[0];
+  } catch {
+    return hostname; // fall back to original hostname
+  }
+}
+
 // ─── Transporter factory ──────────────────────────────────────────────────────
-function makeTransporter(cfg) {
+function makeTransporter(cfg, resolvedHost) {
   return nodemailer.createTransport({
-    host: cfg.host,
+    host: resolvedHost || cfg.host,
     port: cfg.port || 587,
     secure: cfg.port === 465 || cfg.secure === true,
     auth: { user: cfg.username, pass: cfg.password },
-    tls: { rejectUnauthorized: false },
-    family: 4  // force IPv4 — Railway servers can't route IPv6
+    tls: { rejectUnauthorized: false, servername: cfg.host }
   });
 }
 
@@ -23,7 +35,8 @@ async function sendEmail(userId, { to, cc, subject, body, inReplyTo, references,
   if (!user?.smtp?.host) throw new Error('SMTP not configured');
 
   const cfg = user.smtp;
-  const transporter = makeTransporter(cfg);
+  const resolvedHost = await resolveIPv4(cfg.host);
+  const transporter = makeTransporter(cfg, resolvedHost);
 
   const fromEmail = cfg.fromEmail || cfg.username;
   const fromName  = (cfg.fromName || user.name || '').trim();
@@ -58,14 +71,15 @@ async function fetchUnreadReplies(userId, candidateEmails = []) {
   const cfg = user.smtp;
   const imapHost = cfg.imapHost || cfg.host;
   const imapPort = cfg.imapPort || 993;
+  const resolvedImapHost = await resolveIPv4(imapHost);
 
   const client = new ImapFlow({
-    host: imapHost,
+    host: resolvedImapHost,
     port: imapPort,
     secure: imapPort === 993 || cfg.imapSecure !== false,
     auth: { user: cfg.username, pass: cfg.password },
     logger: false,
-    tls: { rejectUnauthorized: false }
+    tls: { rejectUnauthorized: false, servername: imapHost }
   });
 
   const emailSet = new Set(candidateEmails.map(e => e.toLowerCase()));
@@ -138,20 +152,22 @@ async function fetchUnreadReplies(userId, candidateEmails = []) {
 
 // ─── Test connections ─────────────────────────────────────────────────────────
 async function testSmtp(cfg) {
-  const transporter = makeTransporter(cfg);
+  const resolvedHost = await resolveIPv4(cfg.host);
+  const transporter = makeTransporter(cfg, resolvedHost);
   await transporter.verify();
 }
 
 async function testImap(cfg) {
   const imapHost = cfg.imapHost || cfg.host;
   const imapPort = cfg.imapPort || 993;
+  const resolvedImapHost = await resolveIPv4(imapHost);
   const client = new ImapFlow({
-    host: imapHost,
+    host: resolvedImapHost,
     port: imapPort,
     secure: imapPort === 993 || cfg.imapSecure !== false,
     auth: { user: cfg.username, pass: cfg.password },
     logger: false,
-    tls: { rejectUnauthorized: false }
+    tls: { rejectUnauthorized: false, servername: imapHost }
   });
   await client.connect();
   await client.logout();
