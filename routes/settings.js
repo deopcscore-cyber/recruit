@@ -672,11 +672,17 @@ router.post('/smtp', async (req, res) => {
 
     // Test SMTP first
     try { await smtpSvc.testSmtp(cfg); } catch (e) {
-      return res.status(400).json({ error: 'SMTP connection failed: ' + e.message });
+      const hint = /timeout|ETIMEDOUT|ECONNREFUSED/i.test(e.message)
+        ? ' — try port 587 instead of 465, or check that your host allows connections from cloud servers'
+        : '';
+      return res.status(400).json({ error: 'SMTP connection failed: ' + e.message + hint });
     }
     // Test IMAP
     try { await smtpSvc.testImap(cfg); } catch (e) {
-      return res.status(400).json({ error: 'IMAP connection failed: ' + e.message });
+      const hint = /timeout|ETIMEDOUT|ECONNREFUSED/i.test(e.message)
+        ? ' — try port 143 instead of 993, or check your IMAP host settings'
+        : '';
+      return res.status(400).json({ error: 'IMAP connection failed: ' + e.message + hint });
     }
 
     user.smtp = { ...cfg, connected: true };

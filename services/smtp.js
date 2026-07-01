@@ -25,7 +25,10 @@ function makeTransporter(cfg, resolvedHost) {
     port: cfg.port || 587,
     secure: cfg.port === 465 || cfg.secure === true,
     auth: { user: cfg.username, pass: cfg.password },
-    tls: { rejectUnauthorized: false, servername: cfg.host }
+    tls: { rejectUnauthorized: false, servername: cfg.host },
+    connectionTimeout: 15000,
+    greetingTimeout: 10000,
+    socketTimeout: 15000
   });
 }
 
