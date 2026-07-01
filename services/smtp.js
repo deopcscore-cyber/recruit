@@ -7,7 +7,7 @@ const { buildRawEmailParts, buildSignatureHtml, buildSignaturePlainText } = requ
 
 // ─── Transporter factory ──────────────────────────────────────────────────────
 function makeTransporter(cfg) {
-  return nodemailer.createTransporter({
+  return nodemailer.createTransport({
     host: cfg.host,
     port: cfg.port || 587,
     secure: cfg.port === 465 || cfg.secure === true,
