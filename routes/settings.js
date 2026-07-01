@@ -619,8 +619,8 @@ router.get('/credit-history', async (req, res) => {
 router.get('/ai-status', (req, res) => {
   const hasAnthropic = !!process.env.ANTHROPIC_API_KEY;
   const hasOpenAI    = !!process.env.OPENAI_API_KEY;
-  const primary   = hasAnthropic ? 'Claude (claude-sonnet-4-6)' : hasOpenAI ? 'GPT-4o-mini' : 'None';
-  const fallback  = hasAnthropic && hasOpenAI ? 'GPT-4o-mini (auto-switches when Claude credits run out)' : null;
+  const primary   = hasOpenAI ? 'GPT-4o-mini' : hasAnthropic ? 'Claude (claude-sonnet-4-6)' : 'None';
+  const fallback  = hasOpenAI && hasAnthropic ? 'Claude (auto-switches if OpenAI is unavailable)' : null;
   res.json({ primary, fallback, hasAnthropic, hasOpenAI });
 });
 

@@ -30,33 +30,30 @@ function calcCostCents(usage, provider) {
   return Math.ceil((inp * inRate + out * outRate) / 1_000_000);
 }
 
-// Try Claude first; on billing/credit exhaustion fall back to OpenAI
+// Try OpenAI first; fall back to Claude on error
 async function callAI(prompt, maxTokens) {
-  if (process.env.ANTHROPIC_API_KEY) {
+  if (process.env.OPENAI_API_KEY) {
     try {
-      const res = await anthropic.messages.create({
-        model: CLAUDE_MODEL, max_tokens: maxTokens,
+      const res = await getOpenAI().chat.completions.create({
+        model: OPENAI_MODEL, max_tokens: maxTokens,
         messages: [{ role: 'user', content: prompt }]
       });
-      return { content: res.content, usage: res.usage, provider: 'claude' };
+      return {
+        content: [{ text: res.choices[0].message.content }],
+        usage: { input_tokens: res.usage.prompt_tokens, output_tokens: res.usage.completion_tokens },
+        provider: 'openai'
+      };
     } catch (err) {
-      const billing = err.status === 402
-        || /credit|billing|quota|insufficien|overloaded/i.test(err.message || '');
-      if (!billing) throw err;
-      console.warn('[AI] Claude unavailable, switching to OpenAI:', err.message);
+      console.warn('[AI] OpenAI unavailable, switching to Claude:', err.message);
     }
   }
 
-  // OpenAI fallback — normalize response shape to match Anthropic's
-  const res = await getOpenAI().chat.completions.create({
-    model: OPENAI_MODEL, max_tokens: maxTokens,
+  // Claude fallback
+  const res = await anthropic.messages.create({
+    model: CLAUDE_MODEL, max_tokens: maxTokens,
     messages: [{ role: 'user', content: prompt }]
   });
-  return {
-    content: [{ text: res.choices[0].message.content }],
-    usage: { input_tokens: res.usage.prompt_tokens, output_tokens: res.usage.completion_tokens },
-    provider: 'openai'
-  };
+  return { content: res.content, usage: res.usage, provider: 'claude' };
 }
 
 // ─── Company context helper ───────────────────────────────────────────────────
