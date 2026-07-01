@@ -545,48 +545,61 @@ router.post('/autopilot/run-now', async (req, res) => {
     if ((user.credits || 0) <= 0) return res.status(402).json({ error: 'Out of credits — add credits to send.' });
 
     const candidates = await storage.getUserCandidates(req.session.userId);
+    const minMin = user.autopilot.minSpacingMin || 10;
+    const maxMin = user.autopilot.maxSpacingMin || 60;
 
-    // Force a fresh run: clear today's guard so planDailyRun re-plans, and send
-    // the first one in ~1 minute regardless of the configured window.
-    user.autopilot.lastRunDate = null;
-    const forced = { ...user.autopilot, windowStart: '00:00', windowEnd: '23:59', weekdaysOnly: false };
-    const plan = autopilot.planDailyRun({ ...user, autopilot: forced }, candidates, new Date());
+    // Find uncontacted imported candidates not already in a pending job
+    const pendingIds = new Set(
+      queueSvc.getJobsForUser(req.session.userId)
+        .filter(j => j.status === 'pending')
+        .map(j => j.candidateId)
+    );
+    const eligible = candidates.filter(c =>
+      c.email && !c.bounced
+      && (c.stage || 'Imported') === 'Imported'
+      && !(c.stepsCompleted || {}).outreach
+      && !(c.thread || []).some(m => m.direction === 'outbound')
+      && !pendingIds.has(c.id)
+    ).sort((a, b) => new Date(a.createdAt || 0) - new Date(b.createdAt || 0));
 
-    if (!plan.ran) {
-      return res.json({ queued: 0, reason: plan.reason, message: `Nothing to send (${plan.reason}).` });
-    }
-    if (!plan.jobs || !plan.jobs.length) {
-      // If jobs are already pending, advance them to fire now instead of their old scheduled time
-      const alreadyQueued = queueSvc.getJobsForUser(req.session.userId)
-        .filter(j => j.status === 'pending' && (j.type || 'outreach') === 'outreach').length;
-      if (alreadyQueued > 0) {
-        const minMin = user.autopilot.minSpacingMin || 10;
-        const maxMin = user.autopilot.maxSpacingMin || 60;
-        // Calculate window end so we don't schedule past it
-        const windowEndCfg = user.autopilot.windowEnd || '17:00';
-        const [eh, em] = windowEndCfg.split(':').map(Number);
-        const now2 = new Date();
-        const endLocal = new Date(now2); endLocal.setHours(eh, em, 0, 0);
-        if (endLocal.getTime() <= now2.getTime()) endLocal.setDate(endLocal.getDate() + 1);
-        queueSvc.advancePendingNow(req.session.userId, minMin, maxMin, endLocal.getTime());
-        return res.json({ queued: alreadyQueued, message: `${alreadyQueued} queued email${alreadyQueued > 1 ? 's' : ''} moved up — sending starts in ~1 minute, spaced ${minMin}–${maxMin} min apart.` });
-      }
-      return res.json({ queued: 0, reason: plan.reason || 'no_jobs', message: 'No uncontacted imported candidates left to email.' });
-    }
+    const cap = autopilot.effectiveCap(autopilot.getConfig(user), new Date());
 
-    // Clear any existing pending outreach so we don't double-queue
+    // Cancel stale pending jobs and re-queue everything starting right now
     queueSvc.cancelPendingForUser(req.session.userId, 'outreach');
-    queueSvc.addJobs(plan.jobs);
-    user.autopilot.lastRunDate = plan.lastRunDate;
+
+    const allEligible = candidates.filter(c =>
+      c.email && !c.bounced
+      && (c.stage || 'Imported') === 'Imported'
+      && !(c.stepsCompleted || {}).outreach
+      && !(c.thread || []).some(m => m.direction === 'outbound')
+    ).sort((a, b) => new Date(a.createdAt || 0) - new Date(b.createdAt || 0));
+
+    if (!allEligible.length) {
+      return res.json({ queued: 0, message: 'No uncontacted imported candidates left to email.' });
+    }
+
+    const batch = allEligible.slice(0, cap);
+    const { v4: uuid } = require('uuid');
+    let cursor = Date.now() + 60 * 1000; // first email in 1 minute
+    const jobs = batch.map((c, i) => {
+      if (i > 0) cursor += (minMin + Math.random() * (maxMin - minMin)) * 60 * 1000;
+      return {
+        id: uuid(), type: 'outreach', source: 'autopilot',
+        userId: req.session.userId, candidateId: c.id, candidateName: c.name,
+        subject: '', scheduledAt: new Date(cursor).toISOString(),
+        status: 'pending', createdAt: new Date().toISOString()
+      };
+    });
+
+    queueSvc.addJobs(jobs);
+    user.autopilot.lastRunDate = new Date().toISOString().slice(0, 10);
     await storage.saveUser(user);
 
-    const nextAt = plan.jobs.map(j => j.scheduledAt).sort()[0];
+    const nextAt = jobs[0].scheduledAt;
     return res.json({
-      queued: plan.jobs.length,
-      eligibleTotal: plan.eligibleTotal,
-      effectiveCap: plan.effectiveCap,
+      queued: jobs.length,
       nextAt,
-      message: `Queued ${plan.jobs.length} — first goes out around ${new Date(nextAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}.`
+      message: `Queued ${jobs.length} — first goes out in ~1 minute, spaced ${minMin}–${maxMin} min apart.`
     });
   } catch (err) {
     console.error('Autopilot run-now error:', err);
