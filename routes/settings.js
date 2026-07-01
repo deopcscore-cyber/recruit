@@ -645,13 +645,13 @@ router.get('/smtp', async (req, res) => {
   }
 });
 
-// POST /api/settings/smtp — save and test
+// POST /api/settings/smtp — save and optionally test
 router.post('/smtp', async (req, res) => {
   try {
     const user = await storage.getUserById(req.session.userId);
     if (!user) return res.status(404).json({ error: 'User not found' });
 
-    const { host, port, username, password, fromName, fromEmail, imapHost, imapPort } = req.body;
+    const { host, port, username, password, fromName, fromEmail, imapHost, imapPort, skipTest } = req.body;
     if (!host || !username || !password) {
       return res.status(400).json({ error: 'host, username, and password are required' });
     }
@@ -670,24 +670,36 @@ router.post('/smtp', async (req, res) => {
       imapSecure: true
     };
 
-    // Test SMTP first
-    try { await smtpSvc.testSmtp(cfg); } catch (e) {
-      const hint = /timeout|ETIMEDOUT|ECONNREFUSED/i.test(e.message)
-        ? ' — try port 587 instead of 465, or check that your host allows connections from cloud servers'
-        : '';
-      return res.status(400).json({ error: 'SMTP connection failed: ' + e.message + hint });
-    }
-    // Test IMAP
-    try { await smtpSvc.testImap(cfg); } catch (e) {
-      const hint = /timeout|ETIMEDOUT|ECONNREFUSED/i.test(e.message)
-        ? ' — try port 143 instead of 993, or check your IMAP host settings'
-        : '';
-      return res.status(400).json({ error: 'IMAP connection failed: ' + e.message + hint });
+    const warnings = [];
+
+    if (!skipTest) {
+      // Test SMTP
+      try { await smtpSvc.testSmtp(cfg); } catch (e) {
+        const isTimeout = /timeout|ETIMEDOUT|ECONNREFUSED/i.test(e.message);
+        if (isTimeout) {
+          // Save anyway but warn — cloud hosting often blocks test connections
+          // while actual email delivery still works
+          warnings.push('SMTP connection test timed out (your host may block test connections from cloud servers). Credentials saved — send a test email to verify.');
+        } else {
+          return res.status(400).json({ error: 'SMTP connection failed: ' + e.message });
+        }
+      }
+      // Test IMAP only if SMTP passed
+      if (warnings.length === 0) {
+        try { await smtpSvc.testImap(cfg); } catch (e) {
+          const isTimeout = /timeout|ETIMEDOUT|ECONNREFUSED/i.test(e.message);
+          if (isTimeout) {
+            warnings.push('IMAP connection test timed out. Credentials saved — reply fetching will attempt when you run Fetch Replies.');
+          } else {
+            return res.status(400).json({ error: 'IMAP connection failed: ' + e.message });
+          }
+        }
+      }
     }
 
     user.smtp = { ...cfg, connected: true };
     await storage.saveUser(user);
-    res.json({ success: true, fromEmail: cfg.fromEmail });
+    res.json({ success: true, fromEmail: cfg.fromEmail, warnings });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

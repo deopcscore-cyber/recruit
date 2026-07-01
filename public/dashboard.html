@@ -613,13 +613,16 @@
                     </div>
                   </div>
                 </details>
-                <button class="btn btn-primary btn-sm" id="connect-smtp-btn">Connect & Test</button>
+                <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+                  <button class="btn btn-primary btn-sm" id="connect-smtp-btn">Connect & Test</button>
+                  <button class="btn btn-ghost btn-sm" id="smtp-skip-test-btn" style="display:none;font-size:0.78rem;color:var(--text-muted)">Save without testing</button>
+                </div>
               </div>
 
               <div id="smtp-connected-actions" style="display:none;gap:8px;flex-wrap:wrap;margin-bottom:10px">
                 <button class="btn btn-secondary btn-sm" id="disconnect-smtp-btn">Disconnect</button>
               </div>
-              <p style="margin:8px 0 0;font-size:0.78rem;color:var(--text-muted);line-height:1.6">Works with any provider — Namecheap, GoDaddy, Hostinger, ProtonMail Bridge, Fastmail, etc. Uses SMTP to send and IMAP to receive replies.</p>
+              <p style="margin:8px 0 0;font-size:0.78rem;color:var(--text-muted);line-height:1.6">Works with any provider — Namecheap, GoDaddy, Hostinger, ProtonMail Bridge, Fastmail, etc. Uses SMTP to send and IMAP to receive replies. If connection test times out, use <em>Save without testing</em>.</p>
             </div>
           </div>
 

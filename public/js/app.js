@@ -3076,10 +3076,11 @@ async function updateSmtpStatus() {
 
 function wireSmtpSettings() {
   const connectBtn    = document.getElementById('connect-smtp-btn');
+  const skipTestBtn   = document.getElementById('smtp-skip-test-btn');
   const disconnectBtn = document.getElementById('disconnect-smtp-btn');
   if (!connectBtn) return;
 
-  connectBtn.addEventListener('click', async () => {
+  async function doSmtpConnect(skipTest) {
     const data = {
       host:      document.getElementById('smtp-host').value.trim(),
       port:      parseInt(document.getElementById('smtp-port').value) || 587,
@@ -3088,19 +3089,38 @@ function wireSmtpSettings() {
       fromName:  document.getElementById('smtp-from-name').value.trim(),
       fromEmail: document.getElementById('smtp-from-email').value.trim(),
       imapHost:  document.getElementById('smtp-imap-host').value.trim(),
-      imapPort:  parseInt(document.getElementById('smtp-imap-port').value) || 993
+      imapPort:  parseInt(document.getElementById('smtp-imap-port').value) || 993,
+      skipTest:  skipTest || false
     };
     if (!data.host || !data.username || !data.password) {
       Toast.warning('Host, username and password are required'); return;
     }
-    connectBtn.disabled = true; connectBtn.textContent = 'Testing connection…';
+    const btn = skipTest ? skipTestBtn : connectBtn;
+    btn.disabled = true;
+    btn.textContent = skipTest ? 'Saving…' : 'Testing connection…';
     try {
-      await API.settings.smtpConnect(data);
-      Toast.success('SMTP/IMAP connected successfully');
+      const result = await API.settings.smtpConnect(data);
+      if (result.warnings && result.warnings.length) {
+        result.warnings.forEach(w => Toast.warning(w, 8000));
+      } else {
+        Toast.success('SMTP/IMAP connected successfully');
+      }
       updateSmtpStatus();
-    } catch (err) { Toast.error(err.message); }
-    finally { connectBtn.disabled = false; connectBtn.textContent = 'Connect & Test'; }
-  });
+    } catch (err) {
+      Toast.error(err.message);
+      // Show skip-test button on timeout so user can save anyway
+      if (skipTestBtn && /timeout|timed out|cloud/i.test(err.message)) {
+        skipTestBtn.style.display = '';
+      }
+    }
+    finally {
+      connectBtn.disabled = false; connectBtn.textContent = 'Connect & Test';
+      if (skipTestBtn) { skipTestBtn.disabled = false; skipTestBtn.textContent = 'Save without testing'; }
+    }
+  }
+
+  connectBtn.addEventListener('click', () => doSmtpConnect(false));
+  skipTestBtn && skipTestBtn.addEventListener('click', () => doSmtpConnect(true));
 
   disconnectBtn && disconnectBtn.addEventListener('click', async () => {
     if (!confirm('Disconnect SMTP/IMAP? You will need to use Gmail or Outlook to send emails.')) return;
