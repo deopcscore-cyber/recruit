@@ -12,7 +12,8 @@ function makeTransporter(cfg) {
     port: cfg.port || 587,
     secure: cfg.port === 465 || cfg.secure === true,
     auth: { user: cfg.username, pass: cfg.password },
-    tls: { rejectUnauthorized: false }
+    tls: { rejectUnauthorized: false },
+    family: 4  // force IPv4 — Railway servers can't route IPv6
   });
 }
 
