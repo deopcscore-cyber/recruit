@@ -84,9 +84,7 @@ async function fetchUnreadReplies(userId, candidateEmails = []) {
         try {
           const parsed = await simpleParser(msg.source);
           const fromAddr = (parsed.from?.value?.[0]?.address || '').toLowerCase();
-
-          // Skip if not from a known candidate (when we have a candidate list)
-          if (emailSet.size > 0 && !emailSet.has(fromAddr)) continue;
+          const isMatched = emailSet.size === 0 || emailSet.has(fromAddr);
 
           const textBody = parsed.text || '';
           const messageId = (parsed.messageId || '').replace(/[<>]/g, '');
@@ -107,14 +105,18 @@ async function fetchUnreadReplies(userId, candidateEmails = []) {
 
           results.push({
             from:               parsed.from?.text || fromAddr,
+            fromEmail:          fromAddr,
+            fromName:           parsed.from?.value?.[0]?.name || '',
             subject:            parsed.subject || '',
             body:               textBody,
+            bodyPreview:        textBody.replace(/\s+/g, ' ').slice(0, 160),
             gmailMessageId:     messageId || String(msg.uid),
             gmailThreadId:      null,
             matchedCandidateId: null,
             timestamp:          parsed.date?.toISOString() || new Date().toISOString(),
             messageId,
-            resumeAttachment
+            resumeAttachment,
+            matched:            isMatched
           });
 
           // Mark as seen

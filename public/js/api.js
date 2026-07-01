@@ -66,7 +66,9 @@ const API = {
     teamDuplicateCheck(emails) { return API.post('/api/candidates/team-duplicate-check', { emails }); },
     analyzeDraft(subject, body) { return API.post('/api/email/analyze-draft', { subject, body }); },
     deliverabilityTest(opts) { return API.post('/api/email/deliverability-test', opts || {}); },
-    deliverabilityResult(threadId) { return API.get(`/api/email/deliverability-result/${threadId}`); }
+    deliverabilityResult(threadId) { return API.get(`/api/email/deliverability-result/${threadId}`); },
+    unknownLeads() { return API.get('/api/email/unknown-leads'); },
+    dismissUnknownLead(id) { return API.delete(`/api/email/unknown-leads/${id}`); }
   },
 
   // AI

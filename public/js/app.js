@@ -485,8 +485,16 @@ async function loadTodayPage() {
   const hotOpened = allCandidates.filter(c => c.opened && !(c.thread || []).some(m => m.direction === 'inbound'));
 
   // Async extras (best-effort)
-  let analytics = null, ap = null;
-  try { [analytics, ap] = await Promise.all([API.analytics.get().catch(() => null), API.settings.autopilotStatus().catch(() => null)]); } catch {}
+  let analytics = null, ap = null, unknownLeads = [];
+  try {
+    const [a, b, c] = await Promise.all([
+      API.analytics.get().catch(() => null),
+      API.settings.autopilotStatus().catch(() => null),
+      API.email.unknownLeads().catch(() => null)
+    ]);
+    analytics = a; ap = b;
+    unknownLeads = (c && c.leads) ? c.leads : [];
+  } catch {}
 
   const row = (c, meta) => `
     <div class="today-row" data-id="${c.id}" style="display:flex;align-items:center;gap:12px;padding:11px 14px;border:1px solid var(--border);border-radius:9px;background:var(--bg-card);cursor:pointer;transition:border-color .12s">
@@ -513,7 +521,7 @@ async function loadTodayPage() {
       </div>`;
   };
 
-  const allClear = replies.length + interested.length + followups.length === 0;
+  const allClear = replies.length + interested.length + followups.length === 0 && unknownLeads.length === 0;
 
   // Autopilot strip
   let apHtml = '';
@@ -556,6 +564,31 @@ async function loadTodayPage() {
     ${section('🔥', 'Interested — move these forward', interested, '#ef4444', c => 'Interested')}
     ${section('⏰', 'Follow-ups due', followups, '#d97706', c => c.followUpDate ? formatRelativeHL(c.followUpDate) : 'No reply yet')}
     ${hotOpened.length ? `<div style="margin-bottom:22px"><a id="today-hotleads-link" style="font-size:0.84rem;color:var(--blue);cursor:pointer">⚡ ${hotOpened.length} opened your email but haven't replied →</a></div>` : ''}
+    ${unknownLeads.length ? `
+      <div style="margin-bottom:22px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+          <span style="font-size:1.1rem">📬</span>
+          <h3 style="margin:0;font-size:0.95rem;color:var(--text)">New leads from inbox</h3>
+          <span style="background:#0891b21f;color:#0891b2;font-size:0.74rem;font-weight:700;border-radius:10px;padding:1px 9px">${unknownLeads.length}</span>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:8px">
+          ${unknownLeads.slice(0, 8).map(lead => `
+            <div class="unknown-lead-row" data-lead-id="${escapeHtml(lead.id)}" style="display:flex;align-items:center;gap:12px;padding:11px 14px;border:1px solid var(--border);border-radius:9px;background:var(--bg-card)">
+              <div style="flex:1;min-width:0">
+                <div style="font-weight:600;color:var(--text);font-size:0.9rem">${escapeHtml(lead.fromName || lead.fromEmail)}</div>
+                <div style="font-size:0.78rem;color:var(--text-muted);margin-top:1px">${escapeHtml(lead.fromEmail)}</div>
+                <div style="font-size:0.78rem;color:var(--text-muted);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><em>${escapeHtml(lead.subject)}</em></div>
+                ${lead.bodyPreview ? `<div style="font-size:0.76rem;color:var(--text-faint);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(lead.bodyPreview)}</div>` : ''}
+              </div>
+              <div style="display:flex;flex-direction:column;gap:6px;flex-shrink:0;align-items:flex-end">
+                <div style="font-size:0.74rem;color:var(--text-faint)">${formatRelativeHL(lead.timestamp)}</div>
+                <button class="add-lead-btn btn btn-primary btn-sm" data-lead-id="${escapeHtml(lead.id)}" style="font-size:0.75rem;padding:3px 10px">+ Add as candidate</button>
+                <button class="dismiss-lead-btn btn btn-ghost btn-sm" data-lead-id="${escapeHtml(lead.id)}" style="font-size:0.72rem;padding:2px 8px;color:var(--text-muted)">Dismiss</button>
+              </div>
+            </div>`).join('')}
+          ${unknownLeads.length > 8 ? `<div style="font-size:0.78rem;color:var(--text-muted);padding:4px 2px">+ ${unknownLeads.length - 8} more</div>` : ''}
+        </div>
+      </div>` : ''}
     ${statsHtml}
   `;
 
@@ -577,6 +610,50 @@ async function loadTodayPage() {
   });
   const hl = el.querySelector('#today-hotleads-link');
   if (hl) hl.addEventListener('click', () => navigateTo('hotleads'));
+
+  // Unknown lead buttons
+  el.querySelectorAll('.add-lead-btn').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      const leadId = btn.dataset.leadId;
+      const lead = unknownLeads.find(l => l.id === leadId);
+      if (!lead) return;
+      btn.disabled = true;
+      btn.textContent = 'Adding...';
+      try {
+        const created = await API.candidates.create({
+          name: lead.fromName || lead.fromEmail,
+          email: lead.fromEmail,
+          stage: 'Imported',
+          notes: `Emailed: ${lead.subject}\n\n${lead.bodyPreview || ''}`
+        });
+        await API.email.dismissUnknownLead(leadId);
+        allCandidates.push(created);
+        loadTodayPage();
+        openCandidateModal(created, currentUser,
+          updated => { const i = allCandidates.findIndex(x => x.id === updated.id); if (i >= 0) allCandidates[i] = updated; loadTodayPage(); },
+          id => { allCandidates = allCandidates.filter(x => x.id !== id); loadTodayPage(); }
+        );
+      } catch (err) {
+        btn.disabled = false;
+        btn.textContent = '+ Add as candidate';
+        alert('Failed to add: ' + err.message);
+      }
+    });
+  });
+
+  el.querySelectorAll('.dismiss-lead-btn').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      const leadId = btn.dataset.leadId;
+      btn.disabled = true;
+      try {
+        await API.email.dismissUnknownLead(leadId);
+        unknownLeads.splice(unknownLeads.findIndex(l => l.id === leadId), 1);
+        loadTodayPage();
+      } catch { btn.disabled = false; }
+    });
+  });
 }
 
 function loadHotLeadsPage() {

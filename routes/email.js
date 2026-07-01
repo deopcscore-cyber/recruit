@@ -290,6 +290,7 @@ router.post('/fetch', requireAuth, async (req, res) => {
     const emailSvc = getEmailService(user);
     const replies = await emailSvc.fetchUnreadReplies(req.session.userId, candidateEmails, candidateThreadIds);
     const updatedCandidates = [];
+    const newUnknownLeads = [];
 
     for (const reply of replies) {
       // Match candidate: prefer direct thread ID match, fall back to email address
@@ -307,7 +308,27 @@ router.post('/fetch', requireAuth, async (req, res) => {
       if (!candidate && reply.body) {
         candidate = candidates.find(c => c.trackingId && reply.body.includes(`/track/${c.trackingId}`));
       }
-      if (!candidate) continue;
+      if (!candidate) {
+        // Collect unknown senders from SMTP as potential new leads
+        if (reply.matched === false) {
+          const fromAddr2 = extractEmail(reply.from);
+          const isBounceSender = /mailer-daemon|postmaster@|mail delivery subsystem|delivery subsystem/i.test(reply.from || '');
+          const isBounceSubject = /undeliverable|delivery (has )?fail|delivery status notification|returned mail|address not found|user unknown|no such user/i.test(reply.subject || '');
+          if (!isBounceSender && !isBounceSubject && fromAddr2) {
+            newUnknownLeads.push({
+              id: uuidv4(),
+              from: reply.from || '',
+              fromEmail: fromAddr2,
+              fromName: reply.fromName || extractName(reply.from),
+              subject: reply.subject || '',
+              bodyPreview: reply.bodyPreview || (reply.body || '').replace(/\s+/g, ' ').slice(0, 160),
+              timestamp: reply.timestamp || new Date().toISOString(),
+              messageId: reply.messageId || reply.gmailMessageId || ''
+            });
+          }
+        }
+        continue;
+      }
 
       // Bounce detection — sender is MAILER-DAEMON/postmaster, or subject signals NDR
       const fromAddr = (reply.from || '').toLowerCase();
@@ -448,10 +469,28 @@ router.post('/fetch', requireAuth, async (req, res) => {
       updatedCandidates.push(candidate);
     }
 
+    // Merge new unknown leads (dedup by messageId / fromEmail+subject)
+    let unknownLeadsAdded = 0;
+    if (newUnknownLeads.length > 0) {
+      const existing = user.unknownLeads || [];
+      const existingIds = new Set(existing.map(l => l.messageId).filter(Boolean));
+      const existingKeys = new Set(existing.map(l => `${(l.fromEmail || '').toLowerCase()}::${(l.subject || '').toLowerCase()}`));
+      for (const lead of newUnknownLeads) {
+        const key = `${(lead.fromEmail || '').toLowerCase()}::${(lead.subject || '').toLowerCase()}`;
+        if (!existingIds.has(lead.messageId) && !existingKeys.has(key)) {
+          existing.push(lead);
+          unknownLeadsAdded++;
+        }
+      }
+      user.unknownLeads = existing;
+      await storage.saveUser(user);
+    }
+
     return res.json({
       fetched: replies.length,
       matched: updatedCandidates.length,
       candidates: updatedCandidates,
+      unknownLeads: unknownLeadsAdded,
       // debug info — shows raw fetched emails so we can diagnose matching failures
       debug: replies.map(r => ({ from: r.from, subject: r.subject, ts: r.timestamp }))
     });
@@ -730,6 +769,37 @@ function extractEmail(from) {
   if (from.includes('@')) return from.trim();
   return null;
 }
+
+function extractName(from) {
+  if (!from) return '';
+  const match = from.match(/^"?([^"<]+)"?\s*</);
+  if (match) return match[1].trim();
+  return '';
+}
+
+// GET /api/email/unknown-leads — return inbox leads not yet matched to any candidate
+router.get('/unknown-leads', requireAuth, async (req, res) => {
+  try {
+    const user = await storage.getUserById(req.session.userId);
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    return res.json({ leads: user.unknownLeads || [] });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// DELETE /api/email/unknown-leads/:id — dismiss a lead (user ignored it or added as candidate)
+router.delete('/unknown-leads/:id', requireAuth, async (req, res) => {
+  try {
+    const user = await storage.getUserById(req.session.userId);
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    user.unknownLeads = (user.unknownLeads || []).filter(l => l.id !== req.params.id);
+    await storage.saveUser(user);
+    return res.json({ ok: true });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
 
 // GET /api/email/zoho-debug — probe all regions and URL formats to diagnose fetch issues
 router.get('/zoho-debug', requireAuth, async (req, res) => {
