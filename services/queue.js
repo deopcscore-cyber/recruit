@@ -86,7 +86,8 @@ function updateJob(jobId, updates) {
 
 // Advance all pending outreach jobs for a user to fire now,
 // re-spacing them using the user's configured min/max spacing (with jitter).
-function advancePendingNow(userId, minSpacingMin = 10, maxSpacingMin = 60) {
+// Jobs that would fall outside the send window are cancelled (they'll re-queue tomorrow).
+function advancePendingNow(userId, minSpacingMin = 10, maxSpacingMin = 60, windowEnd = null) {
   const queue = read();
   const minMs = minSpacingMin * 60 * 1000;
   const maxMs = maxSpacingMin * 60 * 1000;
@@ -97,11 +98,15 @@ function advancePendingNow(userId, minSpacingMin = 10, maxSpacingMin = 60) {
     .sort((a, b) => new Date(a.scheduledAt) - new Date(b.scheduledAt))
     .forEach((j, i) => {
       if (i > 0) {
-        // random gap within configured range
         const gap = minMs + Math.random() * (maxMs - minMs);
         cursor += gap;
       }
-      j.scheduledAt = new Date(cursor).toISOString();
+      // Cancel jobs that would go past the window end — autopilot will re-queue tomorrow
+      if (windowEnd && cursor > windowEnd) {
+        j.status = 'cancelled';
+      } else {
+        j.scheduledAt = new Date(cursor).toISOString();
+      }
       changed = true;
     });
   if (changed) write(queue);

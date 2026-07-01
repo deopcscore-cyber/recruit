@@ -562,7 +562,13 @@ router.post('/autopilot/run-now', async (req, res) => {
       if (alreadyQueued > 0) {
         const minMin = user.autopilot.minSpacingMin || 10;
         const maxMin = user.autopilot.maxSpacingMin || 60;
-        queueSvc.advancePendingNow(req.session.userId, minMin, maxMin);
+        // Calculate window end so we don't schedule past it
+        const windowEndCfg = user.autopilot.windowEnd || '17:00';
+        const [eh, em] = windowEndCfg.split(':').map(Number);
+        const now2 = new Date();
+        const endLocal = new Date(now2); endLocal.setHours(eh, em, 0, 0);
+        if (endLocal.getTime() <= now2.getTime()) endLocal.setDate(endLocal.getDate() + 1);
+        queueSvc.advancePendingNow(req.session.userId, minMin, maxMin, endLocal.getTime());
         return res.json({ queued: alreadyQueued, message: `${alreadyQueued} queued email${alreadyQueued > 1 ? 's' : ''} moved up — sending starts in ~1 minute, spaced ${minMin}–${maxMin} min apart.` });
       }
       return res.json({ queued: 0, reason: plan.reason || 'no_jobs', message: 'No uncontacted imported candidates left to email.' });
