@@ -36,7 +36,30 @@ function appendInstructions(prompt, instructions) {
 }
 
 // Try OpenAI first; fall back to Claude on error
-async function callAI(prompt, maxTokens) {
+async function callAI(prompt, maxTokens, preferClaude = false) {
+  if (preferClaude) {
+    // Claude first, OpenAI fallback — used for career consultant profiles
+    try {
+      const res = await anthropic.messages.create({
+        model: CLAUDE_MODEL, max_tokens: maxTokens,
+        messages: [{ role: 'user', content: prompt }]
+      });
+      return { content: res.content, usage: res.usage, provider: 'claude' };
+    } catch (err) {
+      console.warn('[AI] Claude unavailable, switching to OpenAI:', err.message);
+    }
+    const res = await getOpenAI().chat.completions.create({
+      model: OPENAI_MODEL, max_tokens: maxTokens,
+      messages: [{ role: 'user', content: prompt }]
+    });
+    return {
+      content: [{ text: res.choices[0].message.content }],
+      usage: { input_tokens: res.usage.prompt_tokens, output_tokens: res.usage.completion_tokens },
+      provider: 'openai'
+    };
+  }
+
+  // Default: OpenAI first, Claude fallback
   if (process.env.OPENAI_API_KEY) {
     try {
       const res = await getOpenAI().chat.completions.create({
@@ -53,7 +76,6 @@ async function callAI(prompt, maxTokens) {
     }
   }
 
-  // Claude fallback
   const res = await anthropic.messages.create({
     model: CLAUDE_MODEL, max_tokens: maxTokens,
     messages: [{ role: 'user', content: prompt }]
@@ -268,7 +290,7 @@ Output ONLY valid JSON. No markdown, no extra text.
 
 Write the email now:`;
 
-  const response = await callAI(appendInstructions(prompt, instructions), 900);
+  const response = await callAI(appendInstructions(prompt, instructions), 900, true);
   const raw = response.content[0].text.trim();
   const costCents = calcCostCents(response.usage, response.provider);
   try {
@@ -705,7 +727,7 @@ RULES:
 
 Write the proposal email now:`;
 
-  const response = await callAI(appendInstructions(prompt, instructions), 900);
+  const response = await callAI(appendInstructions(prompt, instructions), 900, true);
   return { text: response.content[0].text.trim(), costCents: calcCostCents(response.usage, response.provider) };
 }
 
@@ -807,7 +829,7 @@ CRITICAL RULES:
 
 Write the reply now:`;
 
-  const response = await callAI(appendInstructions(prompt, instructions), 900);
+  const response = await callAI(appendInstructions(prompt, instructions), 900, true);
   return { text: response.content[0].text.trim(), costCents: calcCostCents(response.usage, response.provider) };
 }
 
@@ -862,7 +884,7 @@ Also return a brief internal analysis. Output as valid JSON:
 
 Return ONLY the JSON. No markdown, no extra text.`;
 
-  const response = await callAI(appendInstructions(prompt, instructions), 2000);
+  const response = await callAI(appendInstructions(prompt, instructions), 2000, true);
 
   const text = response.content[0].text.trim();
   const costCents = calcCostCents(response.usage, response.provider);
