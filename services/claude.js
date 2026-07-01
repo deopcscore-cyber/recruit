@@ -889,12 +889,12 @@ async function _generateRecruiterReply(candidate, user, lastMessage, instruction
   let nextStep = '';
   if (!stepsCompleted.roleJD) {
     nextStep = `NEXT PIPELINE STEP: Get the candidate to review the Role JD.
-After fully addressing whatever they said, transition toward: "Before we schedule time to connect, I'd like to kindly ask you to review the job description below. Please take a moment to consider whether this role aligns with your vision and career aspirations. If you feel it's a meaningful match, we can proceed and get a call on the calendar. If not, no worries at all, I'd be happy to explore other opportunities within the organization that may better align with where you want to make your impact. Looking forward to your feedback." Then add [ROLE DESCRIPTION BELOW] as a placeholder on its own line.
-IMPORTANT: Only pivot to the JD if the candidate's message has been properly addressed first. If they asked a question or raised a concern, answer it completely before pivoting.`;
+After fully addressing whatever they said, transition toward: "I'd like to ask you to take a look at the role description below. Please take a moment to consider whether this aligns with your vision and where you want to make your next move. If it resonates, just reply and let me know your thoughts — even a one-line reaction helps me understand where you stand. If not, no worries at all." Then add [ROLE DESCRIPTION BELOW] as a placeholder on its own line.
+IMPORTANT: Do NOT mention calls, phone conversations, or scheduling. Keep everything email-based. Only pivot to the JD if the candidate's message has been properly addressed first.`;
   } else if (!stepsCompleted.resumeRequested) {
     nextStep = `NEXT PIPELINE STEP: Ask for their resume.
-After fully addressing whatever they said, transition toward requesting their resume — warmly, with an explanation: "I would genuinely love to jump on a call with you and explore this further. Before we schedule time, though, there are a few details I'd like to review first so I can make sure we position you as strongly as possible going into the process. Could you send me your current resume when you have a moment?" Then explain WHY: there's an early screening step, strong candidates get overlooked when their background isn't communicated clearly on paper. Reference their specific background (companies, roles). End: "Once I've had the chance to review it, I can advise you on next steps very quickly and we can move straight into scheduling time to connect."
-IMPORTANT: Only pivot to the resume request if the candidate's message has been properly addressed first.`;
+After fully addressing whatever they said, transition toward requesting their resume — warmly, with an explanation: "Before we go any further, there are a few details I'd like to review so I can make sure we position you as strongly as possible going into this. Could you send me your current resume when you have a moment?" Then explain WHY: strong candidates get overlooked when their background isn't communicated clearly on paper — you want to make sure theirs lands the way it should. Reference their specific background (companies, roles). End: "Once I've had the chance to review it, I'll come back to you quickly with my thoughts and next steps."
+IMPORTANT: Do NOT mention calls, phone conversations, or scheduling. Only pivot to the resume request if the candidate's message has been properly addressed first.`;
   } else if (stepsCompleted.resumeReceived && !stepsCompleted.reviewSent) {
     nextStep = `NEXT PIPELINE STEP: Acknowledge resume receipt and ask two clarifying questions.
 If they just sent their resume or are referencing it, structure your reply as: (1) "I've successfully received your resume, thank you for sending that over." (2) Say you're reviewing against specific requirements. (3) Ask exactly two bullet questions before finalizing feedback: Recency (is this the most current version?) and Comprehensive Scope (does it fully capture their ownership at [company], home care leadership, and other key accomplishments — reference their actual background). (4) "I ask because backgrounds like yours are often much stronger in practice than what initially appears on paper." (5) "Once you confirm those details, I'll finalize my feedback."
@@ -939,7 +939,7 @@ If they said they're not actively looking:
 → "I completely understand, and I genuinely appreciate your honesty. Most of the people I reach out to aren't actively looking — that's actually part of why I'm reaching out to you specifically. I'm not asking you to make any decisions today, just asking you to take a look at what we're working on and see if it's worth a conversation." Then move to next step.
 
 If they asked about the team, culture, or what the role looks like day-to-day:
-→ Speak to ${company.name}'s mission-driven culture, the collaborative and data-driven environment, and the fact that this is a company where operational leaders have genuine influence. Draw on this context: "${company.pitch}" Don't overpromise specifics — say "I'd love to walk you through the team structure and what the day-to-day looks like on a call." Then move to next step.
+→ Speak to ${company.name}'s mission-driven culture, the collaborative and data-driven environment, and the fact that this is a company where operational leaders have genuine influence. Draw on this context: "${company.pitch}" Don't overpromise specifics — say "I'd love to share more about the team structure and what the day-to-day looks like — reply here and I'll walk you through it." Then move to next step.
 
 If they raised a concern about location, travel, or relocation:
 → Acknowledge it directly, note that ${company.name} has flexible hybrid/remote arrangements and works with candidates on logistics. "Let's not let location be a blocker before we've even had a chance to talk — these are details we can work through together." Then move to next step.
@@ -962,6 +962,7 @@ CRITICAL RULES:
 - NEVER skip over a question, concern, or hesitation to get to the template
 - NEVER open with "Thank you for getting back to me" or any generic filler
 - NEVER sound like a script — sound like a real person who read their message carefully
+- NEVER mention calls, phone conversations, scheduling, or "jumping on a call" UNLESS the candidate has explicitly said they want to talk on the phone — keep everything email-based until they bring it up
 - Reference their actual background (specific companies, roles, words they used) throughout
 - Keep it focused — don't try to do too much in one email
 - Signature at the end: ${user.name}\n${recruiterTitle} at ${company.name}
