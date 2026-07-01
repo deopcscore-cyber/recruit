@@ -309,8 +309,8 @@ router.post('/fetch', requireAuth, async (req, res) => {
         candidate = candidates.find(c => c.trackingId && reply.body.includes(`/track/${c.trackingId}`));
       }
       if (!candidate) {
-        // Collect unknown senders from SMTP as potential new leads (user will dismiss what they don't want)
-        if (reply.matched === false) {
+        // Only collect unknown leads for career consultants — recruiters don't receive inbound cold email
+        if (reply.matched === false && user.userType === 'career_consultant') {
           const fromAddr2 = extractEmail(reply.from);
           if (fromAddr2) {
             newUnknownLeads.push({

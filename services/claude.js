@@ -204,6 +204,7 @@ Output ONLY valid JSON. No markdown, no commentary.`;
 // "I see your potential — let me help you get to a better position."
 async function _generateCareerConsultantOutreach(candidate, user, instructions) {
   const candidateInfo   = formatCandidateContext(candidate);
+  const styleInfo       = formatUserStyle(user);
   const consultantName  = user.name || 'Your Consultant';
   const consultantTitle = (user.title && user.title.trim()) || 'Career Strategist';
   const practiseName    = (user.companyName || '').trim() || '';
@@ -213,7 +214,7 @@ async function _generateCareerConsultantOutreach(candidate, user, instructions) 
   const prompt = `You are ${consultantName}${practiseName ? ' at ' + practiseName : ''}. You are writing a cold outreach email to a professional whose LinkedIn profile you came across. You noticed something specific about their career story that most people would miss.
 
 IMPORTANT CONTEXT: This is a FIRST email. You are NOT pitching a service in this email. You are NOT mentioning career coaching, resume writing, or anything you sell. You are simply a person who read their profile carefully and noticed something worth sharing. The goal of this email is ONE thing: get a reply.
-
+${styleInfo ? '\nSTYLE GUIDANCE:\n' + styleInfo + '\n' : ''}
 CANDIDATE INFORMATION:
 ${candidateInfo}
 
@@ -572,6 +573,7 @@ Return ONLY the JSON object, no markdown, no extra text.`;
 
 async function generateVictoryEmail(candidate, user, instructions) {
   const candidateInfo   = formatCandidateContext(candidate);
+  const styleInfo       = formatUserStyle(user);
   const company         = getCompanyContext(user);
   const recruiterTitle  = (user.title && user.title.trim()) ? user.title.trim() : 'Senior Talent Acquisition Coordinator';
   const firstName       = (candidate.name || '').split(' ')[0];
@@ -582,6 +584,7 @@ async function generateVictoryEmail(candidate, user, instructions) {
   const ccLine       = partnerEmail ? ` (CC: ${partnerEmail})` : '';
 
   const prompt = `You are ${user.name}, ${recruiterTitle}${company.name ? ' at ' + company.name : ''}. The candidate agreed to be introduced to ${partnerName}, a resume consultant you work with. You are writing the introduction email — addressed to the candidate but CC'ing ${partnerName}${ccLine}. This email must feel warm, specific, and urgent.
+${styleInfo ? '\nSTYLE GUIDANCE:\n' + styleInfo + '\n' : ''}
 
 GOLD STANDARD EXAMPLE (follow this exact structure):
 ---
@@ -649,6 +652,7 @@ async function generateResumeFeedback(candidate, user, instructions) {
 
 async function generateProposal(candidate, user, instructions) {
   const candidateInfo  = formatCandidateContext(candidate);
+  const styleInfo      = formatUserStyle(user);
   const consultantName  = user.name || 'Career Consultant';
   const consultantTitle = (user.title && user.title.trim()) || 'Career Strategist';
   const practiseName    = (user.companyName || '').trim() || '';
@@ -662,7 +666,7 @@ async function generateProposal(candidate, user, instructions) {
 3. Reviewed their resume and sent them honest, detailed feedback
 
 ${firstName} has responded positively and wants to understand what working together looks like.
-
+${styleInfo ? '\nSTYLE GUIDANCE:\n' + styleInfo + '\n' : ''}
 YOUR SERVICE:
 ${servicePitch}
 
@@ -708,6 +712,7 @@ Write the proposal email now:`;
 // ── Career Consultant Reply ───────────────────────────────────────────────────
 async function _generateCareerConsultantReply(candidate, user, lastMessage, instructions) {
   const candidateInfo   = formatCandidateContext(candidate);
+  const styleInfo       = formatUserStyle(user);
   const consultantName  = user.name || 'Career Consultant';
   const consultantTitle = (user.title && user.title.trim()) || 'Career Strategist';
   const practiseName    = (user.companyName || '').trim() || '';
@@ -757,7 +762,7 @@ Address what they said directly. If they're asking about next steps, point towar
 
 YOUR SERVICE:
 ${servicePitch}
-
+${styleInfo ? '\nSTYLE GUIDANCE:\n' + styleInfo + '\n' : ''}
 CANDIDATE INFORMATION:
 ${candidateInfo}
 
@@ -874,6 +879,7 @@ Return ONLY the JSON. No markdown, no extra text.`;
 // ── Recruiter Reply (original, renamed) ──────────────────────────────────────
 async function _generateRecruiterReply(candidate, user, lastMessage, instructions) {
   const candidateInfo = formatCandidateContext(candidate);
+  const styleInfo     = formatUserStyle(user);
   const company = getCompanyContext(user);
   const recruiterTitle = (user.title && user.title.trim()) ? user.title.trim() : 'Senior Talent Acquisition Coordinator';
 
@@ -908,7 +914,7 @@ IMPORTANT: Only use this structure if the resume is what they're talking about. 
 
 1. FIRST — Read and respond directly to what the candidate actually said in their last message
 2. THEN — Once their message is addressed, naturally transition to the next pipeline step
-
+${styleInfo ? '\nSTYLE GUIDANCE:\n' + styleInfo + '\n' : ''}
 CANDIDATE INFORMATION:
 ${candidateInfo}
 
@@ -978,6 +984,7 @@ Write the reply now:`;
 
 async function generateFollowUp(candidate, user, instructions) {
   const candidateInfo = formatCandidateContext(candidate);
+  const styleInfo     = formatUserStyle(user);
   const company = getCompanyContext(user);
   const recruiterTitle = (user.title && user.title.trim()) ? user.title.trim() : 'Senior Talent Acquisition Coordinator';
   const firstName = (candidate.name || '').split(' ')[0];
@@ -1053,7 +1060,7 @@ ${lastMsg}`;
   }
 
   const prompt = `You are ${user.name}, ${recruiterTitle} at ${company.name}, writing a follow-up email to an executive candidate. Follow-up emails must be SHORT (under 150 words in the body), warm, human, and specific to this person's background. Never sound like a template. Never use hollow phrases like "I hope this message finds you well" or "just touching base."
-
+${styleInfo ? '\nSTYLE GUIDANCE:\n' + styleInfo + '\n' : ''}
 CANDIDATE INFORMATION:
 ${candidateInfo}
 
