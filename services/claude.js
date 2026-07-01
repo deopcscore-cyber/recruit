@@ -30,6 +30,11 @@ function calcCostCents(usage, provider) {
   return Math.ceil((inp * inRate + out * outRate) / 1_000_000);
 }
 
+function appendInstructions(prompt, instructions) {
+  if (!instructions || !instructions.trim()) return prompt;
+  return prompt + '\n\nADDITIONAL INSTRUCTIONS FROM SENDER: ' + instructions.trim();
+}
+
 // Try OpenAI first; fall back to Claude on error
 async function callAI(prompt, maxTokens) {
   if (process.env.OPENAI_API_KEY) {
@@ -138,23 +143,23 @@ function voiceGuidance(user) {
   return `\nWRITE IN THE SENDER'S VOICE. Below is a sample of how this sender naturally writes — match its tone, warmth, personality and rhythm. Do NOT copy its words or its structure (this message has a different purpose); just sound like the same person wrote it:\n"""\n${s.slice(0, 1500)}\n"""\n`;
 }
 
-async function generateOutreach(candidate, user) {
+async function generateOutreach(candidate, user, instructions) {
   // If the user provided a sample of how their outreach should look, match that
   // style instead of a built-in template — keeps every user's emails distinct.
   if (user.outreachSample && user.outreachSample.trim().length > 40) {
-    return _generateFromSample(candidate, user);
+    return _generateFromSample(candidate, user, instructions);
   }
   // Route to the right prompt based on the user's account type
   const type = user.userType || 'recruiter_company';
-  if (type === 'career_consultant')      return _generateCareerConsultantOutreach(candidate, user);
-  if (type === 'recruiter_independent')  return _generateIndependentRecruiterOutreach(candidate, user);
-  return _generateCompanyRecruiterOutreach(candidate, user);
+  if (type === 'career_consultant')      return _generateCareerConsultantOutreach(candidate, user, instructions);
+  if (type === 'recruiter_independent')  return _generateIndependentRecruiterOutreach(candidate, user, instructions);
+  return _generateCompanyRecruiterOutreach(candidate, user, instructions);
 }
 
 // ── Style-matched outreach from a user-provided sample ────────────────────────
 // The user pastes an example email they like; we mirror its voice, structure,
 // tone and length, but write fresh content for THIS candidate.
-async function _generateFromSample(candidate, user) {
+async function _generateFromSample(candidate, user, instructions) {
   const candidateInfo = formatCandidateContext(candidate);
   const company       = getCompanyContext(user);
   const firstName     = (candidate.name || '').trim().split(/\s+/)[0];
@@ -183,7 +188,7 @@ RULES:
 
 Output ONLY valid JSON. No markdown, no commentary.`;
 
-  const response = await callAI(prompt, 1000);
+  const response = await callAI(appendInstructions(prompt, instructions), 1000);
   const raw = response.content[0].text.trim();
   const costCents = calcCostCents(response.usage, response.provider);
   try {
@@ -197,7 +202,7 @@ Output ONLY valid JSON. No markdown, no commentary.`;
 
 // ── Career Consultant outreach ────────────────────────────────────────────────
 // "I see your potential — let me help you get to a better position."
-async function _generateCareerConsultantOutreach(candidate, user) {
+async function _generateCareerConsultantOutreach(candidate, user, instructions) {
   const candidateInfo   = formatCandidateContext(candidate);
   const consultantName  = user.name || 'Your Consultant';
   const consultantTitle = (user.title && user.title.trim()) || 'Career Strategist';
@@ -262,7 +267,7 @@ Output ONLY valid JSON. No markdown, no extra text.
 
 Write the email now:`;
 
-  const response = await callAI(prompt, 900);
+  const response = await callAI(appendInstructions(prompt, instructions), 900);
   const raw = response.content[0].text.trim();
   const costCents = calcCostCents(response.usage, response.provider);
   try {
@@ -277,7 +282,7 @@ Write the email now:`;
 
 // ── Independent Recruiter outreach ────────────────────────────────────────────
 // "I place talent across multiple companies — your background fits what my clients need."
-async function _generateIndependentRecruiterOutreach(candidate, user) {
+async function _generateIndependentRecruiterOutreach(candidate, user, instructions) {
   const candidateInfo = formatCandidateContext(candidate);
   const styleInfo     = formatUserStyle(user);
   const recruiterName = user.name || 'Recruiter';
@@ -330,12 +335,12 @@ RULES:
 
 Write the email now:`;
 
-  const response = await callAI(prompt, 800);
+  const response = await callAI(appendInstructions(prompt, instructions), 800);
   return { text: response.content[0].text.trim(), costCents: calcCostCents(response.usage, response.provider) };
 }
 
 // ── Company Recruiter outreach (original) ─────────────────────────────────────
-async function _generateCompanyRecruiterOutreach(candidate, user) {
+async function _generateCompanyRecruiterOutreach(candidate, user, instructions) {
   const candidateInfo = formatCandidateContext(candidate);
   const styleInfo = formatUserStyle(user);
   const company = getCompanyContext(user);
@@ -403,12 +408,12 @@ CRITICAL RULES:
 
 Write the outreach email now:`;
 
-  const response = await callAI(prompt, 800);
+  const response = await callAI(appendInstructions(prompt, instructions), 800);
 
   return { text: response.content[0].text.trim(), costCents: calcCostCents(response.usage, response.provider) };
 }
 
-async function generateRoleJD(candidate, user) {
+async function generateRoleJD(candidate, user, instructions) {
   const candidateInfo = formatCandidateContext(candidate);
   const styleInfo = formatUserStyle(user);
   const company = getCompanyContext(user);
@@ -471,7 +476,7 @@ Make every section compelling and specific — not generic boilerplate. Referenc
 
 Write the role description now:`;
 
-  const response = await callAI(prompt, 3000);
+  const response = await callAI(appendInstructions(prompt, instructions), 3000);
 
   return { text: response.content[0].text.trim(), costCents: calcCostCents(response.usage, response.provider) };
 }
@@ -565,7 +570,7 @@ Return ONLY the JSON object, no markdown, no extra text.`;
   }
 }
 
-async function generateVictoryEmail(candidate, user) {
+async function generateVictoryEmail(candidate, user, instructions) {
   const candidateInfo   = formatCandidateContext(candidate);
   const company         = getCompanyContext(user);
   const recruiterTitle  = (user.title && user.title.trim()) ? user.title.trim() : 'Senior Talent Acquisition Coordinator';
@@ -624,16 +629,16 @@ Output ONLY the email body (starting with "Dear ${firstName},"). No subject line
 
 Write the introduction email now:`;
 
-  const response = await callAI(prompt, 800);
+  const response = await callAI(appendInstructions(prompt, instructions), 800);
 
   return { text: response.content[0].text.trim(), costCents: calcCostCents(response.usage, response.provider) };
 }
 
 // ── Route by userType ─────────────────────────────────────────────────────────
-async function generateReply(candidate, user, lastMessage) {
+async function generateReply(candidate, user, lastMessage, instructions) {
   const type = user.userType || 'recruiter_company';
-  if (type === 'career_consultant') return _generateCareerConsultantReply(candidate, user, lastMessage);
-  return _generateRecruiterReply(candidate, user, lastMessage);
+  if (type === 'career_consultant') return _generateCareerConsultantReply(candidate, user, lastMessage, instructions);
+  return _generateRecruiterReply(candidate, user, lastMessage, instructions);
 }
 
 async function generateResumeFeedback(candidate, user) {
@@ -642,7 +647,7 @@ async function generateResumeFeedback(candidate, user) {
   return _generateRecruiterResumeFeedback(candidate, user);
 }
 
-async function generateProposal(candidate, user) {
+async function generateProposal(candidate, user, instructions) {
   const candidateInfo  = formatCandidateContext(candidate);
   const consultantName  = user.name || 'Career Consultant';
   const consultantTitle = (user.title && user.title.trim()) || 'Career Strategist';
@@ -696,12 +701,12 @@ RULES:
 
 Write the proposal email now:`;
 
-  const response = await callAI(prompt, 900);
+  const response = await callAI(appendInstructions(prompt, instructions), 900);
   return { text: response.content[0].text.trim(), costCents: calcCostCents(response.usage, response.provider) };
 }
 
 // ── Career Consultant Reply ───────────────────────────────────────────────────
-async function _generateCareerConsultantReply(candidate, user, lastMessage) {
+async function _generateCareerConsultantReply(candidate, user, lastMessage, instructions) {
   const candidateInfo   = formatCandidateContext(candidate);
   const consultantName  = user.name || 'Career Consultant';
   const consultantTitle = (user.title && user.title.trim()) || 'Career Strategist';
@@ -797,7 +802,7 @@ CRITICAL RULES:
 
 Write the reply now:`;
 
-  const response = await callAI(prompt, 900);
+  const response = await callAI(appendInstructions(prompt, instructions), 900);
   return { text: response.content[0].text.trim(), costCents: calcCostCents(response.usage, response.provider) };
 }
 
@@ -866,7 +871,7 @@ Return ONLY the JSON. No markdown, no extra text.`;
 }
 
 // ── Recruiter Reply (original, renamed) ──────────────────────────────────────
-async function _generateRecruiterReply(candidate, user, lastMessage) {
+async function _generateRecruiterReply(candidate, user, lastMessage, instructions) {
   const candidateInfo = formatCandidateContext(candidate);
   const company = getCompanyContext(user);
   const recruiterTitle = (user.title && user.title.trim()) ? user.title.trim() : 'Senior Talent Acquisition Coordinator';
@@ -964,12 +969,12 @@ CRITICAL RULES:
 
 Write the reply now:`;
 
-  const response = await callAI(prompt, 900);
+  const response = await callAI(appendInstructions(prompt, instructions), 900);
 
   return { text: response.content[0].text.trim(), costCents: calcCostCents(response.usage, response.provider) };
 }
 
-async function generateFollowUp(candidate, user) {
+async function generateFollowUp(candidate, user, instructions) {
   const candidateInfo = formatCandidateContext(candidate);
   const company = getCompanyContext(user);
   const recruiterTitle = (user.title && user.title.trim()) ? user.title.trim() : 'Senior Talent Acquisition Coordinator';
@@ -1061,7 +1066,7 @@ CRITICAL RULES:
 
 Write the follow-up email now:`;
 
-  const response = await callAI(prompt, 600);
+  const response = await callAI(appendInstructions(prompt, instructions), 600);
 
   return { text: response.content[0].text.trim(), costCents: calcCostCents(response.usage, response.provider) };
 }
