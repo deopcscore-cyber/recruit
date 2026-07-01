@@ -560,8 +560,10 @@ router.post('/autopilot/run-now', async (req, res) => {
       const alreadyQueued = queueSvc.getJobsForUser(req.session.userId)
         .filter(j => j.status === 'pending' && (j.type || 'outreach') === 'outreach').length;
       if (alreadyQueued > 0) {
-        queueSvc.advancePendingNow(req.session.userId);
-        return res.json({ queued: alreadyQueued, message: `${alreadyQueued} queued email${alreadyQueued > 1 ? 's' : ''} moved up — sending starts in ~1 minute.` });
+        const minMin = user.autopilot.minSpacingMin || 10;
+        const maxMin = user.autopilot.maxSpacingMin || 60;
+        queueSvc.advancePendingNow(req.session.userId, minMin, maxMin);
+        return res.json({ queued: alreadyQueued, message: `${alreadyQueued} queued email${alreadyQueued > 1 ? 's' : ''} moved up — sending starts in ~1 minute, spaced ${minMin}–${maxMin} min apart.` });
       }
       return res.json({ queued: 0, reason: plan.reason || 'no_jobs', message: 'No uncontacted imported candidates left to email.' });
     }

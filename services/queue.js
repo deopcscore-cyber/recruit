@@ -84,16 +84,24 @@ function updateJob(jobId, updates) {
   if (job) { Object.assign(job, updates); write(queue); }
 }
 
-// Advance all pending outreach jobs for a user to fire within the next few minutes
-function advancePendingNow(userId) {
+// Advance all pending outreach jobs for a user to fire now,
+// re-spacing them using the user's configured min/max spacing (with jitter).
+function advancePendingNow(userId, minSpacingMin = 10, maxSpacingMin = 60) {
   const queue = read();
+  const minMs = minSpacingMin * 60 * 1000;
+  const maxMs = maxSpacingMin * 60 * 1000;
+  let cursor = Date.now() + 60 * 1000; // first one in 1 minute
   let changed = false;
-  const now = Date.now();
   queue
     .filter(j => j.userId === userId && j.status === 'pending' && (j.type || 'outreach') === 'outreach')
     .sort((a, b) => new Date(a.scheduledAt) - new Date(b.scheduledAt))
     .forEach((j, i) => {
-      j.scheduledAt = new Date(now + i * 60 * 1000).toISOString(); // stagger 1 min apart
+      if (i > 0) {
+        // random gap within configured range
+        const gap = minMs + Math.random() * (maxMs - minMs);
+        cursor += gap;
+      }
+      j.scheduledAt = new Date(cursor).toISOString();
       changed = true;
     });
   if (changed) write(queue);
