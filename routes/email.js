@@ -467,14 +467,18 @@ router.post('/fetch', requireAuth, async (req, res) => {
       updatedCandidates.push(candidate);
     }
 
-    // Merge new unknown leads (dedup by messageId / fromEmail+subject)
+    // Merge new unknown leads (dedup by messageId / fromEmail+subject,
+    // and skip anything the user already dismissed — messages stay in the
+    // inbox unmarked, so they resurface on every fetch otherwise)
     let unknownLeadsAdded = 0;
     if (newUnknownLeads.length > 0) {
       const existing = user.unknownLeads || [];
+      const dismissed = new Set(user.dismissedLeadKeys || []);
       const existingIds = new Set(existing.map(l => l.messageId).filter(Boolean));
       const existingKeys = new Set(existing.map(l => `${(l.fromEmail || '').toLowerCase()}::${(l.subject || '').toLowerCase()}`));
       for (const lead of newUnknownLeads) {
         const key = `${(lead.fromEmail || '').toLowerCase()}::${(lead.subject || '').toLowerCase()}`;
+        if (dismissed.has(lead.messageId) || dismissed.has(key)) continue;
         if (!existingIds.has(lead.messageId) && !existingKeys.has(key)) {
           existing.push(lead);
           unknownLeadsAdded++;
@@ -791,7 +795,13 @@ router.delete('/unknown-leads/:id', requireAuth, async (req, res) => {
   try {
     const user = await storage.getUserById(req.session.userId);
     if (!user) return res.status(404).json({ error: 'User not found' });
+    const lead = (user.unknownLeads || []).find(l => l.id === req.params.id);
     user.unknownLeads = (user.unknownLeads || []).filter(l => l.id !== req.params.id);
+    // Remember the dismissal so the same email doesn't resurface on the next fetch
+    if (lead) {
+      const key = lead.messageId || `${(lead.fromEmail || '').toLowerCase()}::${(lead.subject || '').toLowerCase()}`;
+      user.dismissedLeadKeys = [...(user.dismissedLeadKeys || []), key].slice(-500);
+    }
     await storage.saveUser(user);
     return res.json({ ok: true });
   } catch (err) {

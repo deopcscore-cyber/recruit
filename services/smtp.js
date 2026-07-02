@@ -134,20 +134,33 @@ async function fetchUnreadReplies(userId, candidateEmails = []) {
   const emailSet = new Set(candidateEmails.map(e => e.toLowerCase()));
   const results  = [];
 
+  const selfAddrs = new Set(
+    [cfg.username, cfg.fromEmail].filter(Boolean).map(e => e.toLowerCase())
+  );
+
   try {
     await client.connect();
     const lock = await client.getMailboxLock('INBOX');
     try {
-      // Search for unseen messages in the last 60 days
+      // All messages from the last 14 days — NOT just unseen, because the
+      // consultant reading mail in webmail/phone marks it seen and we'd miss
+      // it. Dedupe against already-imported messages happens in the route.
       const since = new Date();
-      since.setDate(since.getDate() - 60);
-      const uids = await client.search({ seen: false, since }, { uid: true });
+      since.setDate(since.getDate() - 14);
+      const uids = await client.search({ since }, { uid: true });
       if (!uids.length) return results;
 
-      for await (const msg of client.fetch(uids, { source: true }, { uid: true })) {
+      // Most recent 100 to bound memory/time on busy inboxes.
+      // fetchAll (not a streaming for-await loop) — issuing other commands
+      // mid-stream deadlocks ImapFlow.
+      const recentUids = uids.slice(-100);
+      const messages = await client.fetchAll(recentUids, { source: true }, { uid: true });
+
+      for (const msg of messages) {
         try {
           const parsed = await simpleParser(msg.source);
           const fromAddr = (parsed.from?.value?.[0]?.address || '').toLowerCase();
+          if (selfAddrs.has(fromAddr)) continue; // own sent mail looped back
           const isMatched = emailSet.size === 0 || emailSet.has(fromAddr);
 
           const textBody = parsed.text || '';
@@ -182,9 +195,6 @@ async function fetchUnreadReplies(userId, candidateEmails = []) {
             resumeAttachment,
             matched:            isMatched
           });
-
-          // Mark as seen
-          await client.messageFlagsAdd({ uid: msg.uid }, ['\\Seen'], { uid: true });
         } catch (parseErr) {
           console.error('[IMAP] parse error:', parseErr.message);
         }
