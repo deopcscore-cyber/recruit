@@ -71,7 +71,8 @@ async function sendEmail(userId, { to, cc, subject, body, inReplyTo, references,
 
   const sigHtml  = buildSignatureHtml(user);
   const sigPlain = buildSignaturePlainText(user);
-  const { html, text } = buildRawEmailParts({ body, signatureHtml: sigHtml, signaturePlain: sigPlain, trackingId });
+  const { BASE_URL } = require('../config');
+  const { plainText: text, htmlBody: html } = buildRawEmailParts({ body, signatureHtml: sigHtml, signaturePlain: sigPlain, trackingId, baseUrl: BASE_URL });
 
   // Prefer Resend when the platform key is set — Railway blocks raw SMTP
   if (process.env.RESEND_API_KEY) {
