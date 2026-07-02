@@ -230,7 +230,7 @@ router.post('/send', requireAuth, async (req, res) => {
               education: candidate.education || [],
               linkedin: candidate.linkedin || '',
               resume: candidate.resume || null,
-              stage: 'Introduced',
+              stage: 'Imported',
               stepsCompleted: { introduced: true },
               consultantPipeline: true,
               referredFromId: candidate.id,

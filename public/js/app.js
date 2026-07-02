@@ -1512,8 +1512,9 @@ async function loadAnalyticsPage() {
     const stageRows = Object.entries(d.stageCounts).map(([s,n]) => {
       const color = STAGE_COLORS_LOCAL[s] || '#64748b';
       const pct = d.total > 0 ? Math.round((n/d.total)*100) : 0;
+      const label = typeof stageLabel === 'function' ? stageLabel(s) : s;
       return `<div style="display:flex;align-items:center;gap:12px;padding:8px 0;border-bottom:1px solid var(--border)">
-        <span style="width:160px;font-size:0.85rem;color:var(--text)">${s}</span>
+        <span style="width:160px;font-size:0.85rem;color:var(--text)">${label}</span>
         <div style="flex:1;background:var(--border);border-radius:4px;height:8px">
           <div style="width:${pct}%;background:${color};height:8px;border-radius:4px;transition:width .4s"></div>
         </div>

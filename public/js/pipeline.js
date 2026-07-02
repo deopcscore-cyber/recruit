@@ -57,6 +57,29 @@ const STAGE_COLORS = {
   'Closed': '#374151'
 };
 
+// Display labels vary by user type — stored stage values never change, only
+// what the user sees. Consultants sell a service, they don't run interviews.
+const STAGE_LABELS_CONSULTANT = {
+  'Imported': 'Leads',
+  'Resume Received': 'Feedback Stage',
+  'Interviewing': 'Proposal Sent',
+  'Closed': 'Closed'
+};
+
+function stageLabel(stage) {
+  const u = (typeof currentUser !== 'undefined' && currentUser) || window.currentUser;
+  if (u && u.userType === 'career_consultant') {
+    return STAGE_LABELS_CONSULTANT[stage] || stage;
+  }
+  return stage;
+}
+
+// Candidates can carry legacy/foreign stage values (e.g. 'Introduced' from a
+// CC referral) — normalize to a real column so they never vanish off the board
+function normalizeStage(stage) {
+  return STAGES.includes(stage) ? stage : 'Imported';
+}
+
 // Tabs vary by user type — career consultants skip Role & JD, rename Intro → Proposal
 const TABS_RECRUITER = [
   { key: 'profile',   label: 'Profile',    step: null },
@@ -210,8 +233,9 @@ function stripQuotedText(text) {
 }
 
 function stageBadge(stage) {
-  const color = STAGE_COLORS[stage] || '#64748b';
-  return `<span class="stage-badge" style="background:${color}20;color:${color};border-color:${color}40">${stage || 'Imported'}</span>`;
+  const norm = normalizeStage(stage || 'Imported');
+  const color = STAGE_COLORS[norm] || '#64748b';
+  return `<span class="stage-badge" style="background:${color}20;color:${color};border-color:${color}40">${stageLabel(norm)}</span>`;
 }
 
 // Auto-classified reply sentiment → coloured chip on candidate cards
@@ -238,11 +262,11 @@ function renderMetricsBar(candidates) {
   const bar = document.getElementById('metrics-bar');
   if (!bar) return;
   bar.innerHTML = STAGES.map(s => {
-    const count = candidates.filter(c => (c.stage || 'Imported') === s).length;
+    const count = candidates.filter(c => normalizeStage(c.stage || 'Imported') === s).length;
     const color = STAGE_COLORS[s];
-    return `<div class="metric-pill" style="border-color:${color}40;background:${color}12" title="${s}">
+    return `<div class="metric-pill" style="border-color:${color}40;background:${color}12" title="${stageLabel(s)}">
       <span class="metric-count" style="color:${color}">${count}</span>
-      <span class="metric-label">${s}</span>
+      <span class="metric-label">${stageLabel(s)}</span>
     </div>`;
   }).join('');
 }
@@ -255,7 +279,7 @@ function renderPipelineBoard(candidates, onCardClick) {
   board.innerHTML = '';
 
   STAGES.forEach(stage => {
-    const stageCandidates = candidates.filter(c => (c.stage || 'Imported') === stage);
+    const stageCandidates = candidates.filter(c => normalizeStage(c.stage || 'Imported') === stage);
     const col = document.createElement('div');
     col.className = 'pipeline-column';
     col.dataset.stage = stage;
@@ -263,7 +287,7 @@ function renderPipelineBoard(candidates, onCardClick) {
 
     col.innerHTML = `
       <div class="column-header" style="border-top:3px solid ${color}">
-        <span class="column-title">${stage}</span>
+        <span class="column-title">${stageLabel(stage)}</span>
         <span class="column-count" style="background:${color}20;color:${color}">${stageCandidates.length}</span>
       </div>
       <div class="column-cards" id="col-${stage.replace(/\s+/g,'-')}"></div>
@@ -543,10 +567,11 @@ function refreshModal() {
     if (name) name.textContent = _modalCandidate.name || 'Unknown';
     const stageBadgeEl = overlay.querySelector('.stage-badge');
     if (stageBadgeEl) {
-      const color = STAGE_COLORS[_modalCandidate.stage] || '#64748b';
+      const normStage = normalizeStage(_modalCandidate.stage || 'Imported');
+      const color = STAGE_COLORS[normStage] || '#64748b';
       stageBadgeEl.style.background = color + '20';
       stageBadgeEl.style.color = color;
-      stageBadgeEl.textContent = _modalCandidate.stage || 'Imported';
+      stageBadgeEl.textContent = stageLabel(normStage);
     }
   });
 }
@@ -647,7 +672,7 @@ function renderProfileTab(body) {
       <div class="tab-section">
         <h4>Pipeline Stage</h4>
         <select id="pf-stage" style="width:auto">
-          ${STAGES.map(s => `<option value="${s}" ${(c.stage||'Imported')===s?'selected':''}>${s}</option>`).join('')}
+          ${STAGES.map(s => `<option value="${s}" ${normalizeStage(c.stage||'Imported')===s?'selected':''}>${stageLabel(s)}</option>`).join('')}
         </select>
       </div>
 
