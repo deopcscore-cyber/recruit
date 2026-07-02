@@ -32,15 +32,39 @@ function makeTransporter(cfg, resolvedHost) {
   });
 }
 
-// ─── Send via SMTP ────────────────────────────────────────────────────────────
+// ─── Send via Resend HTTP API ─────────────────────────────────────────────────
+// Shared platform Resend account (RESEND_API_KEY env var). Railway blocks
+// outbound SMTP ports, so custom-domain sending routes over HTTPS instead.
+// The consultant's domain must be verified in the Resend account.
+async function sendViaResend({ from, to, cc, subject, html, text, inReplyTo, references }) {
+  const axios = require('axios');
+  const headers = {};
+  if (inReplyTo)  headers['In-Reply-To'] = `<${inReplyTo.replace(/[<>]/g, '')}>`;
+  if (references) headers['References']  = references;
+
+  const payload = {
+    from,
+    to: [to],
+    subject,
+    html,
+    text,
+    ...(cc ? { cc: [cc] } : {}),
+    ...(Object.keys(headers).length ? { headers } : {})
+  };
+
+  const res = await axios.post('https://api.resend.com/emails', payload, {
+    headers: { Authorization: `Bearer ${process.env.RESEND_API_KEY}`, 'Content-Type': 'application/json' },
+    timeout: 15000
+  });
+  return res.data?.id || uuidv4();
+}
+
+// ─── Send via SMTP (or Resend when configured) ────────────────────────────────
 async function sendEmail(userId, { to, cc, subject, body, inReplyTo, references, trackingId }) {
   const user = await storage.getUserById(userId);
   if (!user?.smtp?.host) throw new Error('SMTP not configured');
 
   const cfg = user.smtp;
-  const resolvedHost = await resolveIPv4(cfg.host);
-  const transporter = makeTransporter(cfg, resolvedHost);
-
   const fromEmail = cfg.fromEmail || cfg.username;
   const fromName  = (cfg.fromName || user.name || '').trim();
   const from      = fromName ? `"${fromName}" <${fromEmail}>` : fromEmail;
@@ -48,6 +72,20 @@ async function sendEmail(userId, { to, cc, subject, body, inReplyTo, references,
   const sigHtml  = buildSignatureHtml(user);
   const sigPlain = buildSignaturePlainText(user);
   const { html, text } = buildRawEmailParts({ body, signatureHtml: sigHtml, signaturePlain: sigPlain, trackingId });
+
+  // Prefer Resend when the platform key is set — Railway blocks raw SMTP
+  if (process.env.RESEND_API_KEY) {
+    try {
+      const id = await sendViaResend({ from, to, cc, subject, html, text, inReplyTo, references });
+      return { gmailMessageId: id, gmailThreadId: null, smtpMessageId: id };
+    } catch (err) {
+      const detail = err.response?.data?.message || err.message;
+      console.warn('[Resend] send failed, falling back to raw SMTP:', detail);
+    }
+  }
+
+  const resolvedHost = await resolveIPv4(cfg.host);
+  const transporter = makeTransporter(cfg, resolvedHost);
 
   const mail = {
     from,
@@ -155,6 +193,29 @@ async function fetchUnreadReplies(userId, candidateEmails = []) {
 
 // ─── Test connections ─────────────────────────────────────────────────────────
 async function testSmtp(cfg) {
+  // With a platform Resend key, sending goes over HTTPS — validate the
+  // sender's domain is verified in the Resend account instead of SMTP
+  if (process.env.RESEND_API_KEY) {
+    const axios = require('axios');
+    const fromEmail = cfg.fromEmail || cfg.username;
+    const domain = (fromEmail.split('@')[1] || '').toLowerCase();
+    if (!domain) throw new Error('Invalid from email: ' + fromEmail);
+
+    const res = await axios.get('https://api.resend.com/domains', {
+      headers: { Authorization: `Bearer ${process.env.RESEND_API_KEY}` },
+      timeout: 10000
+    });
+    const domains = res.data?.data || [];
+    const match = domains.find(d => (d.name || '').toLowerCase() === domain);
+    if (!match) {
+      throw new Error(`The domain "${domain}" has not been added to the email platform yet — contact your administrator to add it`);
+    }
+    if (match.status !== 'verified') {
+      throw new Error(`The domain "${domain}" is added but not verified yet (status: ${match.status}) — DNS records may still be propagating`);
+    }
+    return;
+  }
+
   const resolvedHost = await resolveIPv4(cfg.host);
   const transporter = makeTransporter(cfg, resolvedHost);
   await transporter.verify();
