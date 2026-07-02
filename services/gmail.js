@@ -521,6 +521,7 @@ function parseEmailBody(payload) {
 // ─── Email Signature Builder ───────────────────────────────────────────────────
 function buildSignatureHtml(user) {
   const sig  = user.signature || {};
+  if (!sig.enabled) return '';
   const name = (user.name || '').trim();
   if (!name) return '';
 
@@ -597,9 +598,10 @@ function buildSignatureHtml(user) {
 }
 
 function buildSignaturePlainText(user) {
+  const sig     = user.signature || {};
+  if (!sig.enabled) return '';
   const name    = (user.name || '').trim();
   if (!name) return '';
-  const sig     = user.signature || {};
   const title   = (user.title || '').trim();
   const company = (user.companyName || '').trim();
   const lines   = ['', '—', name];
