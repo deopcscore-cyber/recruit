@@ -79,7 +79,14 @@ async function sendEmail(userId, { to, cc, subject, body, inReplyTo, references,
       const id = await sendViaResend({ from, to, cc, subject, html, text, inReplyTo, references });
       return { gmailMessageId: id, gmailThreadId: null, smtpMessageId: id };
     } catch (err) {
+      const status = err.response?.status;
       const detail = err.response?.data?.message || err.message;
+      // 4xx = the API rejected us (bad key, unverified domain) — raw SMTP is
+      // blocked on this host anyway, so surface the real error instead of
+      // falling through to a confusing timeout
+      if (status >= 400 && status < 500) {
+        throw new Error('Email platform rejected the send: ' + detail);
+      }
       console.warn('[Resend] send failed, falling back to raw SMTP:', detail);
     }
   }
@@ -201,10 +208,24 @@ async function testSmtp(cfg) {
     const domain = (fromEmail.split('@')[1] || '').toLowerCase();
     if (!domain) throw new Error('Invalid from email: ' + fromEmail);
 
-    const res = await axios.get('https://api.resend.com/domains', {
-      headers: { Authorization: `Bearer ${process.env.RESEND_API_KEY}` },
-      timeout: 10000
-    });
+    let res;
+    try {
+      res = await axios.get('https://api.resend.com/domains', {
+        headers: { Authorization: `Bearer ${process.env.RESEND_API_KEY}` },
+        timeout: 10000
+      });
+    } catch (err) {
+      const data = err.response?.data || {};
+      const msg = data.message || err.message;
+      // Sending-only keys can't list domains — that's fine, sending is all we need.
+      // Domain verification will surface on the first real send if it's wrong.
+      if (/restricted/i.test(data.name || '') || /restricted|only send/i.test(msg)) return;
+      if (err.response?.status === 401) {
+        throw new Error('Email platform API key is invalid — check the RESEND_API_KEY value (no extra spaces) and redeploy');
+      }
+      throw new Error('Email platform check failed: ' + msg);
+    }
+
     const domains = res.data?.data || [];
     const match = domains.find(d => (d.name || '').toLowerCase() === domain);
     if (!match) {
