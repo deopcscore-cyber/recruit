@@ -35,6 +35,14 @@ function appendInstructions(prompt, instructions) {
   return prompt + '\n\nADDITIONAL INSTRUCTIONS FROM SENDER: ' + instructions.trim();
 }
 
+// Which provider runs first for this user. Explicit setting wins; otherwise
+// consultants default to Claude (writing quality) and recruiters to OpenAI (cost).
+function prefersClaude(user) {
+  if (user?.aiProvider === 'claude') return true;
+  if (user?.aiProvider === 'openai') return false;
+  return user?.userType === 'career_consultant';
+}
+
 // Try OpenAI first; fall back to Claude on error
 async function callAI(prompt, maxTokens, preferClaude = false) {
   if (preferClaude) {
@@ -210,7 +218,7 @@ RULES:
 
 Output ONLY valid JSON. No markdown, no commentary.`;
 
-  const response = await callAI(appendInstructions(prompt, instructions), 1000);
+  const response = await callAI(appendInstructions(prompt, instructions), 1000, prefersClaude(user));
   const raw = response.content[0].text.trim();
   const costCents = calcCostCents(response.usage, response.provider);
   try {
@@ -290,7 +298,7 @@ Output ONLY valid JSON. No markdown, no extra text.
 
 Write the email now:`;
 
-  const response = await callAI(appendInstructions(prompt, instructions), 900, true);
+  const response = await callAI(appendInstructions(prompt, instructions), 900, prefersClaude(user));
   const raw = response.content[0].text.trim();
   const costCents = calcCostCents(response.usage, response.provider);
   try {
@@ -358,7 +366,7 @@ RULES:
 
 Write the email now:`;
 
-  const response = await callAI(appendInstructions(prompt, instructions), 800);
+  const response = await callAI(appendInstructions(prompt, instructions), 800, prefersClaude(user));
   return { text: response.content[0].text.trim(), costCents: calcCostCents(response.usage, response.provider) };
 }
 
@@ -431,7 +439,7 @@ CRITICAL RULES:
 
 Write the outreach email now:`;
 
-  const response = await callAI(appendInstructions(prompt, instructions), 800);
+  const response = await callAI(appendInstructions(prompt, instructions), 800, prefersClaude(user));
 
   return { text: response.content[0].text.trim(), costCents: calcCostCents(response.usage, response.provider) };
 }
@@ -499,7 +507,7 @@ Make every section compelling and specific — not generic boilerplate. Referenc
 
 Write the role description now:`;
 
-  const response = await callAI(appendInstructions(prompt, instructions), 3000);
+  const response = await callAI(appendInstructions(prompt, instructions), 3000, prefersClaude(user));
 
   return { text: response.content[0].text.trim(), costCents: calcCostCents(response.usage, response.provider) };
 }
@@ -579,7 +587,7 @@ Also return a brief internal gaps analysis. Output as valid JSON:
 
 Return ONLY the JSON object, no markdown, no extra text.`;
 
-  const response = await callAI(appendInstructions(prompt, instructions), 2500);
+  const response = await callAI(appendInstructions(prompt, instructions), 2500, prefersClaude(user));
 
   const text = response.content[0].text.trim();
   const costCents = calcCostCents(response.usage, response.provider);
@@ -654,7 +662,7 @@ Output ONLY the email body (starting with "Dear ${firstName},"). No subject line
 
 Write the introduction email now:`;
 
-  const response = await callAI(appendInstructions(prompt, instructions), 800);
+  const response = await callAI(appendInstructions(prompt, instructions), 800, prefersClaude(user));
 
   return { text: response.content[0].text.trim(), costCents: calcCostCents(response.usage, response.provider) };
 }
@@ -727,7 +735,7 @@ RULES:
 
 Write the proposal email now:`;
 
-  const response = await callAI(appendInstructions(prompt, instructions), 900, true);
+  const response = await callAI(appendInstructions(prompt, instructions), 900, prefersClaude(user));
   return { text: response.content[0].text.trim(), costCents: calcCostCents(response.usage, response.provider) };
 }
 
@@ -829,7 +837,7 @@ CRITICAL RULES:
 
 Write the reply now:`;
 
-  const response = await callAI(appendInstructions(prompt, instructions), 900, true);
+  const response = await callAI(appendInstructions(prompt, instructions), 900, prefersClaude(user));
   return { text: response.content[0].text.trim(), costCents: calcCostCents(response.usage, response.provider) };
 }
 
@@ -884,7 +892,7 @@ Also return a brief internal analysis. Output as valid JSON:
 
 Return ONLY the JSON. No markdown, no extra text.`;
 
-  const response = await callAI(appendInstructions(prompt, instructions), 2000, true);
+  const response = await callAI(appendInstructions(prompt, instructions), 2000, prefersClaude(user));
 
   const text = response.content[0].text.trim();
   const costCents = calcCostCents(response.usage, response.provider);
@@ -999,7 +1007,7 @@ CRITICAL RULES:
 
 Write the reply now:`;
 
-  const response = await callAI(appendInstructions(prompt, instructions), 900);
+  const response = await callAI(appendInstructions(prompt, instructions), 900, prefersClaude(user));
 
   return { text: response.content[0].text.trim(), costCents: calcCostCents(response.usage, response.provider) };
 }
@@ -1097,7 +1105,7 @@ CRITICAL RULES:
 
 Write the follow-up email now:`;
 
-  const response = await callAI(appendInstructions(prompt, instructions), 600);
+  const response = await callAI(appendInstructions(prompt, instructions), 600, prefersClaude(user));
 
   return { text: response.content[0].text.trim(), costCents: calcCostCents(response.usage, response.provider) };
 }
@@ -1124,7 +1132,7 @@ Score them 1-10 on overall executive fit for ${company.name} and return ONLY a v
 Score 8-10: exceptional fit (deep relevant experience + strategic + executive). 5-7: solid fit with gaps. 1-4: significant gaps.
 Return ONLY the JSON.`;
 
-  const response = await callAI(prompt, 400);
+  const response = await callAI(prompt, 400, prefersClaude(user));
 
   const text = response.content[0].text.trim();
   const costCents = calcCostCents(response.usage, response.provider);
@@ -1157,7 +1165,7 @@ ${(replyText || '').substring(0, 1500)}
 
 Return ONLY valid JSON: {"label":"<one of the four>","reason":"<5-10 word justification>"}`;
 
-  const response = await callAI(prompt, 120);
+  const response = await callAI(prompt, 120, prefersClaude(user));
   const text = response.content[0].text.trim();
   const costCents = calcCostCents(response.usage, response.provider);
   const VALID = ['interested', 'question', 'not_now', 'not_interested'];
@@ -1198,7 +1206,7 @@ Return ONLY valid JSON:
   "rewritten": "the full repositioned resume as plain text"
 }`;
 
-  const response = await callAI(prompt, 4000);
+  const response = await callAI(prompt, 4000, prefersClaude(user));
   const text = response.content[0].text.trim();
   const costCents = calcCostCents(response.usage, response.provider);
   try {

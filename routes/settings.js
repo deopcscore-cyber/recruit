@@ -59,6 +59,7 @@ router.get('/', async (req, res) => {
       apolloApiKey:        user.apolloApiKey        ? '••••••••' : '',
       extensionToken:           user.extensionToken           || '',
       userType:                 user.userType                 || 'recruiter_company',
+      aiProvider:               user.aiProvider               || 'auto',
       resumeConsultantName:     user.resumeConsultantName     || '',
       resumeConsultantEmail:    user.resumeConsultantEmail    || '',
       outreachSample:           user.outreachSample           || '',
@@ -81,6 +82,14 @@ router.put('/', async (req, res) => {
     const { tone, notes, use, avoid, name, title, companyName, companyPitch, salaryRange, hunterApiKey, contactOutApiKey, apolloApiKey, signature, secondaryTestEmail, userType, resumeConsultantName, resumeConsultantEmail } = req.body;
     const VALID_TYPES = ['recruiter_company', 'recruiter_independent', 'career_consultant'];
     if (userType && VALID_TYPES.includes(userType)) user.userType = userType;
+
+    // AI provider preference: auto (default per user type) | openai | claude
+    if (req.body.aiProvider !== undefined) {
+      const VALID_PROVIDERS = ['auto', 'openai', 'claude'];
+      if (VALID_PROVIDERS.includes(req.body.aiProvider)) {
+        user.aiProvider = req.body.aiProvider === 'auto' ? '' : req.body.aiProvider;
+      }
+    }
 
     user.style = user.style || {};
     if (tone !== undefined) user.style.tone = tone;
@@ -610,12 +619,30 @@ router.get('/credit-history', async (req, res) => {
   }
 });
 
-// GET /api/settings/ai-status — which AI provider is active
-router.get('/ai-status', (req, res) => {
+// GET /api/settings/ai-status — which AI provider is active for this user
+router.get('/ai-status', async (req, res) => {
   const hasAnthropic = !!process.env.ANTHROPIC_API_KEY;
   const hasOpenAI    = !!process.env.OPENAI_API_KEY;
-  const primary   = hasOpenAI ? 'GPT-4o-mini' : hasAnthropic ? 'Claude (claude-sonnet-4-6)' : 'None';
-  const fallback  = hasOpenAI && hasAnthropic ? 'Claude (auto-switches if OpenAI is unavailable)' : null;
+
+  // Effective preference: explicit setting wins, otherwise consultants get Claude
+  let claudeFirst = false;
+  try {
+    const user = await storage.getUserById(req.session.userId);
+    if (user?.aiProvider === 'claude') claudeFirst = true;
+    else if (user?.aiProvider === 'openai') claudeFirst = false;
+    else claudeFirst = user?.userType === 'career_consultant';
+  } catch {}
+
+  let primary, fallback = null;
+  if (claudeFirst && hasAnthropic) {
+    primary  = 'Claude (claude-sonnet-4-6)';
+    fallback = hasOpenAI ? 'GPT-4o-mini (auto-switches if Claude is unavailable)' : null;
+  } else if (hasOpenAI) {
+    primary  = 'GPT-4o-mini';
+    fallback = hasAnthropic ? 'Claude (auto-switches if OpenAI is unavailable)' : null;
+  } else {
+    primary = hasAnthropic ? 'Claude (claude-sonnet-4-6)' : 'None';
+  }
   res.json({ primary, fallback, hasAnthropic, hasOpenAI });
 });
 

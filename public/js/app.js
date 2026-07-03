@@ -2628,6 +2628,23 @@ async function loadSettingsPage() {
     document.getElementById('style-use').value = (style.use || []).join(', ');
     document.getElementById('style-avoid').value = (style.avoid || []).join(', ');
 
+    // AI provider preference — saves immediately on change
+    const aiSel = document.getElementById('ai-provider-select');
+    if (aiSel) {
+      aiSel.value = style.aiProvider || 'auto';
+      if (!aiSel.dataset.wired) {
+        aiSel.dataset.wired = '1';
+        aiSel.addEventListener('change', async () => {
+          try {
+            await API.settings.update({ aiProvider: aiSel.value });
+            const label = aiSel.value === 'auto' ? 'Auto' : aiSel.value === 'claude' ? 'Claude' : 'OpenAI';
+            Toast.success(`AI preference saved: ${label}`);
+            updateAIModelStatus();
+          } catch (err) { Toast.error(err.message); }
+        });
+      }
+    }
+
     // Secondary test inbox
     document.getElementById('secondary-test-email').value = style.secondaryTestEmail || '';
 

@@ -727,6 +727,15 @@
             </div>
             <div class="settings-card-body">
               <div id="ai-model-status" style="font-size:0.88rem;color:var(--text);line-height:1.8">Loading…</div>
+              <div style="margin-top:14px">
+                <label style="display:block;font-size:0.82rem;font-weight:600;color:var(--text);margin-bottom:6px">Preferred AI</label>
+                <select id="ai-provider-select" style="width:auto;min-width:260px">
+                  <option value="auto">Auto (recommended for your profile)</option>
+                  <option value="claude">Claude — best writing quality</option>
+                  <option value="openai">OpenAI — lowest cost</option>
+                </select>
+                <p style="margin:8px 0 0;font-size:0.78rem;color:var(--text-muted);line-height:1.5">Auto uses Claude for career consultants and OpenAI for recruiters. If your choice is unavailable, the other is used as backup automatically.</p>
+              </div>
             </div>
           </div>
 
