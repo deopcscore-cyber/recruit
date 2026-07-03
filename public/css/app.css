@@ -1369,10 +1369,11 @@ select { appearance: auto; }
   /* Filter bar */
   .filter-bar { padding: 6px 14px; gap: 6px; }
   #bulk-actions { display: none !important; } /* bulk actions hidden on mobile */
-  .view-toggle { display: none; } /* force list view on mobile */
+  .view-toggle button { padding: 5px 9px; font-size: 0.74rem; } /* compact toggle, list is default */
 
-  /* Pipeline board — allow horizontal scroll but hint at it */
-  .pipeline-wrapper { padding: 10px; }
+  /* Pipeline board — swipeable columns sized for a phone screen */
+  .pipeline-wrapper { padding: 10px; -webkit-overflow-scrolling: touch; }
+  .pipeline-column { width: 80vw; max-width: 300px; }
 
   /* Candidate modal — full-screen sheet from bottom */
   .cmodal { border-radius: var(--radius-xl) var(--radius-xl) 0 0; max-height: 96vh; }

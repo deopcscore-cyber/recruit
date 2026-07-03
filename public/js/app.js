@@ -83,13 +83,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // Nav
   document.querySelectorAll('.nav-item').forEach(item => {
-    item.addEventListener('click', () => {
-      navigateTo(item.dataset.page);
-      if (item.dataset.page === 'analytics')  loadAnalyticsPage();
-      if (item.dataset.page === 'followups')  loadFollowUpPage();
-      if (item.dataset.page === 'hotleads')   loadHotLeadsPage();
-      if (item.dataset.page === 'templates')  loadTemplatesPage();
-    });
+    item.addEventListener('click', () => navigateTo(item.dataset.page));
   });
 
   // Logout
@@ -225,7 +219,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     navigateTo('candidates');
     handleBookmarkletImport(liToken);
   } else {
-    navigateTo('today');
+    // Restore the page from the URL hash (e.g. /dashboard#settings on refresh)
+    navigateTo(location.hash.slice(1) || 'today');
   }
 
   // Generate the bookmarklet href using this app's origin
@@ -275,6 +270,17 @@ function applyTheme(theme) {
 
 // ---- Navigation ----
 function navigateTo(page) {
+  // Hash-based routing: the URL reflects the page (e.g. /dashboard#settings),
+  // so refresh keeps your place and the back button works. hashchange renders.
+  if (location.hash !== '#' + page) {
+    location.hash = page;
+  } else {
+    _showPage(page);
+  }
+}
+
+function _showPage(page) {
+  if (!document.getElementById(`page-${page}`)) page = 'today';
   document.querySelectorAll('.nav-item').forEach(i => i.classList.toggle('active', i.dataset.page === page));
   document.querySelectorAll('.bottom-nav-item').forEach(i => i.classList.toggle('active', i.dataset.page === page));
   document.querySelectorAll('.page').forEach(p => p.classList.toggle('active', p.id === `page-${page}`));
@@ -283,7 +289,13 @@ function navigateTo(page) {
   if (page === 'followups') loadFollowUpPage();
   if (page === 'hotleads')  loadHotLeadsPage();
   if (page === 'templates') loadTemplatesPage();
+  if (page === 'analytics') loadAnalyticsPage();
 }
+
+window.addEventListener('hashchange', () => {
+  const page = location.hash.slice(1);
+  if (page) _showPage(page);
+});
 
 function openMobileMore() {
   const m = document.getElementById('mobile-more-modal');
@@ -2671,12 +2683,15 @@ function openCreditHistoryModal() {
   const modal = document.getElementById('credit-history-modal');
   if (!modal) return;
   modal.style.display = 'flex';
+  modal.classList.add('open');
   loadCreditHistory();
 }
 
 function closeCreditHistoryModal() {
   const modal = document.getElementById('credit-history-modal');
-  if (modal) modal.style.display = 'none';
+  if (!modal) return;
+  modal.classList.remove('open');
+  modal.style.display = 'none';
 }
 
 async function loadCreditHistory() {
