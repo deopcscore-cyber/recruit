@@ -33,23 +33,50 @@
     });
   }
 
-  // Click every visible "View Email" button, waiting for each reveal to load
-  // and for newly-rendered buttons (pagination, lazy sections) to appear.
+  // ContactOut (like most email-finder tools) shows a masked preview before
+  // you spend a credit — e.g. "j***@gmail.com" or "••••@acme.com". The local
+  // part is hidden but the domain is visible, which is enough to tell personal
+  // from work WITHOUT revealing. Matches masked-local-part + real domain.
+  const MASKED_EMAIL_RE = /[a-zA-Z0-9][a-zA-Z0-9.*•_-]{0,30}@([a-zA-Z0-9.\-]+\.[a-zA-Z]{2,})/g;
+
+  // Look at the button's nearby card text (a few ancestor levels up — the
+  // masked preview sits right next to/above the button, not far away) for
+  // any visible domain hints. Returns true/false only when we found at least
+  // one hint; null means "couldn't tell" (no masked preview visible at all).
+  function knownPersonalFromMask(btn) {
+    let el = btn.parentElement;
+    let text = '';
+    for (let i = 0; i < 4 && el; i++) {
+      text += ' ' + (el.innerText || el.textContent || '');
+      el = el.parentElement;
+    }
+    const domains = [...text.matchAll(MASKED_EMAIL_RE)].map(m => m[1].toLowerCase());
+    if (domains.length === 0) return null; // no preview available — can't tell in advance
+    return domains.some(d => PERSONAL_RE.test('@' + d));
+  }
+
+  // Click "View Email" buttons, but skip any whose masked preview already
+  // shows a work-domain hint — that saves a ContactOut credit on an email
+  // we'd throw away anyway (personal-only import). Only reveals when the
+  // preview looks personal, or when no preview is available to judge from.
   async function revealAllEmails() {
-    let totalClicked = 0;
+    let totalClicked = 0, totalSkipped = 0;
     for (let pass = 0; pass < 6; pass++) {
       const btns = [];
       collectRevealButtons(document, btns);
-      const unique = [...new Set(btns)];
+      const unique = [...new Set(btns)].filter(b => !b.dataset.rpChecked);
       if (unique.length === 0) break;
       for (const btn of unique) {
+        btn.dataset.rpChecked = '1';
+        const looksPersonal = knownPersonalFromMask(btn);
+        if (looksPersonal === false) { totalSkipped++; continue; } // known work email — don't spend a credit
         try { btn.click(); } catch (_) {}
+        totalClicked++;
         await sleep(350); // reveal triggers an API call — give it time to resolve
       }
-      totalClicked += unique.length;
       await sleep(1200); // let the DOM settle before checking for more buttons
     }
-    return totalClicked;
+    return { totalClicked, totalSkipped };
   }
 
   /* ════════════════════════════════════════════════════════════
