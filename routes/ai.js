@@ -22,19 +22,32 @@ async function checkCredits(user, res) {
 
 async function deductCredits(user, costCents, action, candidateName) {
   if (!costCents || costCents <= 0) return;
-  user.credits    = Math.max(0, (user.credits    || 0) - costCents);
-  user.totalSpent = (user.totalSpent || 0) + costCents;
 
-  if (!user.creditHistory) user.creditHistory = [];
-  user.creditHistory.unshift({
-    ts:        new Date().toISOString(),
-    action:    action || 'AI generation',
-    candidate: candidateName || null,
-    cost:      costCents
+  // Atomic read-modify-write, keyed off the on-disk balance at write time —
+  // not the possibly-stale `user` snapshot from request start. A plain
+  // getUserById-then-saveUser here raced with concurrent requests (settings
+  // saves, other AI calls) and could silently drop either side's write.
+  const updated = await storage.updateUser(user.id, (u) => {
+    u.credits    = Math.max(0, (u.credits    || 0) - costCents);
+    u.totalSpent = (u.totalSpent || 0) + costCents;
+    if (!u.creditHistory) u.creditHistory = [];
+    u.creditHistory.unshift({
+      ts:        new Date().toISOString(),
+      action:    action || 'AI generation',
+      candidate: candidateName || null,
+      cost:      costCents
+    });
+    if (u.creditHistory.length > 500) u.creditHistory = u.creditHistory.slice(0, 500);
+    return u;
   });
-  if (user.creditHistory.length > 500) user.creditHistory = user.creditHistory.slice(0, 500);
 
-  await storage.saveUser(user);
+  // Reflect the persisted values onto the caller's in-memory user object
+  // so the response (creditsRemaining etc.) shows the real post-write balance.
+  if (updated) {
+    user.credits      = updated.credits;
+    user.totalSpent   = updated.totalSpent;
+    user.creditHistory = updated.creditHistory;
+  }
 }
 
 // ── Context helper ────────────────────────────────────────────────────────────

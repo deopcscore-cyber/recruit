@@ -76,10 +76,12 @@ router.get('/', async (req, res) => {
 // PUT /api/settings
 router.put('/', async (req, res) => {
   try {
-    const user = await storage.getUserById(req.session.userId);
-    if (!user) return res.status(404).json({ error: 'User not found' });
-
     const { tone, notes, use, avoid, name, title, companyName, companyPitch, salaryRange, hunterApiKey, contactOutApiKey, apolloApiKey, signature, secondaryTestEmail, userType, resumeConsultantName, resumeConsultantEmail } = req.body;
+
+    // Atomic read-modify-write — a plain getUserById + saveUser here raced
+    // with concurrent writes (e.g. a credit deduction mid-AI-generation)
+    // and could silently wipe out whichever field this request just set.
+    const user = await storage.updateUser(req.session.userId, (user) => {
     const VALID_TYPES = ['recruiter_company', 'recruiter_independent', 'career_consultant'];
     if (userType && VALID_TYPES.includes(userType)) user.userType = userType;
 
@@ -176,7 +178,9 @@ router.put('/', async (req, res) => {
       fields.forEach(f => { if (signature[f] !== undefined) user.signature[f] = signature[f]; });
     }
 
-    await storage.saveUser(user);
+      return user;
+    });
+    if (!user) return res.status(404).json({ error: 'User not found' });
 
     // If autopilot is on, plan today's batch immediately so jobs queue right
     // away instead of waiting up to 15 min for the background loop.
@@ -195,8 +199,12 @@ router.put('/', async (req, res) => {
               queueSvc.cancelPendingForUser(user.id, 'outreach');
               queueSvc.addJobs(plan.jobs);
             }
+            await storage.updateUser(user.id, (u) => {
+              u.autopilot = u.autopilot || {};
+              u.autopilot.lastRunDate = plan.lastRunDate;
+              return u;
+            });
             user.autopilot.lastRunDate = plan.lastRunDate;
-            await storage.saveUser(user);
           }
         }
       } catch (e) { console.error('Autopilot immediate-run error:', e.message); }

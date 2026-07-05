@@ -72,6 +72,25 @@ async function saveUser(user) {
   });
 }
 
+// Atomic read-modify-write for a single user. Use this (not getUserById +
+// saveUser) for any update — that pattern reads before the lock, so two
+// concurrent requests both read the same pre-update snapshot and the second
+// save silently clobbers the first (e.g. a credit deduction firing while a
+// settings save is in flight wipes out the settings change). mutator can be
+// sync or async and should mutate the passed-in user object; its return
+// value (if any) is saved instead.
+async function updateUser(id, mutator) {
+  return withLock(async () => {
+    const users = await getAllUsers();
+    const idx = users.findIndex(u => u.id === id);
+    if (idx < 0) return null;
+    const result = await mutator(users[idx]);
+    users[idx] = result || users[idx];
+    await saveAllUsers(users);
+    return users[idx];
+  });
+}
+
 async function getAllCandidates() {
   const result = await readJSON('candidates.json');
   return Array.isArray(result) ? result : [];
@@ -113,6 +132,7 @@ module.exports = {
   getUserById,
   getUserByEmail,
   saveUser,
+  updateUser,
   getAllCandidates,
   saveAllCandidates,
   getUserCandidates,
