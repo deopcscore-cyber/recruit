@@ -191,7 +191,17 @@ router.post('/quick-import', async (req, res) => {
       if (!personalEmail && enriched.email)         { personalEmail = enriched.email;     emailSource = enriched.source; }
     }
 
-    const bestEmail = personalEmail || workEmail || '';
+    // Personal emails only — a work-only (or no) email means we skip the
+    // import entirely rather than saving a candidate without a real address.
+    if (!personalEmail) {
+      return res.status(422).json({
+        error: workEmail
+          ? 'Only a work email was found — skipped (personal emails only).'
+          : 'No email found for this profile — skipped.',
+        skipped: true
+      });
+    }
+    const bestEmail = personalEmail;
 
     // 4. Duplicate check
     const existing = await storage.getUserCandidates(user.id);

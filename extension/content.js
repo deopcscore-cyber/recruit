@@ -17,6 +17,41 @@
   function isEmail(s) { return EMAIL_EXACT.test(s); }
   function sleep(ms)  { return new Promise(r => setTimeout(r, ms)); }
 
+  // ── Auto-click "View Email" so we never have to reveal emails by hand ──────
+  // Shadow-DOM aware: ContactOut's LinkedIn-injected widget renders inside a
+  // shadow root, same as the email text itself (see readContactOutEmails below).
+  function isRevealBtn(el) {
+    const t = (el.textContent || '').trim().toLowerCase();
+    return t === 'view email' || t === 'reveal email' || t === 'show email';
+  }
+
+  function collectRevealButtons(root, out) {
+    if (!root || !root.querySelectorAll) return;
+    root.querySelectorAll('button, span, a, [role="button"]').forEach(el => {
+      if (isRevealBtn(el)) out.push(el);
+      if (el.shadowRoot) collectRevealButtons(el.shadowRoot, out);
+    });
+  }
+
+  // Click every visible "View Email" button, waiting for each reveal to load
+  // and for newly-rendered buttons (pagination, lazy sections) to appear.
+  async function revealAllEmails() {
+    let totalClicked = 0;
+    for (let pass = 0; pass < 6; pass++) {
+      const btns = [];
+      collectRevealButtons(document, btns);
+      const unique = [...new Set(btns)];
+      if (unique.length === 0) break;
+      for (const btn of unique) {
+        try { btn.click(); } catch (_) {}
+        await sleep(350); // reveal triggers an API call — give it time to resolve
+      }
+      totalClicked += unique.length;
+      await sleep(1200); // let the DOM settle before checking for more buttons
+    }
+    return totalClicked;
+  }
+
   /* ════════════════════════════════════════════════════════════
      CONTACTOUT — bulk import from search results page
   ════════════════════════════════════════════════════════════ */
@@ -182,12 +217,13 @@
       }
     }
 
-    // Prefer personal email over work email
+    // Personal emails only — work emails are never imported (candidates who
+    // only have a work address on ContactOut are skipped downstream)
     const allEmails = ((el.innerText || '').match(EMAIL_RE) || [])
       .map(e => e.toLowerCase()).filter(e => isEmail(e) && !IGNORE_DOMAINS.test(e));
-    const bestEmail = allEmails.find(e => PERSONAL_RE.test(e)) || email;
+    const personalEmail = allEmails.find(e => PERSONAL_RE.test(e)) || (PERSONAL_RE.test(email) ? email : '');
 
-    return { name, email: bestEmail, linkedin, title, company, location, phone, career, education };
+    return { name, email: personalEmail, linkedin, title, company, location, phone, career, education };
   }
 
   // ── Auto-expand all "...more" / "Show more" buttons ────────────────────────
@@ -252,19 +288,22 @@
   }
 
   async function onContactOutImport() {
+    setCoBtnText('⏳ Revealing emails…', '#1c7ed6');
+    await revealAllEmails();
+
     setCoBtnText('⏳ Expanding profiles…', '#1c7ed6');
     await expandAllMore();
 
     setCoBtnText('⏳ Reading contacts…', '#1c7ed6');
     const cards = findCandidateCards();
     const all   = cards.map(extractCandidate).filter(c => c.name);
-    const candidates = all.filter(c => c.email);
-    const noEmail    = all.length - candidates.length;
+    const candidates  = all.filter(c => c.email);
+    const noPersonal  = all.length - candidates.length;
 
     if (candidates.length === 0) {
       const msg = cards.length === 0
         ? '❌ No contacts detected — try refreshing the page'
-        : '❌ No revealed emails — reveal emails in ContactOut first';
+        : '❌ No personal emails found — only work emails were revealed';
       setCoBtnText(msg, '#e03131');
       setTimeout(resetCoBtn, 5000);
       return;
@@ -286,7 +325,7 @@
       const { added = 0, skipped = 0 } = response;
       const parts = [`✓ ${added} added`];
       if (skipped > 0) parts.push(`${skipped} already in pipeline`);
-      if (noEmail  > 0) parts.push(`${noEmail} skipped (no email)`);
+      if (noPersonal > 0) parts.push(`${noPersonal} skipped (no personal email)`);
       setCoBtnText(parts.join(' · '), '#2f9e44');
       setTimeout(resetCoBtn, 6000);
     });
@@ -347,7 +386,10 @@
     inner.addEventListener('click', onLinkedInImport);
   }
 
-  function onLinkedInImport() {
+  async function onLinkedInImport() {
+    setLiBtn('⏳ Revealing email…', '#1c7ed6');
+    await revealAllEmails();
+
     setLiBtn('⏳ Importing…', '#1c7ed6');
     const payload = {
       type:     'IMPORT_PROFILE',
@@ -362,17 +404,15 @@
         return;
       }
       if (!response || response.error) {
-        setLiBtn('❌ ' + ((response && response.error) || 'Import failed'), '#e03131');
-        setTimeout(resetLiBtn, 5000);
+        const msg = response && response.skipped
+          ? '⏭️ Skipped — no personal email found'
+          : '❌ ' + ((response && response.error) || 'Import failed');
+        setLiBtn(msg, response && response.skipped ? '#f08c00' : '#e03131');
+        setTimeout(resetLiBtn, 6000);
         return;
       }
-      if (response.email) {
-        setLiBtn(`✓ ${response.name || 'Added'} · ${response.email}`, '#2f9e44');
-        setTimeout(resetLiBtn, 4000);
-      } else {
-        setLiBtn('✓ Added — no email found. Reveal it in ContactOut first.', '#f08c00');
-        setTimeout(resetLiBtn, 7000);
-      }
+      setLiBtn(`✓ ${response.name || 'Added'} · ${response.email}`, '#2f9e44');
+      setTimeout(resetLiBtn, 4000);
     });
   }
 
