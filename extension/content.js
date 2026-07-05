@@ -54,10 +54,10 @@
     return domains.some(d => PERSONAL_RE.test('@' + d));
   }
 
-  // Click "View Email" buttons, but skip any whose masked preview already
-  // shows a work-domain hint — that saves a ContactOut credit on an email
-  // we'd throw away anyway (personal-only import). Only reveals when the
-  // preview looks personal, or when no preview is available to judge from.
+  // Click "View Email" buttons — but ONLY when the masked preview confirms
+  // a personal domain. If we can't read a hint at all, we still don't click:
+  // wasting a credit on an unknown (possibly work) email is worse than
+  // missing an occasional personal one we couldn't detect.
   async function revealAllEmails() {
     let totalClicked = 0, totalSkipped = 0;
     for (let pass = 0; pass < 6; pass++) {
@@ -68,7 +68,8 @@
       for (const btn of unique) {
         btn.dataset.rpChecked = '1';
         const looksPersonal = knownPersonalFromMask(btn);
-        if (looksPersonal === false) { totalSkipped++; continue; } // known work email — don't spend a credit
+        console.log('[Recruit Pro] reveal check:', looksPersonal, '—', (btn.closest('div')?.innerText || '').replace(/\s+/g, ' ').slice(0, 80));
+        if (looksPersonal !== true) { totalSkipped++; continue; } // work domain, or no readable hint — don't spend a credit
         try { btn.click(); } catch (_) {}
         totalClicked++;
         await sleep(350); // reveal triggers an API call — give it time to resolve
