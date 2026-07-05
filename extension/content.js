@@ -33,11 +33,10 @@
     });
   }
 
-  // ContactOut (like most email-finder tools) shows a masked preview before
-  // you spend a credit — e.g. "j***@gmail.com" or "••••@acme.com". The local
-  // part is hidden but the domain is visible, which is enough to tell personal
-  // from work WITHOUT revealing. Matches masked-local-part + real domain.
-  const MASKED_EMAIL_RE = /[a-zA-Z0-9][a-zA-Z0-9.*•_-]{0,30}@([a-zA-Z0-9.\-]+\.[a-zA-Z]{2,})/g;
+  // ContactOut shows a masked preview before you spend a credit — the local
+  // part is FULLY masked (e.g. "***@yahoo.com"), but the domain is real and
+  // visible. That's enough to tell personal from work without revealing.
+  const MASKED_EMAIL_RE = /[a-zA-Z0-9*•_.-]{1,30}@([a-zA-Z0-9.\-]+\.[a-zA-Z]{2,})/g;
 
   // Look at the button's nearby card text (a few ancestor levels up — the
   // masked preview sits right next to/above the button, not far away) for
