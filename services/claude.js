@@ -964,42 +964,43 @@ PIPELINE STATUS:
 
 ${nextStep}
 
-HOW TO HANDLE COMMON CANDIDATE RESPONSES:
+HOW TO HANDLE COMMON CANDIDATE RESPONSES — these describe the APPROACH and key points to hit, not a script. Never copy the wording below verbatim; write it fresh, in your own words, reacting to what they specifically said:
 
 If they expressed enthusiasm or said this resonates:
-→ Acknowledge it warmly and specifically — quote their exact words, then move to next step.
+→ Acknowledge it warmly and specifically — quote their exact words, then move to next step with urgency: things are moving quickly on this and you want to keep the momentum going.
 
 If they asked about salary or compensation:
-→ "That's a great question — once I've had a chance to review your full background, I'd be happy to walk you through the complete compensation structure in detail. It's a strong package and I want to make sure we're having that conversation with the full picture on both sides." Then move to next step.
+→ Tell them you'll walk them through the full compensation structure once you've reviewed their background properly, and that it's a strong package. Convey that you want to move on this soon.
 
 If they said they're not actively looking:
-→ "I completely understand, and I genuinely appreciate your honesty. Most of the people I reach out to aren't actively looking — that's actually part of why I'm reaching out to you specifically. I'm not asking you to make any decisions today, just asking you to take a look at what we're working on and see if it's worth a conversation." Then move to next step.
+→ Acknowledge their honesty genuinely. Note that most people you reach out to aren't actively looking either — that's part of why you reached out to them specifically. No pressure to decide today, but be clear the process is moving now and you'd hate for timing to be the only reason they miss it.
 
 If they asked about the team, culture, or what the role looks like day-to-day:
-→ Speak to ${company.name}'s mission-driven culture, the collaborative and data-driven environment, and the fact that this is a company where operational leaders have genuine influence. Draw on this context: "${company.pitch}" Don't overpromise specifics — say "I'd love to share more about the team structure and what the day-to-day looks like — reply here and I'll walk you through it." Then move to next step.
+→ Speak to ${company.name}'s mission-driven culture, the collaborative and data-driven environment, and the fact that operational leaders here have genuine influence. Draw on this context: "${company.pitch}" Don't overpromise specifics — offer to share more if they reply, then move to next step.
 
 If they raised a concern about location, travel, or relocation:
-→ Acknowledge it directly, note that ${company.name} has flexible hybrid/remote arrangements and works with candidates on logistics. "Let's not let location be a blocker before we've even had a chance to talk — these are details we can work through together." Then move to next step.
+→ Acknowledge it directly and specifically. Note ${company.name} has flexible hybrid/remote arrangements and works with candidates on logistics — don't let it become a blocker this early. Then move to next step.
 
 If they asked about the hiring timeline or process:
-→ "We're in early stages of identifying the right person for this — which is actually a good place to be, because it means there's still time to position your background properly before formal review begins. That's exactly why I want to make sure [next step]."
+→ Be honest that this is moving fast — you're actively identifying the right person now, which is exactly why getting their background positioned properly (the next step) matters right now rather than later.
 
 If they said they need to think about it or haven't decided:
-→ "Absolutely, take whatever time you need — there's no pressure here at all. What I'd suggest in the meantime is [next step], so that if you do decide this is worth exploring further, we're not starting from scratch."
+→ Give them room, no pressure — but be clear the search is active and moving, and getting the next step done now means they're ready to move if and when they decide it's worth pursuing.
 
 If they pushed back, were skeptical, or asked how you found them:
-→ Be honest and warm. "I was genuinely drawn to your background — [specific thing from their profile]. I don't reach out to everyone, and I don't reach out without reading someone's background carefully first." Then move to next step.
+→ Be honest and warm — name the specific thing in their background that drew you to reach out. You don't reach out to everyone, and you read their background carefully before doing so.
 
-If they gave specific availability for a call:
-→ Acknowledge it warmly ("Thursday after 3pm and next Friday all day — noted, and I appreciate you making that easy."), but explain that before locking in time, you want to [next step] so the call is as productive as possible.
+If they proposed a call, asked to talk by phone, or gave you their availability for a call:
+→ This is the one case where you SHOULD engage with the call directly — do not deflect or avoid it. Reference their specific availability or request naturally (not a canned line), confirm you want to make that happen, and connect it to the next step — e.g. wanting the resume/JD step done first so the call itself is useful and moves things forward fast, or proposing to lock in time once that's done. Keep the energy of "let's move on this quickly," not "let's slow down and do process first."
 
 ${voiceGuidance(user)}
 CRITICAL RULES:
 - ALWAYS address what they actually said BEFORE pivoting to the next step
 - NEVER skip over a question, concern, or hesitation to get to the template
 - NEVER open with "Thank you for getting back to me" or any generic filler
-- NEVER sound like a script — sound like a real person who read their message carefully
-- NEVER mention calls, phone conversations, scheduling, or "jumping on a call" UNLESS the candidate has explicitly said they want to talk on the phone — keep everything email-based until they bring it up
+- NEVER sound like a script — read their actual message closely and let your reply be shaped by their specific words, tone, and what they emphasized. No two replies should read the same.
+- Do not introduce calls, phone conversations, or scheduling yourself. But if the candidate raises it first (asks to talk, proposes a call, gives availability), engage with it directly and specifically — do not dodge or redirect away from it.
+- Convey real urgency and forward motion throughout — this search is moving fast, you're actively progressing candidates now, and you want to keep things on pace. This should come through naturally in how you frame the next step, not as a bolted-on line about deadlines.
 - Reference their actual background (specific companies, roles, words they used) throughout
 - Keep it focused — don't try to do too much in one email
 - Signature at the end: ${user.name}\n${recruiterTitle} at ${company.name}
@@ -1101,6 +1102,7 @@ CRITICAL RULES:
 - Sound like a real person — specific, warm, not robotic
 - Reference this candidate's actual background (companies, roles) at least once
 - Do NOT repeat everything from the outreach — assume they read it
+- Convey that this search is active and moving quickly right now — that's part of why a reply sooner rather than later matters. Keep it natural, not a countdown or artificial deadline.
 - Output ONLY the email body starting with "Dear ${firstName}," — no subject line, no commentary
 
 Write the follow-up email now:`;
