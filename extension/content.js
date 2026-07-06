@@ -33,33 +33,13 @@
     });
   }
 
-  // ContactOut shows a masked preview before you spend a credit — the local
-  // part is FULLY masked (e.g. "***@yahoo.com"), but the domain is real and
-  // visible. That's enough to tell personal from work without revealing.
-  const MASKED_EMAIL_RE = /[a-zA-Z0-9*•_.-]{1,30}@([a-zA-Z0-9.\-]+\.[a-zA-Z]{2,})/g;
-
-  // Look at the button's nearby card text (a few ancestor levels up — the
-  // masked preview sits right next to/above the button, not far away) for
-  // any visible domain hints. Returns true/false only when we found at least
-  // one hint; null means "couldn't tell" (no masked preview visible at all).
-  function knownPersonalFromMask(btn) {
-    let el = btn.parentElement;
-    let text = '';
-    for (let i = 0; i < 4 && el; i++) {
-      text += ' ' + (el.innerText || el.textContent || '');
-      el = el.parentElement;
-    }
-    const domains = [...text.matchAll(MASKED_EMAIL_RE)].map(m => m[1].toLowerCase());
-    if (domains.length === 0) return null; // no preview available — can't tell in advance
-    return domains.some(d => PERSONAL_RE.test('@' + d));
-  }
-
-  // Click "View Email" buttons — but ONLY when the masked preview confirms
-  // a personal domain. If we can't read a hint at all, we still don't click:
-  // wasting a credit on an unknown (possibly work) email is worse than
-  // missing an occasional personal one we couldn't detect.
+  // Click every "View Email" button. We no longer try to guess personal vs
+  // work before revealing — that pre-check proved unreliable across
+  // ContactOut's DOM. Instead we reveal everything and prefer the personal
+  // email when one exists, but still import on a work email rather than
+  // skip the candidate entirely (see extractCandidate / quick-import).
   async function revealAllEmails() {
-    let totalClicked = 0, totalSkipped = 0;
+    let totalClicked = 0;
     for (let pass = 0; pass < 6; pass++) {
       const btns = [];
       collectRevealButtons(document, btns);
@@ -67,16 +47,13 @@
       if (unique.length === 0) break;
       for (const btn of unique) {
         btn.dataset.rpChecked = '1';
-        const looksPersonal = knownPersonalFromMask(btn);
-        console.log('[Recruit Pro] reveal check:', looksPersonal, '—', (btn.closest('div')?.innerText || '').replace(/\s+/g, ' ').slice(0, 80));
-        if (looksPersonal !== true) { totalSkipped++; continue; } // work domain, or no readable hint — don't spend a credit
         try { btn.click(); } catch (_) {}
         totalClicked++;
         await sleep(350); // reveal triggers an API call — give it time to resolve
       }
       await sleep(1200); // let the DOM settle before checking for more buttons
     }
-    return { totalClicked, totalSkipped };
+    return { totalClicked };
   }
 
   /* ════════════════════════════════════════════════════════════
@@ -244,13 +221,13 @@
       }
     }
 
-    // Personal emails only — work emails are never imported (candidates who
-    // only have a work address on ContactOut are skipped downstream)
+    // Prefer a personal email, but fall back to a work email rather than
+    // skip the candidate entirely — we still want to reach out to them.
     const allEmails = ((el.innerText || '').match(EMAIL_RE) || [])
       .map(e => e.toLowerCase()).filter(e => isEmail(e) && !IGNORE_DOMAINS.test(e));
-    const personalEmail = allEmails.find(e => PERSONAL_RE.test(e)) || (PERSONAL_RE.test(email) ? email : '');
+    const bestEmail = allEmails.find(e => PERSONAL_RE.test(e)) || email;
 
-    return { name, email: personalEmail, linkedin, title, company, location, phone, career, education };
+    return { name, email: bestEmail, linkedin, title, company, location, phone, career, education };
   }
 
   // ── Auto-expand all "...more" / "Show more" buttons ────────────────────────
@@ -325,12 +302,12 @@
     const cards = findCandidateCards();
     const all   = cards.map(extractCandidate).filter(c => c.name);
     const candidates  = all.filter(c => c.email);
-    const noPersonal  = all.length - candidates.length;
+    const noEmail     = all.length - candidates.length;
 
     if (candidates.length === 0) {
       const msg = cards.length === 0
         ? '❌ No contacts detected — try refreshing the page'
-        : '❌ No personal emails found — only work emails were revealed';
+        : '❌ No revealed emails — reveal emails in ContactOut first';
       setCoBtnText(msg, '#e03131');
       setTimeout(resetCoBtn, 5000);
       return;
@@ -352,7 +329,7 @@
       const { added = 0, skipped = 0 } = response;
       const parts = [`✓ ${added} added`];
       if (skipped > 0) parts.push(`${skipped} already in pipeline`);
-      if (noPersonal > 0) parts.push(`${noPersonal} skipped (no personal email)`);
+      if (noEmail > 0) parts.push(`${noEmail} skipped (no email)`);
       setCoBtnText(parts.join(' · '), '#2f9e44');
       setTimeout(resetCoBtn, 6000);
     });
@@ -431,15 +408,17 @@
         return;
       }
       if (!response || response.error) {
-        const msg = response && response.skipped
-          ? '⏭️ Skipped — no personal email found'
-          : '❌ ' + ((response && response.error) || 'Import failed');
-        setLiBtn(msg, response && response.skipped ? '#f08c00' : '#e03131');
-        setTimeout(resetLiBtn, 6000);
+        setLiBtn('❌ ' + ((response && response.error) || 'Import failed'), '#e03131');
+        setTimeout(resetLiBtn, 5000);
         return;
       }
-      setLiBtn(`✓ ${response.name || 'Added'} · ${response.email}`, '#2f9e44');
-      setTimeout(resetLiBtn, 4000);
+      if (response.email) {
+        setLiBtn(`✓ ${response.name || 'Added'} · ${response.email}`, '#2f9e44');
+        setTimeout(resetLiBtn, 4000);
+      } else {
+        setLiBtn('✓ Added — no email found. Reveal it in ContactOut first.', '#f08c00');
+        setTimeout(resetLiBtn, 7000);
+      }
     });
   }
 
