@@ -734,17 +734,18 @@ PARAGRAPH 3 — What they can expect to gain:
 - Reference their actual companies, roles, and what a stronger positioning could unlock for them
 - Make it feel concrete and personal, not generic
 
-PARAGRAPH 4 — Low-friction next step (NO call, NO scheduling):
+PARAGRAPH 4 — Low-friction next step (NO call, NO scheduling, by default):
 - The next step is simply a reply to this email
 - Ask them one clear, easy question — something like: "What roles or level are you targeting right now?" or "What's one thing about your background you feel isn't coming through on paper?"
 - This opens the conversation without any commitment
 - Do NOT mention a call. Do NOT say "schedule time." Do NOT say "book a session."
+- EXCEPTION: if the sender's instructions further below tell you to mention a call or availability, follow those instructions exactly instead of this paragraph's default — they take priority.
 
 RULES:
 - Sound warm and confident — not salesy
 - Reference their specific background throughout (companies, transitions, what makes them valuable)
 - Do NOT include pricing
-- Do NOT mention a call, meeting, or scheduling of any kind
+- Do NOT mention a call, meeting, or scheduling of any kind — unless the sender's instructions further below explicitly say to, in which case follow those instructions exactly
 - Do NOT add a signature, sign-off name, title, or company at the end — the sender's email signature is appended automatically
 - Under 300 words
 - Output ONLY the email body starting with "Dear ${firstName},"
@@ -893,10 +894,11 @@ PARAGRAPH 4 — Why it matters: Explain what opportunities they're leaving on th
 
 PARAGRAPH 5 — What you'd do together: Briefly explain your approach — not a pitch, just 1-3 sentences on how you typically work. Keep it simple and specific.
 
-PARAGRAPH 6 — Low-friction close (NO call, NO scheduling):
+PARAGRAPH 6 — Low-friction close (NO call, NO scheduling, by default):
 - If they're interested, the next step is to simply reply
 - Ask them one easy question — something like "What kind of roles are you targeting?" or "Is there a specific part of your background you feel isn't landing?"
 - Do NOT mention a call. Do NOT say "schedule time" or "book a session." Just invite a reply.
+- EXCEPTION: if the sender's instructions further below tell you to mention a call or availability, follow those instructions exactly instead of this default.
 
 Do NOT add a signature, sign-off name, title, or company at the end of the email — the sender's email signature is appended automatically. End after the final sentence of paragraph 6.
 
@@ -943,11 +945,11 @@ async function _generateRecruiterReply(candidate, user, lastMessage, instruction
   if (!stepsCompleted.roleJD) {
     nextStep = `NEXT PIPELINE STEP: Get the candidate to review the Role JD.
 After fully addressing whatever they said, transition toward: "I'd like to ask you to take a look at the role description below. Please take a moment to consider whether this aligns with your vision and where you want to make your next move. If it resonates, just reply and let me know your thoughts — even a one-line reaction helps me understand where you stand. If not, no worries at all." Then add [ROLE DESCRIPTION BELOW] as a placeholder on its own line.
-IMPORTANT: Do NOT mention calls, phone conversations, or scheduling. Keep everything email-based. Only pivot to the JD if the candidate's message has been properly addressed first.`;
+IMPORTANT: Do NOT mention calls, phone conversations, or scheduling by default — keep it email-based. EXCEPTION: if the sender's instructions further below tell you to mention a call or availability, follow those instructions exactly instead — they take priority over this default. Only pivot to the JD if the candidate's message has been properly addressed first.`;
   } else if (!stepsCompleted.resumeRequested) {
     nextStep = `NEXT PIPELINE STEP: Ask for their resume.
 After fully addressing whatever they said, transition toward requesting their resume — warmly, with an explanation: "Before we go any further, there are a few details I'd like to review so I can make sure we position you as strongly as possible going into this. Could you send me your current resume when you have a moment?" Then explain WHY: strong candidates get overlooked when their background isn't communicated clearly on paper — you want to make sure theirs lands the way it should. Reference their specific background (companies, roles). End: "Once I've had the chance to review it, I'll come back to you quickly with my thoughts and next steps."
-IMPORTANT: Do NOT mention calls, phone conversations, or scheduling. Only pivot to the resume request if the candidate's message has been properly addressed first.`;
+IMPORTANT: Do NOT mention calls, phone conversations, or scheduling by default. EXCEPTION: if the sender's instructions further below tell you to mention a call or availability, follow those instructions exactly instead — they take priority over this default. Only pivot to the resume request if the candidate's message has been properly addressed first.`;
   } else if (stepsCompleted.resumeReceived && !stepsCompleted.reviewSent) {
     nextStep = `NEXT PIPELINE STEP: Acknowledge resume receipt and ask two clarifying questions.
 If they just sent their resume or are referencing it, structure your reply as: (1) "I've successfully received your resume, thank you for sending that over." (2) Say you're reviewing against specific requirements. (3) Ask exactly two bullet questions before finalizing feedback: Recency (is this the most current version?) and Comprehensive Scope (does it fully capture their ownership at [company], home care leadership, and other key accomplishments — reference their actual background). (4) "I ask because backgrounds like yours are often much stronger in practice than what initially appears on paper." (5) "Once you confirm those details, I'll finalize my feedback."
@@ -1015,7 +1017,7 @@ CRITICAL RULES:
 - NEVER skip over a question, concern, or hesitation to get to the template
 - NEVER open with "Thank you for getting back to me" or any generic filler
 - NEVER sound like a script — read their actual message closely and let your reply be shaped by their specific words, tone, and what they emphasized. No two replies should read the same.
-- Do not introduce calls, phone conversations, or scheduling yourself. But if the candidate raises it first (asks to talk, proposes a call, gives availability), engage with it directly and specifically — do not dodge or redirect away from it.
+- Do not introduce calls, phone conversations, or scheduling yourself by default. But if the candidate raises it first (asks to talk, proposes a call, gives availability), engage with it directly — do not dodge it. Also: if the sender's instructions further below explicitly tell you to mention a call, your availability, or scheduling, that instruction OVERRIDES this default rule — follow it exactly, stating the call plainly, not vaguely.
 - Convey real urgency and forward motion throughout — this search is moving fast, you're actively progressing candidates now, and you want to keep things on pace. This should come through naturally in how you frame the next step, not as a bolted-on line about deadlines.
 - Reference their actual background (specific companies, roles, words they used) throughout
 - Keep it focused — don't try to do too much in one email
