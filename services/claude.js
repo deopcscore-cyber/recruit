@@ -32,7 +32,23 @@ function calcCostCents(usage, provider) {
 
 function appendInstructions(prompt, instructions) {
   if (!instructions || !instructions.trim()) return prompt;
-  return prompt + '\n\nADDITIONAL INSTRUCTIONS FROM SENDER: ' + instructions.trim();
+  // Framed as an override, not a suggestion — the templates above are full of
+  // "follow this exact structure" directives and numbered steps that a soft
+  // "additional note" gets steamrolled by. This has to outrank them explicitly,
+  // or the sender's actual request for this email gets silently dropped.
+  return prompt + `
+
+═══════════════════════════════════════════
+OVERRIDE — SENDER'S INSTRUCTIONS FOR THIS EMAIL (highest priority)
+Everything above (structure, examples, numbered steps, "critical rules") is
+a default starting point. The instructions below are what the sender
+actually asked for THIS TIME. Where they conflict with anything above,
+follow the instructions below instead — do not silently keep the default
+structure. Apply them concretely (if they ask for urgency, the sentences
+must read as urgent, not just add a word "urgent" somewhere; if they ask
+to mention something, mention it plainly, not vaguely):
+${instructions.trim()}
+═══════════════════════════════════════════`;
 }
 
 // Which provider runs first for this user. Explicit setting wins; otherwise
