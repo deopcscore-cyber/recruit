@@ -625,9 +625,38 @@ async function runAutoFetch() {
 
         for (const reply of replies) {
           const fromEmail = reply.from ? (reply.from.match(/<([^>]+)>/) || [,''])[1].trim() || reply.from.trim() : '';
-          if (!fromEmail) continue;
-          const candidate = candidates.find(c => c.email && c.email.toLowerCase() === fromEmail.toLowerCase());
+
+          // Match candidate: thread ID first (bounce-backs arrive in the same
+          // Gmail thread as the original send, from mailer-daemon — not the
+          // candidate's own address, so from-email matching alone misses them
+          // entirely and bounces never get flagged), then from-email, then
+          // tracking pixel in the body.
+          let candidate = null;
+          if (reply.matchedCandidateId) {
+            candidate = candidates.find(c => c.id === reply.matchedCandidateId);
+          }
+          if (!candidate && fromEmail) {
+            candidate = candidates.find(c => c.email && c.email.toLowerCase() === fromEmail.toLowerCase());
+          }
+          if (!candidate && reply.body) {
+            candidate = candidates.find(c => c.trackingId && reply.body.includes(`/track/${c.trackingId}`));
+          }
           if (!candidate) continue;
+
+          // Bounce detection — sender is MAILER-DAEMON/postmaster, or subject signals NDR
+          const fromAddrLower = (reply.from || '').toLowerCase();
+          const subjLower     = (reply.subject || '').toLowerCase();
+          const isBounce = /mailer-daemon|postmaster@|mail delivery subsystem|delivery subsystem/i.test(fromAddrLower)
+            || /undeliverable|delivery (has )?fail|delivery status notification|returned mail|address not found|user unknown|no such user/i.test(subjLower);
+          if (isBounce) {
+            candidate.bounced   = true;
+            candidate.bouncedAt = new Date().toISOString();
+            await storageService.saveCandidate(candidate);
+            try { followupsSvc.cancelSequence(candidate.id); } catch (e) {}
+            console.log(`Auto-fetch: bounce detected for ${candidate.name} <${candidate.email}> — follow-ups cancelled`);
+            continue;
+          }
+
           const already = (candidate.thread || []).some(t => t.gmailMessageId === reply.gmailMessageId);
           if (already) continue;
 
