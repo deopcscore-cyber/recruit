@@ -52,6 +52,29 @@ router.get('/', async (req, res) => {
     let pendingFollowUps = 0;
     try { pendingFollowUps = require('../services/queue').pendingFollowUpCount(req.session.userId); } catch (e) {}
 
+    // Deliverability warning — only once there's enough volume to mean anything
+    // (a handful of sends with 0 opens is normal noise, not a signal). Below
+    // 25% open rate usually means landing in spam; healthy opens but almost
+    // no replies points to messaging, not deliverability.
+    let deliverabilityWarning = null;
+    const MIN_SAMPLE = 20;
+    if (withOutreach >= MIN_SAMPLE) {
+      if (openRate < 25) {
+        deliverabilityWarning = {
+          type: 'open_rate',
+          openRate,
+          message: `Only ${openRate}% of your emails are being opened — that usually means they're landing in spam, not that people aren't interested. Worth checking your sending setup.`
+        };
+      } else if (responseRate < 5) {
+        deliverabilityWarning = {
+          type: 'reply_rate',
+          openRate,
+          responseRate,
+          message: `Your emails are being opened (${openRate}%) but almost nobody is replying (${responseRate}%) — that points to the message itself, not deliverability.`
+        };
+      }
+    }
+
     // Avg days active (from first outbound to now, for active candidates)
     const activeTimes = candidates
       .filter(c => c.thread && c.thread.length > 0 && !['Closed'].includes(c.stage))
@@ -87,7 +110,8 @@ router.get('/', async (req, res) => {
       avgDays,
       funnel,
       sentimentCounts,
-      pendingFollowUps
+      pendingFollowUps,
+      deliverabilityWarning
     });
   } catch (err) {
     console.error('Analytics error:', err);

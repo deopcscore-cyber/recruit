@@ -545,6 +545,24 @@ async function loadTodayPage() {
     </div>`;
   }
 
+  // Deliverability warning — dismissible for 24h so it doesn't nag every load,
+  // but comes back if the problem is still there the next day.
+  let dwHtml = '';
+  const dw = analytics && analytics.deliverabilityWarning;
+  if (dw) {
+    const dismissKey = `dw_dismissed_${dw.type}`;
+    const dismissedAt = Number(localStorage.getItem(dismissKey) || 0);
+    const stillDismissed = Date.now() - dismissedAt < 24 * 60 * 60 * 1000;
+    if (!stillDismissed) {
+      const icon = dw.type === 'open_rate' ? '📪' : '📝';
+      dwHtml = `<div id="dw-banner" style="display:flex;align-items:flex-start;gap:10px;padding:11px 14px;background:#fef3c7;border:1px solid #fde68a;border-radius:9px;font-size:0.82rem;color:#92400e;margin-bottom:22px">
+        <span style="font-size:1rem">${icon}</span>
+        <span style="flex:1">${escapeHtml(dw.message)}</span>
+        <button id="dw-dismiss-btn" data-key="${dismissKey}" style="background:none;border:none;color:#92400e;cursor:pointer;font-size:0.95rem;line-height:1;padding:0 2px;flex-shrink:0" title="Dismiss for 24h">×</button>
+      </div>`;
+    }
+  }
+
   // Week stats strip
   let statsHtml = '';
   if (analytics) {
@@ -562,6 +580,7 @@ async function loadTodayPage() {
   }
 
   el.innerHTML = `
+    ${dwHtml}
     ${apHtml}
     ${allClear ? `
       <div style="text-align:center;padding:40px 20px;border:1px dashed var(--border);border-radius:12px;margin-bottom:22px">
@@ -622,6 +641,15 @@ async function loadTodayPage() {
   });
   const hl = el.querySelector('#today-hotleads-link');
   if (hl) hl.addEventListener('click', () => navigateTo('hotleads'));
+
+  const dwDismissBtn = el.querySelector('#dw-dismiss-btn');
+  if (dwDismissBtn) {
+    dwDismissBtn.addEventListener('click', () => {
+      localStorage.setItem(dwDismissBtn.dataset.key, String(Date.now()));
+      const banner = document.getElementById('dw-banner');
+      if (banner) banner.remove();
+    });
+  }
 
   // Unknown lead buttons
   el.querySelectorAll('.add-lead-btn').forEach(btn => {
