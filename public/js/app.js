@@ -86,11 +86,13 @@ document.addEventListener('DOMContentLoaded', async () => {
     item.addEventListener('click', () => navigateTo(item.dataset.page));
   });
 
-  // Logout
-  document.getElementById('logout-btn').addEventListener('click', async () => {
+  // Logout (sidebar link + Settings > Account button on mobile)
+  const doLogout = async () => {
     await API.auth.logout();
     window.location.href = '/login';
-  });
+  };
+  document.getElementById('logout-btn').addEventListener('click', doLogout);
+  document.getElementById('logout-btn-settings')?.addEventListener('click', doLogout);
 
   // Credit history modal
   document.getElementById('sidebar-credits').addEventListener('click', openCreditHistoryModal);
