@@ -18,6 +18,22 @@ function isOutlookReady(user) {
 function isSmtpReady(user) {
   return !!(user.smtp?.connected && user.smtp.host && user.smtp.username && user.smtp.password);
 }
+
+// Gmail's own per-user quota — a transient condition that resolves itself,
+// not a bug. Turns the raw "User-rate limit exceeded. Retry after <ISO>"
+// error into a message that tells the user when to actually try again.
+function friendlyRateLimitError(err) {
+  const msg = (err && err.message) || '';
+  if (!/rate limit exceeded/i.test(msg)) return null;
+  const match = msg.match(/Retry after (\S+)/i);
+  const retryAt = match ? new Date(match[1]) : null;
+  if (retryAt && !isNaN(retryAt)) {
+    const minutes = Math.max(1, Math.ceil((retryAt - Date.now()) / 60000));
+    const timeStr = retryAt.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+    return `Gmail is temporarily rate-limiting your account — this resolves on its own. Try again in about ${minutes} minute${minutes === 1 ? '' : 's'} (around ${timeStr}).`;
+  }
+  return 'Gmail is temporarily rate-limiting your account — this resolves on its own within a few minutes. Try again shortly.';
+}
 function getEmailService(user) {
   if (isOutlookReady(user)) return outlookService;
   if (isZohoOAuthReady(user))  return zohoService;
@@ -266,6 +282,10 @@ router.post('/send', requireAuth, async (req, res) => {
     console.error('Send email error:', err);
     if (err.message && err.message.startsWith('GMAIL_REAUTH_REQUIRED')) {
       return res.status(400).json({ error: err.message, reauth: 'gmail' });
+    }
+    const rateLimitMsg = friendlyRateLimitError(err);
+    if (rateLimitMsg) {
+      return res.status(429).json({ error: rateLimitMsg, rateLimited: true });
     }
     return res.status(500).json({ error: 'Failed to send email: ' + err.message });
   }

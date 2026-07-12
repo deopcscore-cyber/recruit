@@ -382,6 +382,19 @@ function _getUserEmailAddress(user) {
 const followupsSvc = require('./services/followups');
 let queueBusy = false;
 
+// Gmail's own per-user quota (not something we control) returns
+// "User-rate limit exceeded.  Retry after 2026-07-12T20:33:05.301Z" — a
+// transient condition that resolves itself. Extracts the retry time so
+// callers can reschedule instead of treating it as a permanent failure.
+function _gmailRateLimitRetryAt(err) {
+  const msg = (err && err.message) || '';
+  if (!/rate limit exceeded/i.test(msg)) return null;
+  const match = msg.match(/Retry after (\S+)/i);
+  const parsed = match ? new Date(match[1]) : null;
+  if (parsed && !isNaN(parsed)) return parsed;
+  return new Date(Date.now() + 15 * 60 * 1000); // no timestamp given — fall back to 15 min
+}
+
 async function processQueueJob() {
   if (queueBusy) return;
   const job = queueSvc.getNextDueJob();
@@ -397,8 +410,17 @@ async function processQueueJob() {
       await _processOutreachJob(job);
     }
   } catch (err) {
-    console.error(`Queue job ${job.id} failed: ${err.message}`);
-    queueSvc.updateJob(job.id, { status: 'failed', error: err.message });
+    const retryAt = _gmailRateLimitRetryAt(err);
+    if (retryAt) {
+      // Transient Gmail quota — push back to pending at the retry time instead
+      // of losing the send. Otherwise this silently drops outreach/follow-ups
+      // with no way for the user to know it never went out.
+      queueSvc.updateJob(job.id, { status: 'pending', scheduledAt: retryAt.toISOString() });
+      console.log(`Queue job ${job.id} hit Gmail rate limit — rescheduled for ${retryAt.toISOString()}`);
+    } else {
+      console.error(`Queue job ${job.id} failed: ${err.message}`);
+      queueSvc.updateJob(job.id, { status: 'failed', error: err.message });
+    }
   } finally {
     queueBusy = false;
   }
