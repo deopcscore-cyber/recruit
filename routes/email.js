@@ -8,16 +8,10 @@ const gmailService   = require('../services/gmail');
 const zohoService    = require('../services/zoho');
 const outlookService = require('../services/outlook');
 const smtpService    = require('../services/smtp');
+const outbound       = require('../services/outbound');
+const queueSvc       = require('../services/queue');
 
-function isZohoOAuthReady(user) {
-  return !!(user.zoho?.connected && user.zoho.accessToken);
-}
-function isOutlookReady(user) {
-  return !!(user.outlook?.connected && user.outlook.accessToken);
-}
-function isSmtpReady(user) {
-  return !!(user.smtp?.connected && user.smtp.host && user.smtp.username && user.smtp.password);
-}
+const { getEmailService, isEmailConnected, isZohoOAuthReady, isOutlookReady, isSmtpReady } = outbound;
 
 // Gmail's own per-user quota — a transient condition that resolves itself,
 // not a bug. Turns the raw "User-rate limit exceeded. Retry after <ISO>"
@@ -33,15 +27,6 @@ function friendlyRateLimitError(err) {
     return `Gmail is temporarily rate-limiting your account — this resolves on its own. Try again in about ${minutes} minute${minutes === 1 ? '' : 's'} (around ${timeStr}).`;
   }
   return 'Gmail is temporarily rate-limiting your account — this resolves on its own within a few minutes. Try again shortly.';
-}
-function getEmailService(user) {
-  if (isOutlookReady(user)) return outlookService;
-  if (isZohoOAuthReady(user))  return zohoService;
-  if (isSmtpReady(user))    return smtpService;
-  return gmailService;
-}
-function isEmailConnected(user) {
-  return !!(user.gmail?.connected) || isZohoOAuthReady(user) || isOutlookReady(user) || isSmtpReady(user);
 }
 const storage = require('../services/storage');
 const requireAuth = require('../middleware/auth');
@@ -99,7 +84,7 @@ const gmailCallback = async (req, res) => {
 // POST /api/email/send
 router.post('/send', requireAuth, async (req, res) => {
   try {
-    const { candidateId, subject, body, isReply, cc } = req.body;
+    const { candidateId, subject, body, isReply, cc, scheduledAt } = req.body;
 
     if (!candidateId || !subject || !body) {
       return res.status(400).json({ error: 'candidateId, subject, and body are required' });
@@ -115,167 +100,36 @@ router.post('/send', requireAuth, async (req, res) => {
       return res.status(400).json({ error: 'No email account connected. Connect Gmail, Zoho Mail, or Outlook in Settings.' });
     }
 
-    // Fresh tracking pixel for every outbound email — resets the opened badge
-    candidate.trackingId = uuidv4();
-    candidate.opened     = false;
-    candidate.openedAt   = null;
-
-    const sendParams = {
-      to: candidate.email,
-      subject,
-      body,
-      trackingId: candidate.trackingId,
-      ...(cc ? { cc } : {})
-    };
-
-    // Threading — pass threadId AND the correct SMTP Message-ID for In-Reply-To
-    if (isReply && candidate.gmailThreadId) {
-      sendParams.threadId = candidate.gmailThreadId;
-    }
-    // Use the SMTP Message-ID (not the Gmail API ID) for RFC-compliant threading
-    if (isReply && candidate.lastSmtpMessageId) {
-      sendParams.inReplyTo = candidate.lastSmtpMessageId;
-    }
-
-    // Normalize subject for reply threading (RFC 2822 compliance)
-    let replySubject = subject;
-    if (isReply) {
-      if (!replySubject.match(/^re:\s*/i)) {
-        replySubject = 'Re: ' + (candidate.originalSubject || replySubject).replace(/^re:\s*/i, '');
+    // Schedule-send: queue the composed draft instead of sending immediately.
+    // Times less than a minute out just send now — not worth a queue round-trip.
+    if (scheduledAt) {
+      const t = new Date(scheduledAt).getTime();
+      if (isNaN(t)) return res.status(400).json({ error: 'Invalid scheduledAt timestamp' });
+      if (t > Date.now() + 30 * 24 * 60 * 60 * 1000) {
+        return res.status(400).json({ error: 'Scheduled time can be at most 30 days in the future' });
       }
-      sendParams.subject = replySubject;
-
-      // Build In-Reply-To using SMTP Message-ID
-      if (candidate.lastSmtpMessageId) {
-        const cleanId = candidate.lastSmtpMessageId.replace(/^<|>$/g, '');
-        sendParams.inReplyTo = cleanId;
-        // Cumulative References chain
-        const newRef = `<${cleanId}>`;
-        sendParams.references = candidate.gmailReferences
-          ? (candidate.gmailReferences.includes(newRef) ? candidate.gmailReferences : `${candidate.gmailReferences} ${newRef}`)
-          : newRef;
+      if (t > Date.now() + 60 * 1000) {
+        const job = {
+          id:            uuidv4(),
+          type:          'scheduled_send',
+          userId:        req.session.userId,
+          candidateId:   candidate.id,
+          candidateName: candidate.name,
+          subject,
+          body,
+          isReply:       !!isReply,
+          cc:            cc || null,
+          scheduledAt:   new Date(t).toISOString(),
+          status:        'pending',
+          createdAt:     new Date().toISOString()
+        };
+        queueSvc.addJobs([job]);
+        return res.json({ scheduled: true, jobId: job.id, scheduledAt: job.scheduledAt });
       }
     }
 
-    const emailSvc = getEmailService(user);
-    const { gmailMessageId, gmailThreadId, smtpMessageId } = await emailSvc.sendEmail(req.session.userId, sendParams);
-
-    // Add to thread
-    const message = {
-      id: uuidv4(),
-      direction: 'outbound',
-      subject,
-      body,
-      timestamp: new Date().toISOString(),
-      gmailMessageId,
-      gmailThreadId,
-      smtpMessageId,
-      read: true
-    };
-
-    if (!candidate.thread) candidate.thread = [];
-    candidate.thread.push(message);
-    candidate.lastGmailMessageId = gmailMessageId;
-    candidate.lastSmtpMessageId = smtpMessageId;
-    candidate.lastSubject = subject;
-
-    // Update gmailThreadId if this was the first send
-    if (!candidate.gmailThreadId) {
-      candidate.gmailThreadId = gmailThreadId;
-    }
-
-    // Set a 5-day follow-up reminder on first outbound email if not already set
-    if (!candidate.followUpDate) {
-      const followUp = new Date();
-      followUp.setDate(followUp.getDate() + 5);
-      candidate.followUpDate = followUp.toISOString();
-    }
-
-    // Track first email subject for consistent thread subject on all replies
-    if (!candidate.originalSubject) {
-      candidate.originalSubject = sendParams.subject || subject;
-    }
-
-    // Update cumulative References chain with this outbound message's SMTP ID
-    if (smtpMessageId) {
-      const newRef = `<${smtpMessageId.replace(/^<|>$/g, '')}>`;
-      candidate.gmailReferences = candidate.gmailReferences
-        ? `${candidate.gmailReferences} ${newRef}`
-        : newRef;
-      candidate.lastSmtpMessageId = smtpMessageId;
-    }
-
-    await storage.saveCandidate(candidate);
-
-    // Automated follow-up sequence: schedule on a fresh outreach, cancel when
-    // this send is a manual reply (the conversation is already moving).
-    try {
-      const followups = require('../services/followups');
-      if (isReply) {
-        followups.cancelSequence(candidate.id);
-      } else {
-        followups.scheduleSequence(user, candidate);
-      }
-    } catch (fuErr) {
-      console.error('Follow-up scheduling error:', fuErr.message);
-    }
-
-    // ── CC-to-auto-appear: if email CC's a consultant user, mirror candidate to their account ──
-    if (cc) {
-      try {
-        const ccEmail = cc.trim().toLowerCase();
-        const consultantUser = await storage.getUserByEmail(ccEmail);
-        if (consultantUser && consultantUser.id !== req.session.userId) {
-          const existing = await storage.getUserCandidates(consultantUser.id);
-          const alreadyThere = existing.some(c =>
-            (c.email || '').toLowerCase() === (candidate.email || '').toLowerCase() ||
-            c.referredFromId === candidate.id
-          );
-          if (!alreadyThere) {
-            const mirror = {
-              id: uuidv4(),
-              userId: consultantUser.id,
-              name: candidate.name,
-              email: candidate.email,
-              title: candidate.title,
-              company: candidate.company,
-              location: candidate.location,
-              summary: candidate.summary,
-              background: candidate.background,
-              career: candidate.career || [],
-              education: candidate.education || [],
-              linkedin: candidate.linkedin || '',
-              resume: candidate.resume || null,
-              stage: 'Imported',
-              stepsCompleted: { introduced: true },
-              consultantPipeline: true,
-              referredFromId: candidate.id,
-              referredBy: {
-                userId: req.session.userId,
-                name: user.name || '',
-                email: user.email || '',
-                company: user.companyName || ''
-              },
-              thread: [{
-                id: uuidv4(),
-                direction: 'context',
-                subject: subject,
-                body: `[Referred by ${user.name || user.email}]\n\n${body}`,
-                timestamp: new Date().toISOString(),
-                read: true,
-                isIntroContext: true
-              }],
-              createdAt: new Date().toISOString(),
-              updatedAt: new Date().toISOString()
-            };
-            await storage.saveCandidate(mirror);
-            console.log(`[CC] Mirrored ${candidate.name} → consultant ${consultantUser.email}`);
-          }
-        }
-      } catch (ccErr) {
-        console.error('[CC] Mirror failed:', ccErr.message);
-      }
-    }
+    const { gmailMessageId, gmailThreadId } =
+      await outbound.sendComposed(user, candidate, { subject, body, isReply: !!isReply, cc: cc || null });
 
     return res.json({ success: true, gmailMessageId, gmailThreadId, candidate });
   } catch (err) {
@@ -288,6 +142,31 @@ router.post('/send', requireAuth, async (req, res) => {
       return res.status(429).json({ error: rateLimitMsg, rateLimited: true });
     }
     return res.status(500).json({ error: 'Failed to send email: ' + err.message });
+  }
+});
+
+// GET /api/email/scheduled/:candidateId — pending scheduled sends for one candidate
+router.get('/scheduled/:candidateId', requireAuth, (req, res) => {
+  try {
+    const jobs = queueSvc.getJobsForUser(req.session.userId)
+      .filter(j => j.type === 'scheduled_send' && j.status === 'pending' && j.candidateId === req.params.candidateId)
+      .map(j => ({ id: j.id, subject: j.subject, body: j.body, cc: j.cc, isReply: j.isReply, scheduledAt: j.scheduledAt }));
+    return res.json({ jobs });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// DELETE /api/email/scheduled/:jobId — cancel a pending scheduled send
+router.delete('/scheduled/:jobId', requireAuth, (req, res) => {
+  try {
+    const job = queueSvc.getJobsForUser(req.session.userId).find(j => j.id === req.params.jobId);
+    if (!job || job.type !== 'scheduled_send') return res.status(404).json({ error: 'Scheduled send not found' });
+    if (job.status !== 'pending') return res.status(400).json({ error: `Cannot cancel — already ${job.status}` });
+    queueSvc.updateJob(job.id, { status: 'cancelled' });
+    return res.json({ success: true });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
   }
 });
 

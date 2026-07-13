@@ -1564,7 +1564,21 @@ function renderThreadTab(body) {
         <div class="compose-footer">
           <span class="text-xs text-muted">All sends require your approval above</span>
           <button class="btn btn-ghost btn-sm" id="th-check-deliver" title="Check spam/deliverability risk">🛡 Check deliverability</button>
-          <button class="btn btn-primary" id="th-send">Send Email</button>
+          <span style="position:relative;display:inline-flex">
+            <button class="btn btn-primary" id="th-send" style="border-top-right-radius:0;border-bottom-right-radius:0">Send Email</button>
+            <button class="btn btn-primary" id="th-schedule-btn" title="Schedule send for later" style="border-top-left-radius:0;border-bottom-left-radius:0;border-left:1px solid rgba(255,255,255,0.3);padding-left:10px;padding-right:10px">🕐 ▾</button>
+            <div id="th-schedule-menu" style="display:none;position:absolute;bottom:calc(100% + 6px);right:0;background:var(--card-bg);border:1px solid var(--border);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,0.22);padding:6px;min-width:220px;z-index:60">
+              <div style="font-size:0.68rem;font-weight:600;color:var(--text-muted);letter-spacing:0.08em;text-transform:uppercase;padding:4px 8px 6px">Send later</div>
+              <button class="btn btn-ghost btn-sm th-sched-preset" data-mins="15" style="width:100%;justify-content:flex-start">In 15 minutes</button>
+              <button class="btn btn-ghost btn-sm th-sched-preset" data-mins="60" style="width:100%;justify-content:flex-start">In 1 hour</button>
+              <button class="btn btn-ghost btn-sm th-sched-preset" data-mins="180" style="width:100%;justify-content:flex-start">In 3 hours</button>
+              <button class="btn btn-ghost btn-sm" id="th-sched-tomorrow" style="width:100%;justify-content:flex-start">Tomorrow 9:00 AM</button>
+              <div style="border-top:1px solid var(--border);margin:6px 0;padding:8px 8px 4px">
+                <input type="datetime-local" id="th-sched-custom" style="width:100%;font-size:0.8rem;margin-bottom:6px" />
+                <button class="btn btn-secondary btn-sm" id="th-sched-custom-go" style="width:100%">Schedule</button>
+              </div>
+            </div>
+          </span>
         </div>
       </div>
     </div>
@@ -1732,6 +1746,93 @@ function renderThreadTab(body) {
     }
     finally { btn.disabled = false; btn.textContent = 'Send Email'; }
   });
+
+  // ── Schedule send ─────────────────────────────────────────────────────────
+  const schedMenu = body.querySelector('#th-schedule-menu');
+  const schedToggle = body.querySelector('#th-schedule-btn');
+  const fmtWhen = d => d.toLocaleString([], { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+
+  schedToggle.addEventListener('click', () => {
+    const show = schedMenu.style.display === 'none';
+    schedMenu.style.display = show ? 'block' : 'none';
+    if (show) {
+      // Prefill custom picker with +1h, rounded to the next quarter hour
+      const d = new Date(Date.now() + 60 * 60 * 1000);
+      d.setMinutes(Math.ceil(d.getMinutes() / 15) * 15, 0, 0);
+      const pad = n => String(n).padStart(2, '0');
+      body.querySelector('#th-sched-custom').value =
+        `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    }
+  });
+
+  async function scheduleSend(when) {
+    const subject = body.querySelector('#th-subject').value.trim();
+    const msgBody = body.querySelector('#th-body').value.trim();
+    if (!subject) { Toast.warning('Subject line required'); return; }
+    if (!msgBody) { Toast.warning('Message body is empty'); return; }
+    if (when.getTime() <= Date.now()) { Toast.warning('Pick a time in the future'); return; }
+    schedMenu.style.display = 'none';
+    schedToggle.disabled = true;
+    try {
+      const isReply = thread.some(m => m.direction === 'outbound');
+      await API.email.send({ candidateId: c.id, subject, body: msgBody, isReply, scheduledAt: when.toISOString() });
+      clearDraft(c.id, 'thread');
+      clearDraft(c.id, 'thread_subj');
+      Toast.success(`Scheduled for ${fmtWhen(when)}`);
+      renderThreadTab(body);
+    } catch (err) {
+      if (typeof handleReauthError === 'function' && handleReauthError(err)) { /* handled */ }
+      else Toast.error(err.message);
+    }
+    finally { schedToggle.disabled = false; }
+  }
+
+  body.querySelectorAll('.th-sched-preset').forEach(b => {
+    b.addEventListener('click', () => scheduleSend(new Date(Date.now() + parseInt(b.dataset.mins, 10) * 60 * 1000)));
+  });
+  body.querySelector('#th-sched-tomorrow').addEventListener('click', () => {
+    const d = new Date();
+    d.setDate(d.getDate() + 1);
+    d.setHours(9, 0, 0, 0);
+    scheduleSend(d);
+  });
+  body.querySelector('#th-sched-custom-go').addEventListener('click', () => {
+    const v = body.querySelector('#th-sched-custom').value;
+    if (!v) { Toast.warning('Pick a date and time'); return; }
+    scheduleSend(new Date(v));
+  });
+
+  // ── Pending scheduled sends — banner with cancel ─────────────────────────
+  API.email.scheduled(c.id).then(({ jobs }) => {
+    if (!jobs || !jobs.length) return;
+    const msgsEl2 = body.querySelector('#thread-msgs');
+    if (!msgsEl2) return;
+    jobs.forEach(job => {
+      const div = document.createElement('div');
+      div.className = 'sched-banner';
+      div.style.cssText = 'margin:8px 16px;padding:10px 14px;border:1px dashed var(--border);border-radius:10px;background:var(--card-bg);display:flex;align-items:center;gap:10px;font-size:0.82rem';
+      div.innerHTML = `
+        <span style="font-size:1rem">🕐</span>
+        <span style="flex:1;min-width:0">
+          <strong>Scheduled</strong> — sends ${escapeHtml(fmtWhen(new Date(job.scheduledAt)))}<br>
+          <span style="color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block">${escapeHtml(job.subject)}</span>
+        </span>
+        <button class="btn btn-secondary btn-sm">Cancel</button>`;
+      div.querySelector('button').addEventListener('click', async () => {
+        try {
+          await API.email.cancelScheduled(job.id);
+          // Restore the draft into the compose fields so it isn't lost
+          body.querySelector('#th-subject').value = job.subject;
+          const bodyField = body.querySelector('#th-body');
+          bodyField.value = job.body;
+          bodyField.dispatchEvent(new Event('input'));
+          div.remove();
+          Toast.success('Scheduled send cancelled — draft restored below');
+        } catch (err) { Toast.error(err.message); }
+      });
+      msgsEl2.insertAdjacentElement('afterend', div);
+    });
+  }).catch(() => {});
 }
 
 // ================================================================

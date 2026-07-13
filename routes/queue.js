@@ -97,8 +97,9 @@ router.post('/outreach', async (req, res) => {
       return res.status(400).json({ error: 'No email provider connected. Connect Gmail or Zoho Mail in Settings first.' });
     }
 
-    // Cancel any existing pending jobs so the user starts fresh
-    queueSvc.cancelPendingForUser(req.session.userId);
+    // Cancel any existing pending outreach jobs so the user starts fresh
+    // (scoped to 'outreach' so scheduled sends and follow-ups are untouched)
+    queueSvc.cancelPendingForUser(req.session.userId, 'outreach');
 
     const queued = jobs.map(j => ({
       id:            uuidv4(),
@@ -132,7 +133,7 @@ router.get('/outreach', (req, res) => {
 // DELETE /api/queue/outreach — cancel pending jobs
 router.delete('/outreach', (req, res) => {
   try {
-    queueSvc.cancelPendingForUser(req.session.userId);
+    queueSvc.cancelPendingForUser(req.session.userId, 'outreach');
     return res.json({ success: true });
   } catch (err) {
     return res.status(500).json({ error: err.message });
