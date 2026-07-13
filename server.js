@@ -393,6 +393,8 @@ async function processQueueJob() {
   try {
     if ((job.type || 'outreach') === 'followup') {
       await _processFollowUpJob(job);
+    } else if (job.type === 'scheduled_send') {
+      await _processScheduledSendJob(job);
     } else {
       await _processOutreachJob(job);
     }
@@ -484,6 +486,29 @@ async function _processOutreachJob(job) {
 
   queueSvc.updateJob(job.id, { status: 'sent', sentAt: new Date().toISOString() });
   console.log(`Queue: outreach sent → ${candidate.name} <${candidate.email}>`);
+}
+
+// User-composed draft queued via schedule-send. No AI generation and no credit
+// spend at send time — the exact approved text goes out through the same path
+// as an immediate manual send.
+async function _processScheduledSendJob(job) {
+  const storageSvc = require('./services/storage');
+  const outbound   = require('./services/outbound');
+  const user      = await storageSvc.getUserById(job.userId);
+  const candidate = await storageSvc.getCandidateById(job.candidateId);
+
+  if (!user || !candidate) { queueSvc.updateJob(job.id, { status: 'cancelled', reason: 'missing' }); return; }
+  if (!outbound.isEmailConnected(user)) throw new Error('No email provider connected');
+
+  await outbound.sendComposed(user, candidate, {
+    subject: job.subject,
+    body:    job.body,
+    isReply: !!job.isReply,
+    cc:      job.cc || null
+  });
+
+  queueSvc.updateJob(job.id, { status: 'sent', sentAt: new Date().toISOString() });
+  console.log(`Queue: scheduled send delivered → ${candidate.name} <${candidate.email}>`);
 }
 
 async function _processFollowUpJob(job) {

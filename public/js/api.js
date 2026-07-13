@@ -60,6 +60,8 @@ const API = {
   email: {
     getConnectUrl() { return API.get('/api/email/connect'); },
     send(data) { return API.post('/api/email/send', data); },
+    scheduled(candidateId) { return API.get(`/api/email/scheduled/${candidateId}`); },
+    cancelScheduled(jobId) { return API.delete(`/api/email/scheduled/${jobId}`); },
     fetch() { return API.post('/api/email/fetch'); },
     test() { return API.post('/api/email/test'); },
     checkPriorContact(emails) { return API.post('/api/email/check-prior-contact', { emails }); },
