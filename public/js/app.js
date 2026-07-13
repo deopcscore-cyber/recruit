@@ -1632,6 +1632,14 @@ async function loadAnalyticsPage() {
         </div>
       </div>
 
+      <!-- Follow-ups sent per day -->
+      <div class="settings-card">
+        <div class="settings-card-header">
+          <h3>📤 Follow-Ups Sent <span style="font-size:0.8rem;font-weight:400;color:var(--text-muted)">last 14 days</span></h3>
+        </div>
+        <div class="settings-card-body" id="followups-sent-chart"><p style="color:var(--text-muted);font-size:0.85rem">Loading…</p></div>
+      </div>
+
       <!-- Follow-ups due -->
       <div class="settings-card">
         <div class="settings-card-header">
@@ -1655,6 +1663,35 @@ async function loadAnalyticsPage() {
         </div>`;
       }).join('');
     }).catch(() => {});
+
+    // Follow-ups sent per day — counts both the automated 3/7-day sequence
+    // and manually-drafted follow-ups sent via the Thread tab. Only successful
+    // sends land here (a message only exists in the thread once it's actually
+    // delivered), so this can't be inflated by queued/failed attempts.
+    API.get('/api/analytics/followups?days=14').then(({ series, total }) => {
+      const chart = document.getElementById('followups-sent-chart');
+      if (!chart) return;
+      if (!series || !series.length || total === 0) {
+        chart.innerHTML = `<p style="color:var(--text-muted);font-size:0.85rem">No follow-ups sent in the last 14 days.</p>`;
+        return;
+      }
+      const max = Math.max(1, ...series.map(s => s.count));
+      const rows = series.map(s => {
+        const pct = Math.round((s.count / max) * 100);
+        const label = new Date(s.date + 'T00:00:00').toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' });
+        return `<div style="display:flex;align-items:center;gap:10px;padding:4px 0">
+          <span style="width:90px;font-size:0.78rem;color:var(--text-muted)">${label}</span>
+          <div style="flex:1;background:var(--border);border-radius:4px;height:8px"><div style="width:${pct}%;background:#6366f1;height:8px;border-radius:4px;transition:width .4s"></div></div>
+          <span style="width:24px;text-align:right;font-weight:600;color:#6366f1;font-size:0.82rem">${s.count}</span>
+        </div>`;
+      }).join('');
+      chart.innerHTML = `
+        <div style="font-size:0.78rem;color:var(--text-muted);margin-bottom:10px">${total} sent over the last 14 days</div>
+        ${rows}`;
+    }).catch(() => {
+      const chart = document.getElementById('followups-sent-chart');
+      if (chart) chart.innerHTML = `<p style="color:var(--text-muted);font-size:0.85rem">Couldn't load follow-up data.</p>`;
+    });
   } catch (err) {
     el.innerHTML = `<div style="padding:40px;text-align:center;color:#ef4444">Failed to load analytics: ${err.message}</div>`;
   }

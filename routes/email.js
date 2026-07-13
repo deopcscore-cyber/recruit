@@ -84,7 +84,7 @@ const gmailCallback = async (req, res) => {
 // POST /api/email/send
 router.post('/send', requireAuth, async (req, res) => {
   try {
-    const { candidateId, subject, body, isReply, cc, scheduledAt } = req.body;
+    const { candidateId, subject, body, isReply, cc, scheduledAt, isFollowUp } = req.body;
 
     if (!candidateId || !subject || !body) {
       return res.status(400).json({ error: 'candidateId, subject, and body are required' });
@@ -118,6 +118,7 @@ router.post('/send', requireAuth, async (req, res) => {
           subject,
           body,
           isReply:       !!isReply,
+          isFollowUp:    !!isFollowUp,
           cc:            cc || null,
           scheduledAt:   new Date(t).toISOString(),
           status:        'pending',
@@ -129,7 +130,7 @@ router.post('/send', requireAuth, async (req, res) => {
     }
 
     const { gmailMessageId, gmailThreadId } =
-      await outbound.sendComposed(user, candidate, { subject, body, isReply: !!isReply, cc: cc || null });
+      await outbound.sendComposed(user, candidate, { subject, body, isReply: !!isReply, isFollowUp: !!isFollowUp, cc: cc || null });
 
     return res.json({ success: true, gmailMessageId, gmailThreadId, candidate });
   } catch (err) {

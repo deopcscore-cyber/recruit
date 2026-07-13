@@ -526,6 +526,7 @@ async function _processScheduledSendJob(job) {
     subject: job.subject,
     body:    job.body,
     isReply: !!job.isReply,
+    isFollowUp: !!job.isFollowUp,
     cc:      job.cc || null
   });
 

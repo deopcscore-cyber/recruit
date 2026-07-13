@@ -1630,6 +1630,12 @@ function renderThreadTab(body) {
   });
 
   // AI buttons
+  // Tracks which draft type was last generated into the compose box, so Send
+  // can tag the outbound message as a follow-up for reporting (isFollowUp).
+  // Stays set through minor manual edits (typos, personalization) — only a
+  // fresh generate() call of a different type changes it.
+  let lastGeneratedType = null;
+
   async function aiGenerate(type) {
     const btn = body.querySelector(`#th-gen-${type}`);
     const origText = btn.textContent;
@@ -1649,6 +1655,7 @@ function renderThreadTab(body) {
       }
       if (result && result.draft) {
         body.querySelector('#th-body').value = result.draft;
+        lastGeneratedType = type;
         if (type === 'outreach' && !body.querySelector('#th-subject').value) {
           const firstName = c.name ? c.name.split(' ')[0] : 'there';
           body.querySelector('#th-subject').value = isConsultantThread
@@ -1744,7 +1751,7 @@ function renderThreadTab(body) {
     btn.disabled = true; btn.textContent = 'Sending…';
     try {
       const isReply = thread.some(m => m.direction === 'outbound');
-      const result = await API.email.send({ candidateId: c.id, subject, body: msgBody, isReply });
+      const result = await API.email.send({ candidateId: c.id, subject, body: msgBody, isReply, isFollowUp: lastGeneratedType === 'followup' });
       if (result.candidate) Object.assign(_modalCandidate, result.candidate);
       _modalOnUpdate(_modalCandidate);
       clearDraft(c.id, 'thread');
@@ -1786,7 +1793,7 @@ function renderThreadTab(body) {
     schedToggle.disabled = true;
     try {
       const isReply = thread.some(m => m.direction === 'outbound');
-      await API.email.send({ candidateId: c.id, subject, body: msgBody, isReply, scheduledAt: when.toISOString() });
+      await API.email.send({ candidateId: c.id, subject, body: msgBody, isReply, isFollowUp: lastGeneratedType === 'followup', scheduledAt: when.toISOString() });
       clearDraft(c.id, 'thread');
       clearDraft(c.id, 'thread_subj');
       Toast.success(`Scheduled for ${fmtWhen(when)}`);

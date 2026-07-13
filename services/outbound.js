@@ -34,7 +34,7 @@ function isEmailConnected(user) {
 // Send a user-composed email to a candidate: tracking pixel, reply threading,
 // thread persistence, follow-up sequencing, and CC-mirroring.
 // Mutates and saves the candidate; returns { gmailMessageId, gmailThreadId, candidate }.
-async function sendComposed(user, candidate, { subject, body, isReply = false, cc = null }) {
+async function sendComposed(user, candidate, { subject, body, isReply = false, cc = null, isFollowUp = false }) {
   // Fresh tracking pixel for every outbound email — resets the opened badge
   candidate.trackingId = uuidv4();
   candidate.opened     = false;
@@ -90,7 +90,8 @@ async function sendComposed(user, candidate, { subject, body, isReply = false, c
     gmailMessageId,
     gmailThreadId,
     smtpMessageId,
-    read: true
+    read: true,
+    ...(isFollowUp ? { isFollowUp: true } : {})
   };
 
   if (!candidate.thread) candidate.thread = [];

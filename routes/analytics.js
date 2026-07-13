@@ -153,4 +153,46 @@ router.get('/subjects', async (req, res) => {
   }
 });
 
+// GET /api/analytics/followups — successful follow-ups sent per day.
+// A message only ever lands in a candidate's thread after the send actually
+// succeeds (both the automated 3/7-day sequence and manually-drafted
+// follow-ups sent via the Thread tab are tagged isFollowUp: true), so
+// counting thread entries is the same as counting successful sends —
+// nothing failed/pending shows up here.
+router.get('/followups', async (req, res) => {
+  try {
+    const candidates = await storage.getUserCandidates(req.session.userId);
+    const days = Math.min(90, Math.max(1, parseInt(req.query.days, 10) || 30));
+
+    const byDay = new Map(); // 'YYYY-MM-DD' -> count
+    const today = new Date();
+    for (let i = 0; i < days; i++) {
+      const d = new Date(today);
+      d.setDate(d.getDate() - i);
+      byDay.set(d.toISOString().slice(0, 10), 0);
+    }
+
+    let total = 0;
+    for (const c of candidates) {
+      for (const m of c.thread || []) {
+        if (m.direction !== 'outbound' || !m.isFollowUp || !m.timestamp) continue;
+        const key = new Date(m.timestamp).toISOString().slice(0, 10);
+        if (byDay.has(key)) {
+          byDay.set(key, byDay.get(key) + 1);
+          total++;
+        }
+      }
+    }
+
+    const series = [...byDay.entries()]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([date, count]) => ({ date, count }));
+
+    return res.json({ days, total, series });
+  } catch (err) {
+    console.error('Follow-up analytics error:', err);
+    return res.status(500).json({ error: 'Failed to get follow-up analytics' });
+  }
+});
+
 module.exports = router;
