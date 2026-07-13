@@ -298,7 +298,7 @@ function renderPipelineBoard(candidates, onCardClick) {
     if (stageCandidates.length === 0) {
       cardsEl.innerHTML = `<div class="col-empty">No candidates</div>`;
     } else {
-      stageCandidates.sort((a,b) => new Date(b.updatedAt||0) - new Date(a.updatedAt||0)).forEach(c => {
+      stageCandidates.sort((a,b) => new Date(candidateLastActivity(b)||0) - new Date(candidateLastActivity(a)||0)).forEach(c => {
         const card = createCandidateCard(c);
         card.addEventListener('click', () => onCardClick(c));
         cardsEl.appendChild(card);
@@ -307,16 +307,27 @@ function renderPipelineBoard(candidates, onCardClick) {
   });
 }
 
+// Single source of truth for "how recently active" a candidate is — used by
+// both the board's sort and each card's displayed date, so they can't drift
+// apart (updatedAt gets bumped by things that aren't real activity, like an
+// open-tracking hit or a background re-evaluation, which used to sort a card
+// to the top while it still displayed an old date).
+function candidateLastActivity(candidate) {
+  const lastMsg = candidate.thread && candidate.thread.length > 0
+    ? candidate.thread[candidate.thread.length - 1]
+    : null;
+  return lastMsg ? lastMsg.timestamp : candidate.updatedAt;
+}
+
 function createCandidateCard(candidate) {
   const card = document.createElement('div');
   card.className = 'candidate-card' + (candidate.unread ? ' unread' : '');
   card.dataset.id = candidate.id;
 
-  // Last message
   const lastMsg = candidate.thread && candidate.thread.length > 0
     ? candidate.thread[candidate.thread.length - 1]
     : null;
-  const lastActivity = lastMsg ? lastMsg.timestamp : candidate.updatedAt;
+  const lastActivity = candidateLastActivity(candidate);
   const previewText = lastMsg ? preview55(lastMsg.body) : (candidate.summary ? preview55(candidate.summary) : '');
 
   // Follow-up badge
