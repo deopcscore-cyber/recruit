@@ -629,10 +629,27 @@ async function generateVictoryEmail(candidate, user, instructions) {
   const partnerEmail = (user.resumeConsultantEmail || '').trim();
   const ccLine       = partnerEmail ? ` (CC: ${partnerEmail})` : '';
 
-  const prompt = `You are ${user.name}, ${recruiterTitle}${company.name ? ' at ' + company.name : ''}. The candidate agreed to be introduced to ${partnerName}, a resume consultant you work with. You are writing the introduction email — addressed to the candidate but CC'ing ${partnerName}${ccLine}. This email must feel warm, specific, and urgent.
-${styleInfo ? '\nSTYLE GUIDANCE:\n' + styleInfo + '\n' : ''}
+  // Recent conversation so the intro responds to what the candidate actually
+  // said (their exact words when agreeing, questions, timing constraints)
+  // instead of opening with a canned acknowledgement.
+  const recentThread = (candidate.thread || [])
+    .filter(m => m.direction === 'inbound' || m.direction === 'outbound')
+    .slice(-6)
+    .map(m => ({ from: m.direction === 'inbound' ? 'candidate' : 'you', body: (m.body || '').slice(0, 1500) }));
+  const lastInbound = [...(candidate.thread || [])].reverse().find(m => m.direction === 'inbound');
+  const lastCandidateMsg = lastInbound ? (lastInbound.body || '').slice(0, 2000) : '';
 
-GOLD STANDARD EXAMPLE (follow this exact structure):
+  const prompt = `You are ${user.name}, ${recruiterTitle}${company.name ? ' at ' + company.name : ''}. The candidate agreed to be introduced to ${partnerName}, a resume consultant you work with. You are writing the introduction email — addressed to the candidate but CC'ing ${partnerName}${ccLine}. This email must feel warm, specific, and urgent — and it must read as a genuine continuation of the conversation below, not a template.
+${styleInfo ? '\nSTYLE GUIDANCE:\n' + styleInfo + '\n' : ''}
+${recentThread.length ? `CONVERSATION SO FAR (most recent last):
+${JSON.stringify(recentThread, null, 2)}
+` : ''}${lastCandidateMsg ? `THE CANDIDATE'S LATEST MESSAGE (this is what your opening must respond to):
+"""
+${lastCandidateMsg}
+"""
+` : ''}
+
+GOLD STANDARD EXAMPLE (follow this structure — but note the opening line below is only a fallback; your opening must respond to the candidate's actual last message per the instructions after the example):
 ---
 Dear Tomeka,
 
@@ -661,16 +678,16 @@ ${recruiterTitle}${company.name ? ' at ' + company.name : ''}
 CANDIDATE INFORMATION:
 ${candidateInfo}
 
-INSTRUCTIONS — follow the gold standard structure exactly:
+INSTRUCTIONS — follow the gold standard structure, but make the opening genuinely responsive:
 1. "Dear [First Name],"
-2. "Wonderful, I'm glad you're open to the introduction."
+2. OPENING (1-3 sentences) — respond directly to the candidate's latest message above. Reference what they actually said in their own terms: if they expressed enthusiasm, mirror it; if they asked a question (cost, process, timing), answer it briefly and honestly or say ${partnerName} will cover it; if they mentioned a constraint (travel, timing, hesitation), acknowledge it specifically and work with it. Do NOT use a generic acknowledgement like "Wonderful, I'm glad you're open to the introduction" unless their message truly contained nothing specific to respond to. Their exact words matter — someone reading the opening should be able to tell what the candidate said.
 3. "I've CC'd ${partnerName} on this email. ${partnerName} is a trusted resume consultant I work with who has helped a number of candidates strengthen their positioning for high-level opportunities similar to this one."
 4. "${partnerName}, I wanted to introduce you to [candidate full name]."
-5. Paragraph to ${partnerName} about the candidate: summarize their background genuinely — name their actual companies, roles, and career arc. What makes their profile unique and compelling.
+5. Paragraph to ${partnerName} about the candidate: summarize their background genuinely — name their actual companies, roles, and career arc. What makes their profile unique and compelling. If the conversation revealed anything relevant beyond the resume (goals, motivations, context they shared), weave it in.
 6. Paragraph about resume gap: "After reviewing her/his resume and background, I believe there is substantially more executive-level operational value present than is currently being communicated on paper. In particular, I believe the strategic positioning, leadership narrative, operational scope, and portfolio-level impact need stronger framing..."
-7. Sentence about the candidate's character: "[First Name] is very [specific quality observed from conversation], and I believe with the right presentation strategy their background could become significantly more competitive in executive review environments."
-8. "[First Name], I'll let you and ${partnerName} take it from here regarding timing, process, and next steps."
-9. URGENCY: "I do encourage both of you to prioritize this conversation sooner rather than later, as the early stages of review on these opportunities can move quickly once candidate materials begin entering formal consideration."
+7. Sentence about the candidate's character: "[First Name] is very [specific quality actually shown in the conversation above — how they write, what they asked about, what they care about], and I believe with the right presentation strategy their background could become significantly more competitive in executive review environments."
+8. "[First Name], I'll let you and ${partnerName} take it from here regarding timing, process, and next steps." — but if the candidate raised timing or scheduling in their message, adapt this line to reflect what they said.
+9. URGENCY: "I do encourage both of you to prioritize this conversation sooner rather than later, as the early stages of review on these opportunities can move quickly once candidate materials begin entering formal consideration." — soften or adapt if it would clash with a constraint the candidate stated (e.g. they said they're away until a date).
 10. "Looking forward to seeing this come together."
 11. Signature: "${user.name} / ${recruiterTitle}${company.name ? ' at ' + company.name : ''}"
 
@@ -678,7 +695,7 @@ Output ONLY the email body (starting with "Dear ${firstName},"). No subject line
 
 Write the introduction email now:`;
 
-  const response = await callAI(appendInstructions(prompt, instructions), 800, prefersClaude(user));
+  const response = await callAI(appendInstructions(prompt, instructions), 1000, prefersClaude(user));
 
   return { text: response.content[0].text.trim(), costCents: calcCostCents(response.usage, response.provider) };
 }
