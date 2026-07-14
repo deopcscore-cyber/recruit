@@ -46,7 +46,13 @@ actually asked for THIS TIME. Where they conflict with anything above,
 follow the instructions below instead — do not silently keep the default
 structure. Apply them concretely (if they ask for urgency, the sentences
 must read as urgent, not just add a word "urgent" somewhere; if they ask
-to mention something, mention it plainly, not vaguely):
+to mention something, mention it plainly, not vaguely).
+TWO THINGS SURVIVE EVERY INSTRUCTION unless the instructions explicitly
+say to drop them: (1) if this is a first contact or the template includes
+introducing the sender/company, the email must still make clear who is
+writing and where from — even a "make it shorter" email keeps a one-line
+introduction; (2) if the conversation context includes a latest message
+from the candidate, the email still acknowledges and responds to it:
 ${instructions.trim()}
 ═══════════════════════════════════════════`;
 }
@@ -169,6 +175,31 @@ function formatUserStyle(user) {
   if (style.use && style.use.length > 0) lines.push(`Phrases to use: ${style.use.join(', ')}`);
   if (style.avoid && style.avoid.length > 0) lines.push(`Phrases to avoid: ${style.avoid.join(', ')}`);
   return lines.join('\n') || 'Warm, professional, human';
+}
+
+// Recent conversation + the candidate's latest message, formatted for prompts.
+// Used by every mid-pipeline generator so the email responds to what the
+// candidate actually said instead of opening from a template. Returns '' for
+// an empty thread so prompts degrade gracefully.
+function formatConversationContext(candidate, maxMessages = 6) {
+  const msgs = (candidate.thread || [])
+    .filter(m => m.direction === 'inbound' || m.direction === 'outbound')
+    .slice(-maxMessages)
+    .map(m => ({ from: m.direction === 'inbound' ? 'candidate' : 'you', body: (m.body || '').slice(0, 1500) }));
+  if (!msgs.length) return '';
+  const lastInbound = [...(candidate.thread || [])].reverse().find(m => m.direction === 'inbound');
+  let block = `CONVERSATION SO FAR (most recent last):
+${JSON.stringify(msgs, null, 2)}
+`;
+  if (lastInbound) {
+    block += `
+THE CANDIDATE'S LATEST MESSAGE (your email must acknowledge and respond to this — reference their actual words, answer their questions, and work with any constraints or concerns they raised; do not open with a generic line that ignores it):
+"""
+${(lastInbound.body || '').slice(0, 2000)}
+"""
+`;
+  }
+  return block;
 }
 
 // If the user provided a subject line sample, return a prompt instruction
@@ -357,7 +388,7 @@ PARAGRAPH 1 — Career arc (the heart of the email):
 - Trace their career arc, naming specific companies and transitions chronologically.
 - End with one differentiating detail that reveals depth or character.
 
-PARAGRAPH 2 — Who you are / your positioning:
+PARAGRAPH 2 — Who you are / your positioning (REQUIRED — never omit this paragraph; this is a cold email and the reader must learn who is writing and why):
 - Explain briefly that you are an independent recruiter, not tied to one company.
 - Use the pitch above, lightly adapted for natural flow.
 - The key message: you bring opportunities from multiple companies and you are selective about who you bring them to.
@@ -426,7 +457,7 @@ PARAGRAPH 1 — Career arc (the heart of the email):
 - Continue by tracing their career chronologically — name specific companies, roles, and transitions in order, with dates where available. Show you actually read their background in detail.
 - End paragraph 1 with one specific differentiating detail — a certification, sustained practice, or unique dimension of their work that reveals character or depth. Phrase it as a reflection of who they are.
 
-PARAGRAPH 2 — Company introduction (use the recruiter's company pitch below — adapt slightly for natural flow but keep the core message):
+PARAGRAPH 2 — Company introduction (REQUIRED — never omit this paragraph; this is a cold email and the reader must learn who is reaching out and from where. Use the recruiter's company pitch below — adapt slightly for natural flow but keep the core message):
 "${company.pitch}"
 
 PARAGRAPH 3 — Bridge their background to the company's need:
@@ -469,6 +500,8 @@ async function generateRoleJD(candidate, user, instructions) {
   const candidateLocation = (candidate.location || '').trim();
   const jdLocation = candidateLocation ? candidateLocation : 'Remote / Hybrid';
 
+  const convoContext = formatConversationContext(candidate);
+
   const prompt = `You are creating a tailored leadership role description for ${company.name} to present to a specific executive candidate.
 
 RECRUITER STYLE:
@@ -476,7 +509,7 @@ ${styleInfo}
 
 CANDIDATE INFORMATION:
 ${candidateInfo}
-
+${convoContext ? '\n' + convoContext + '\nUse the conversation above where it helps: if the candidate shared motivations, priorities, questions, or constraints, let the "Why This Role Was Created With You In Mind" section and the offer sections speak to them directly.\n' : ''}
 INSTRUCTIONS:
 Create a detailed, personalized role description that feels written specifically for this person. Use markdown formatting — headers (##), bold (**text**), bullet points (-). Structure it as six sections:
 
@@ -538,9 +571,11 @@ async function _generateRecruiterResumeFeedback(candidate, user, instructions) {
     throw new Error('No resume text available for this candidate');
   }
 
-  const prompt = `You are ${user.name}, ${recruiterTitle} at ${company.name}. A candidate has admitted their resume doesn't fully capture their experience. You need to write a detailed, warm, honest email that: praises what IS genuinely strong, identifies specific gaps, explains why it matters, and recommends they work with a professional resume consultant — then asks if they'd like an introduction.
+  const convoContext = formatConversationContext(candidate);
 
-GOLD STANDARD EXAMPLE (follow this exact structure and tone):
+  const prompt = `You are ${user.name}, ${recruiterTitle} at ${company.name}. The candidate sent you their resume and you have now reviewed it. You need to write a detailed, warm, honest email that: responds to what they said when they sent it, praises what IS genuinely strong, identifies specific gaps, explains why it matters, and recommends they work with a professional resume consultant — then asks if they'd like an introduction.
+${convoContext ? '\n' + convoContext : ''}
+GOLD STANDARD EXAMPLE (follow this structure and tone — but the opening paragraph below assumes the candidate voiced concerns about their own resume; only mirror that premise if the conversation above shows they actually did):
 ---
 Dear Tomeka,
 
@@ -578,10 +613,10 @@ ${candidateInfo}
 RESUME TEXT:
 ${candidate.resume.text.substring(0, 3000)}
 
-INSTRUCTIONS — follow the gold standard structure exactly:
+INSTRUCTIONS — follow the gold standard structure, with a responsive opening:
 1. "Dear [First Name],"
-2. Thank them for transparency — appreciate the honesty, it confirms what you were already sensing
-3. "And to be candid with you, that matters at this level."
+2. OPENING — respond to what the candidate actually said in their latest message above. Thank them for sending the resume, and address anything specific in their message first: answer questions, acknowledge enthusiasm, timing constraints, or caveats in their own terms. If (and only if) they expressed doubts about their resume, appreciate that honesty and note it confirms what you were already sensing. Never fabricate an admission they didn't make. If there is no conversation context, simply thank them for sending the resume and their interest.
+3. Transition into your candid assessment — e.g. "And to be candid with you, how this reads on paper matters at this level."
 4. Paragraph: What ${company.name} genuinely LIKES about their background — be specific, name their actual companies/roles, highlight 2-3 genuinely impressive dimensions
 5. Paragraph: Another specific strength (clinical + non-clinical, payer-side, unique combination, etc.) — reference their actual background
 6. "That said, after reviewing the resume carefully, I do see several areas..."
@@ -632,22 +667,11 @@ async function generateVictoryEmail(candidate, user, instructions) {
   // Recent conversation so the intro responds to what the candidate actually
   // said (their exact words when agreeing, questions, timing constraints)
   // instead of opening with a canned acknowledgement.
-  const recentThread = (candidate.thread || [])
-    .filter(m => m.direction === 'inbound' || m.direction === 'outbound')
-    .slice(-6)
-    .map(m => ({ from: m.direction === 'inbound' ? 'candidate' : 'you', body: (m.body || '').slice(0, 1500) }));
-  const lastInbound = [...(candidate.thread || [])].reverse().find(m => m.direction === 'inbound');
-  const lastCandidateMsg = lastInbound ? (lastInbound.body || '').slice(0, 2000) : '';
+  const convoContext = formatConversationContext(candidate);
 
   const prompt = `You are ${user.name}, ${recruiterTitle}${company.name ? ' at ' + company.name : ''}. The candidate agreed to be introduced to ${partnerName}, a resume consultant you work with. You are writing the introduction email — addressed to the candidate but CC'ing ${partnerName}${ccLine}. This email must feel warm, specific, and urgent — and it must read as a genuine continuation of the conversation below, not a template.
 ${styleInfo ? '\nSTYLE GUIDANCE:\n' + styleInfo + '\n' : ''}
-${recentThread.length ? `CONVERSATION SO FAR (most recent last):
-${JSON.stringify(recentThread, null, 2)}
-` : ''}${lastCandidateMsg ? `THE CANDIDATE'S LATEST MESSAGE (this is what your opening must respond to):
-"""
-${lastCandidateMsg}
-"""
-` : ''}
+${convoContext}
 
 GOLD STANDARD EXAMPLE (follow this structure — but note the opening line below is only a fallback; your opening must respond to the candidate's actual last message per the instructions after the example):
 ---
@@ -722,6 +746,7 @@ async function generateProposal(candidate, user, instructions) {
   const servicePitch    = (user.companyPitch || '').trim() ||
     'I work with experienced professionals to reposition their career story so it reflects their actual value — better title, better company, better compensation.';
   const firstName = (candidate.name || '').split(' ')[0];
+  const convoContext = formatConversationContext(candidate);
 
   const prompt = `You are ${consultantName}, a career consultant${practiseName ? ' at ' + practiseName : ''}. You have already:
 1. Reached out to ${firstName} with a personalised message
@@ -735,10 +760,10 @@ ${servicePitch}
 
 CANDIDATE INFORMATION:
 ${candidateInfo}
-
+${convoContext ? '\n' + convoContext : ''}
 Write a warm, professional proposal email that covers:
 
-PARAGRAPH 1 — Acknowledge their interest warmly and specifically (reference something from their background or what you found in the resume review).
+PARAGRAPH 1 — Open by responding to their latest message above: mirror their actual words and energy, answer any question they asked (except pricing — see rules), and acknowledge any constraint they mentioned. Then connect it to something specific from their background or your resume review. If there is no conversation context, acknowledge their interest warmly and specifically instead.
 
 PARAGRAPH 2 — What working together looks like (the process):
 - You start by doing a deep audit of their career story — extracting the full scope of what they've actually built
@@ -888,6 +913,8 @@ async function _generateCareerConsultantResumeFeedback(candidate, user, instruct
 
   if (!candidate.resume?.text) throw new Error('No resume text available');
 
+  const convoContext = formatConversationContext(candidate);
+
   const prompt = `You are ${consultantName}, a career consultant${practiseName ? ' at ' + practiseName : ''}. ${firstName} sent you their resume after expressing interest in your help. You've now reviewed it carefully.
 
 YOUR SERVICE:
@@ -895,13 +922,13 @@ ${servicePitch}
 ${styleInfo ? '\nSTYLE GUIDANCE:\n' + styleInfo : ''}
 CANDIDATE INFORMATION:
 ${candidateInfo}
-
+${convoContext ? '\n' + convoContext : ''}
 RESUME TEXT:
 ${candidate.resume.text.substring(0, 3000)}
 
 Write a warm, honest, expert resume assessment email. Structure:
 
-PARAGRAPH 1 — Thank them for sending it. One genuine observation about what you noticed right away (positive — something that IS working or genuinely impressive in their background).
+PARAGRAPH 1 — Thank them for sending it, and respond to their latest message above first: if they asked anything, answer it; if they added context or caveats ("it's outdated", "excuse the formatting", timing constraints), acknowledge it in their own terms. Then one genuine observation about what you noticed right away (positive — something that IS working or genuinely impressive in their background).
 
 PARAGRAPH 2 — What's working: 2 specific strengths you see. Reference their actual companies and roles. Be genuine — don't manufacture praise.
 
