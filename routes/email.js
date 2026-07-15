@@ -14,19 +14,22 @@ const queueSvc       = require('../services/queue');
 const { getEmailService, isEmailConnected, isZohoOAuthReady, isOutlookReady, isSmtpReady } = outbound;
 
 // Gmail's own per-user quota — a transient condition that resolves itself,
-// not a bug. Turns the raw "User-rate limit exceeded. Retry after <ISO>"
-// error into a message that tells the user when to actually try again.
-function friendlyRateLimitError(err) {
+// not a bug. Parses "User-rate limit exceeded. Retry after <ISO>" into the
+// time the quota clears (15-min fallback when Google doesn't say).
+function rateLimitRetryAt(err) {
   const msg = (err && err.message) || '';
   if (!/rate limit exceeded/i.test(msg)) return null;
   const match = msg.match(/Retry after (\S+)/i);
-  const retryAt = match ? new Date(match[1]) : null;
-  if (retryAt && !isNaN(retryAt)) {
-    const minutes = Math.max(1, Math.ceil((retryAt - Date.now()) / 60000));
-    const timeStr = retryAt.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
-    return `Gmail is temporarily rate-limiting your account — this resolves on its own. Try again in about ${minutes} minute${minutes === 1 ? '' : 's'} (around ${timeStr}).`;
-  }
-  return 'Gmail is temporarily rate-limiting your account — this resolves on its own within a few minutes. Try again shortly.';
+  const parsed = match ? new Date(match[1]) : null;
+  if (parsed && !isNaN(parsed)) return parsed;
+  return new Date(Date.now() + 15 * 60 * 1000);
+}
+
+function friendlyRateLimitError(err) {
+  const retryAt = rateLimitRetryAt(err);
+  if (!retryAt) return null;
+  const minutes = Math.max(1, Math.ceil((retryAt - Date.now()) / 60000));
+  return `Gmail is temporarily rate-limiting your account — this resolves on its own. Try again in about ${minutes} minute${minutes === 1 ? '' : 's'}.`;
 }
 const storage = require('../services/storage');
 const requireAuth = require('../middleware/auth');
@@ -129,9 +132,50 @@ router.post('/send', requireAuth, async (req, res) => {
       }
     }
 
-    const { gmailMessageId, gmailThreadId } =
-      await outbound.sendComposed(user, candidate, { subject, body, isReply: !!isReply, isFollowUp: !!isFollowUp, cc: cc || null });
+    let sendResult;
+    try {
+      sendResult = await outbound.sendComposed(user, candidate, { subject, body, isReply: !!isReply, isFollowUp: !!isFollowUp, cc: cc || null });
+    } catch (sendErr) {
+      // Gmail rate limit: instead of bouncing the user, queue this exact draft
+      // to send automatically once the quota clears. Nothing was persisted —
+      // sendComposed only saves state after a successful provider send.
+      const retryAt = rateLimitRetryAt(sendErr);
+      if (!retryAt) throw sendErr;
 
+      // If this draft is already queued (user retried while rate-limited),
+      // don't queue a duplicate — report the existing job instead.
+      const existing = queueSvc.getJobsForUser(req.session.userId).find(j =>
+        j.type === 'scheduled_send' && j.status === 'pending' &&
+        j.candidateId === candidate.id && j.subject === subject && j.body === body);
+      const job = existing || {
+        id:            uuidv4(),
+        type:          'scheduled_send',
+        userId:        req.session.userId,
+        candidateId:   candidate.id,
+        candidateName: candidate.name,
+        subject,
+        body,
+        isReply:       !!isReply,
+        isFollowUp:    !!isFollowUp,
+        cc:            cc || null,
+        // small buffer past the reported reset so the retry doesn't hit the same window
+        scheduledAt:   new Date(retryAt.getTime() + 90 * 1000).toISOString(),
+        status:        'pending',
+        createdAt:     new Date().toISOString(),
+        reason:        'gmail_rate_limit'
+      };
+      if (!existing) queueSvc.addJobs([job]);
+      const minutes = Math.max(1, Math.ceil((new Date(job.scheduledAt) - Date.now()) / 60000));
+      return res.json({
+        scheduled: true,
+        rateLimited: true,
+        jobId: job.id,
+        scheduledAt: job.scheduledAt,
+        message: `Gmail is rate-limiting your account, so this email was queued instead — it will send automatically in about ${minutes} minute${minutes === 1 ? '' : 's'}.`
+      });
+    }
+
+    const { gmailMessageId, gmailThreadId } = sendResult;
     return res.json({ success: true, gmailMessageId, gmailThreadId, candidate });
   } catch (err) {
     console.error('Send email error:', err);

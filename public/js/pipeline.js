@@ -1375,7 +1375,9 @@ function renderReviewTab(body) {
       _modalOnUpdate(_modalCandidate);
       clearDraft(c.id, 'review-body');
       refreshModal();
-      Toast.success(isConsultant ? 'Feedback sent — Proposal tab is now unlocked' : 'Review email sent — Intro tab is now unlocked');
+      const queuedMsg = queuedSendMessage(result);
+      if (queuedMsg) Toast.info(queuedMsg);
+      else Toast.success(isConsultant ? 'Feedback sent — Proposal tab is now unlocked' : 'Review email sent — Intro tab is now unlocked');
       renderReviewTab(body);
     } catch (err) { Toast.error(err.message); }
     finally { btn.disabled = false; btn.textContent = 'Approve & Send'; }
@@ -1756,7 +1758,9 @@ function renderThreadTab(body) {
       _modalOnUpdate(_modalCandidate);
       clearDraft(c.id, 'thread');
       clearDraft(c.id, 'thread_subj');
-      Toast.success('Email sent');
+      const queuedMsg = queuedSendMessage(result);
+      if (queuedMsg) Toast.info(queuedMsg);
+      else Toast.success('Email sent');
       renderThreadTab(body);
     } catch (err) {
       if (typeof handleReauthError === 'function' && handleReauthError(err)) { /* handled */ }
@@ -1928,7 +1932,9 @@ function wireAIDraft(body, { genBtnId, draftAreaId, subjectId, bodyId, regenBtnI
         clearDraft(c.id, bodyId);
         if (subjectId) clearDraft(c.id, subjectId);
         refreshModal();
-        Toast.success('Email sent');
+        const queuedMsg = queuedSendMessage(result);
+        if (queuedMsg) Toast.info(queuedMsg);
+        else Toast.success('Email sent');
         renderModalTab(_activeTab);
       } catch (err) { Toast.error(err.message); }
       finally { sendBtn.disabled = false; sendBtn.textContent = 'Approve & Send'; }

@@ -30,7 +30,10 @@ const Toast = {
 
   success(msg) { this.show(msg, 'success'); },
   error(msg) { this.show(msg, 'error', 5000); },
-  warning(msg) { this.show(msg, 'warning'); }
+  warning(msg) { this.show(msg, 'warning'); },
+  // Longer duration — info toasts carry state the user should actually read
+  // (e.g. "queued, sends at 9:46 PM")
+  info(msg) { this.show(msg, 'default', 6000); }
 };
 
 // ---- Modal management ----

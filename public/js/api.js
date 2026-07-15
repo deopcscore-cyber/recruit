@@ -2,6 +2,17 @@
    Welltower Recruiter — API Client
    ============================================================ */
 
+// When /api/email/send auto-queues a draft because Gmail is rate-limiting,
+// returns the user-facing toast text (with the send time in local time); null
+// for a normal successful send.
+function queuedSendMessage(result) {
+  if (!result || !result.scheduled || !result.rateLimited) return null;
+  const t = result.scheduledAt
+    ? new Date(result.scheduledAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+    : '';
+  return `Gmail is rate-limiting sends right now — your email was queued and will go out automatically${t ? ' around ' + t : ' shortly'}.`;
+}
+
 const API = {
   async request(method, url, body, isFormData = false) {
     const opts = {

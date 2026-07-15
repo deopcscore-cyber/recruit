@@ -1522,7 +1522,7 @@ async function sendFollowUpEmail(candidateId) {
 
   sendBtn.disabled = true; sendBtn.textContent = 'Sending…';
   try {
-    await API.email.send({
+    const result = await API.email.send({
       candidateId,
       subject,
       body,
@@ -1531,7 +1531,9 @@ async function sendFollowUpEmail(candidateId) {
     // Clear the follow-up date and refresh
     await API.candidates.update(candidateId, { followUpDate: null });
     if (candidate) candidate.followUpDate = null;
-    Toast.success(`Follow-up sent to ${candidate.name}`);
+    const queuedMsg = queuedSendMessage(result);
+    if (queuedMsg) Toast.info(queuedMsg);
+    else Toast.success(`Follow-up sent to ${candidate.name}`);
     allCandidates = await API.candidates.list();
     loadFollowUpPage();
   } catch (err) {
