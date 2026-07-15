@@ -32,14 +32,29 @@ function calcCostCents(usage, provider) {
 
 function appendInstructions(prompt, instructions) {
   if (!instructions || !instructions.trim()) return prompt;
-  // Framed as an override, not a suggestion — the templates above are full of
-  // "follow this exact structure" directives and numbered steps that a soft
-  // "additional note" gets steamrolled by. This has to outrank them explicitly,
-  // or the sender's actual request for this email gets silently dropped.
-  return prompt + `
+  const text = instructions.trim();
+  // Sandwich the sender's instructions: a brief at the TOP (models weight the
+  // start of a prompt heavily and the template that follows is long), plus the
+  // override + a forced self-check at the BOTTOM. Framed as an override, not a
+  // suggestion — the templates are full of "follow this exact structure"
+  // directives that a soft "additional note" gets steamrolled by.
+  const brief = `SENDER'S BRIEF FOR THIS EMAIL — READ FIRST.
+The sender typed the following instructions for THIS specific email. The
+template further below is default scaffolding; where they conflict, this
+brief wins. Treat EVERY sentence below as a separate requirement that must
+be visibly fulfilled in the finished email — if a sentence asks you to
+explain reasons ("why"), the email must actually state those reasons
+concretely; if it dictates how to close, the email must close that way:
+"""
+${text}
+"""
+
+`;
+  return brief + prompt + `
 
 ═══════════════════════════════════════════
-OVERRIDE — SENDER'S INSTRUCTIONS FOR THIS EMAIL (highest priority)
+OVERRIDE — SENDER'S INSTRUCTIONS FOR THIS EMAIL (highest priority; same
+brief as at the top of this prompt)
 Everything above (structure, examples, numbered steps, "critical rules") is
 a default starting point. The instructions below are what the sender
 actually asked for THIS TIME. Where they conflict with anything above,
@@ -53,7 +68,14 @@ introducing the sender/company, the email must still make clear who is
 writing and where from — even a "make it shorter" email keeps a one-line
 introduction; (2) if the conversation context includes a latest message
 from the candidate, the email still acknowledges and responds to it:
-${instructions.trim()}
+"""
+${text}
+"""
+FINAL CHECK before you answer: go through the sender's instructions
+sentence by sentence. For each one, confirm the draft contains the
+sentence(s) that fulfil it — explicitly, not by vague implication. If any
+requirement is missing or only half-done, rewrite the draft first, then
+output only the final email in the format this prompt requires.
 ═══════════════════════════════════════════`;
 }
 
@@ -63,6 +85,14 @@ function prefersClaude(user) {
   if (user?.aiProvider === 'claude') return true;
   if (user?.aiProvider === 'openai') return false;
   return user?.userType === 'career_consultant';
+}
+
+// Provider for a single generation. Custom sender instructions demand real
+// instruction-following, which the cheap default model reliably fumbles
+// (it half-applies multi-part instructions) — route those to Claude even for
+// users who default to OpenAI. Cost is passed through credits either way.
+function pickProvider(user, instructions) {
+  return prefersClaude(user) || !!(instructions && instructions.trim());
 }
 
 // Try OpenAI first; fall back to Claude on error
@@ -265,7 +295,7 @@ RULES:
 
 Output ONLY valid JSON. No markdown, no commentary.`;
 
-  const response = await callAI(appendInstructions(prompt, instructions), 1000, prefersClaude(user));
+  const response = await callAI(appendInstructions(prompt, instructions), 1000, pickProvider(user, instructions));
   const raw = response.content[0].text.trim();
   const costCents = calcCostCents(response.usage, response.provider);
   try {
@@ -345,7 +375,7 @@ Output ONLY valid JSON. No markdown, no extra text.
 
 Write the email now:`;
 
-  const response = await callAI(appendInstructions(prompt, instructions), 900, prefersClaude(user));
+  const response = await callAI(appendInstructions(prompt, instructions), 900, pickProvider(user, instructions));
   const raw = response.content[0].text.trim();
   const costCents = calcCostCents(response.usage, response.provider);
   try {
@@ -413,7 +443,7 @@ RULES:
 
 Write the email now:`;
 
-  const response = await callAI(appendInstructions(prompt, instructions), 800, prefersClaude(user));
+  const response = await callAI(appendInstructions(prompt, instructions), 800, pickProvider(user, instructions));
   return { text: response.content[0].text.trim(), costCents: calcCostCents(response.usage, response.provider) };
 }
 
@@ -486,7 +516,7 @@ CRITICAL RULES:
 
 Write the outreach email now:`;
 
-  const response = await callAI(appendInstructions(prompt, instructions), 800, prefersClaude(user));
+  const response = await callAI(appendInstructions(prompt, instructions), 800, pickProvider(user, instructions));
 
   return { text: response.content[0].text.trim(), costCents: calcCostCents(response.usage, response.provider) };
 }
@@ -556,7 +586,7 @@ Make every section compelling and specific — not generic boilerplate. Referenc
 
 Write the role description now:`;
 
-  const response = await callAI(appendInstructions(prompt, instructions), 3000, prefersClaude(user));
+  const response = await callAI(appendInstructions(prompt, instructions), 3000, pickProvider(user, instructions));
 
   return { text: response.content[0].text.trim(), costCents: calcCostCents(response.usage, response.provider) };
 }
@@ -638,7 +668,7 @@ Also return a brief internal gaps analysis. Output as valid JSON:
 
 Return ONLY the JSON object, no markdown, no extra text.`;
 
-  const response = await callAI(appendInstructions(prompt, instructions), 2500, prefersClaude(user));
+  const response = await callAI(appendInstructions(prompt, instructions), 2500, pickProvider(user, instructions));
 
   const text = response.content[0].text.trim();
   const costCents = calcCostCents(response.usage, response.provider);
@@ -719,7 +749,7 @@ Output ONLY the email body (starting with "Dear ${firstName},"). No subject line
 
 Write the introduction email now:`;
 
-  const response = await callAI(appendInstructions(prompt, instructions), 1000, prefersClaude(user));
+  const response = await callAI(appendInstructions(prompt, instructions), 1000, pickProvider(user, instructions));
 
   return { text: response.content[0].text.trim(), costCents: calcCostCents(response.usage, response.provider) };
 }
@@ -794,7 +824,7 @@ RULES:
 
 Write the proposal email now:`;
 
-  const response = await callAI(appendInstructions(prompt, instructions), 900, prefersClaude(user));
+  const response = await callAI(appendInstructions(prompt, instructions), 900, pickProvider(user, instructions));
   return { text: response.content[0].text.trim(), costCents: calcCostCents(response.usage, response.provider) };
 }
 
@@ -896,7 +926,7 @@ CRITICAL RULES:
 
 Write the reply now:`;
 
-  const response = await callAI(appendInstructions(prompt, instructions), 900, prefersClaude(user));
+  const response = await callAI(appendInstructions(prompt, instructions), 900, pickProvider(user, instructions));
   return { text: response.content[0].text.trim(), costCents: calcCostCents(response.usage, response.provider) };
 }
 
@@ -954,7 +984,7 @@ Also return a brief internal analysis. Output as valid JSON:
 
 Return ONLY the JSON. No markdown, no extra text.`;
 
-  const response = await callAI(appendInstructions(prompt, instructions), 2000, prefersClaude(user));
+  const response = await callAI(appendInstructions(prompt, instructions), 2000, pickProvider(user, instructions));
 
   const text = response.content[0].text.trim();
   const costCents = calcCostCents(response.usage, response.provider);
@@ -1070,7 +1100,7 @@ CRITICAL RULES:
 
 Write the reply now:`;
 
-  const response = await callAI(appendInstructions(prompt, instructions), 900, prefersClaude(user));
+  const response = await callAI(appendInstructions(prompt, instructions), 900, pickProvider(user, instructions));
 
   return { text: response.content[0].text.trim(), costCents: calcCostCents(response.usage, response.provider) };
 }
@@ -1169,7 +1199,7 @@ CRITICAL RULES:
 
 Write the follow-up email now:`;
 
-  const response = await callAI(appendInstructions(prompt, instructions), 600, prefersClaude(user));
+  const response = await callAI(appendInstructions(prompt, instructions), 600, pickProvider(user, instructions));
 
   return { text: response.content[0].text.trim(), costCents: calcCostCents(response.usage, response.provider) };
 }
