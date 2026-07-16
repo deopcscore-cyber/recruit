@@ -1553,6 +1553,13 @@ function renderThreadTab(body) {
     <div class="thread-container">
       <div class="thread-messages" id="thread-msgs">${threadHtml}</div>
 
+      ${c.pendingFollowUpDraft ? `
+        <div id="pending-draft-banner" style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:#ecfeff;border:1px solid #a5f3fc;border-radius:9px;margin:0 16px 10px;font-size:0.82rem;color:#155e75">
+          <span>✍️</span>
+          <span style="flex:1">A follow-up draft is ready — auto-generated after ${c.pendingFollowUpDraft.kind === 'review' ? 'the resume review' : 'the consultant intro'} went unanswered. Review before sending.</span>
+          <button class="btn btn-primary btn-sm" id="load-pending-draft-btn">Load into compose</button>
+          <button class="btn btn-ghost btn-sm" id="dismiss-pending-draft-btn">Dismiss</button>
+        </div>` : ''}
       <div class="compose-area">
         <div class="compose-header">
           <h4>Compose</h4>
@@ -1673,6 +1680,33 @@ function renderThreadTab(body) {
   body.querySelector('#th-gen-reply').addEventListener('click', () => aiGenerate('reply'));
   body.querySelector('#th-gen-outreach').addEventListener('click', () => aiGenerate('outreach'));
   body.querySelector('#th-gen-followup').addEventListener('click', () => aiGenerate('followup'));
+
+  // Pending follow-up draft (auto-generated after review/victory stage went
+  // quiet) — load it into compose for the recruiter to review before sending.
+  const loadDraftBtn = body.querySelector('#load-pending-draft-btn');
+  if (loadDraftBtn) {
+    loadDraftBtn.addEventListener('click', () => {
+      const d = c.pendingFollowUpDraft;
+      if (!d) return;
+      body.querySelector('#th-subject').value = d.subject || '';
+      body.querySelector('#th-body').value = d.body || '';
+      lastGeneratedType = null;
+      body.querySelector('#th-body').focus();
+      Toast.show('Draft loaded — review, then Send Email');
+    });
+  }
+  const dismissDraftBtn = body.querySelector('#dismiss-pending-draft-btn');
+  if (dismissDraftBtn) {
+    dismissDraftBtn.addEventListener('click', async () => {
+      dismissDraftBtn.disabled = true;
+      try {
+        const updated = await API.candidates.update(c.id, { pendingFollowUpDraft: null });
+        Object.assign(_modalCandidate, updated);
+        _modalOnUpdate(_modalCandidate);
+        renderThreadTab(body);
+      } catch (err) { Toast.error(err.message); dismissDraftBtn.disabled = false; }
+    });
+  }
 
   // Follow Up — inline date picker injected below the button
   body.querySelector('#th-set-followup').addEventListener('click', function() {

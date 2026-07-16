@@ -165,13 +165,17 @@ router.put('/:id', async (req, res) => {
     if (!candidate) return res.status(404).json({ error: 'Candidate not found' });
     if (candidate.userId !== req.session.userId) return res.status(403).json({ error: 'Forbidden' });
 
+    // Snapshot before mutating — used below to detect newly-completed steps
+    // so we can kick off that stage's follow-up sequence.
+    const stepsBefore = { ...(candidate.stepsCompleted || {}) };
+
     // Merge updates — allow updating most fields
     const allowed = [
       'name', 'email', 'title', 'company', 'linkedin', 'background',
       'career', 'education', 'summary', 'stage', 'notes', 'tags',
       'stepsCompleted', 'followUpDate', 'gmailThreadId', 'lastGmailMessageId',
       'lastSmtpMessageId', 'lastSubject', 'unread', 'opened', 'openedAt', 'thread', 'resume',
-      'originalSubject', 'gmailReferences', 'score', 'scoreDetails'
+      'originalSubject', 'gmailReferences', 'score', 'scoreDetails', 'pendingFollowUpDraft'
     ];
 
     allowed.forEach(key => {
@@ -183,6 +187,25 @@ router.put('/:id', async (req, res) => {
     // Merge stepsCompleted rather than replace
     if (req.body.stepsCompleted) {
       candidate.stepsCompleted = { ...candidate.stepsCompleted, ...req.body.stepsCompleted };
+    }
+
+    // A step just flipped from not-done to done → start that stage's
+    // follow-up sequence (auto-send for roleJD/resumeRequested, draft-only
+    // for review/victory — see services/followups.js KIND_DEFAULTS).
+    const STEP_TO_FOLLOWUP_KIND = {
+      roleJD: 'roleJD', resumeRequested: 'resumeRequested',
+      reviewSent: 'review', victorySent: 'victory'
+    };
+    const newlyCompleted = Object.entries(STEP_TO_FOLLOWUP_KIND)
+      .filter(([step]) => !stepsBefore[step] && candidate.stepsCompleted?.[step]);
+    if (newlyCompleted.length) {
+      try {
+        const user = await storage.getUserById(req.session.userId);
+        if (user) {
+          const followupsSvc = require('../services/followups');
+          for (const [, kind] of newlyCompleted) followupsSvc.scheduleSequence(user, candidate, kind);
+        }
+      } catch (fuErr) { console.error('Stage follow-up schedule error:', fuErr.message); }
     }
 
     // Notes history — append new note entry

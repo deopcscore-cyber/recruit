@@ -54,11 +54,16 @@ function cancelPendingForUser(userId, type = null) {
 }
 
 // Cancel pending jobs for one candidate (used when they reply — stops follow-ups).
-function cancelPendingForCandidate(candidateId, type = null) {
+// Optionally restrict to a single follow-up kind ('roleJD', 'resumeRequested',
+// etc.) so scheduling a new sequence doesn't clobber an unrelated one; omit to
+// cancel every pending follow-up regardless of kind (e.g. on reply/bounce).
+function cancelPendingForCandidate(candidateId, type = null, kind = null) {
   const queue = read();
   let changed = false;
   queue.forEach(j => {
-    if (j.candidateId === candidateId && j.status === 'pending' && (!type || (j.type || 'outreach') === type)) {
+    if (j.candidateId === candidateId && j.status === 'pending'
+      && (!type || (j.type || 'outreach') === type)
+      && (!kind || j.followUpKind === kind)) {
       j.status = 'cancelled';
       changed = true;
     }

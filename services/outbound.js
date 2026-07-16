@@ -39,6 +39,9 @@ async function sendComposed(user, candidate, { subject, body, isReply = false, c
   candidate.trackingId = uuidv4();
   candidate.opened     = false;
   candidate.openedAt   = null;
+  // Any real send clears a stale pending draft — whether they used it as-is
+  // or wrote something else entirely, its job is done either way.
+  candidate.pendingFollowUpDraft = null;
 
   const sendParams = {
     to: candidate.email,

@@ -534,6 +534,17 @@ async function _processScheduledSendJob(job) {
   console.log(`Queue: scheduled send delivered → ${candidate.name} <${candidate.email}>`);
 }
 
+// Generate the right follow-up content for a job, based on its kind. review/
+// victory use their own dedicated (draft-only) generators; everything else
+// (outreach, roleJD, resumeRequested) shares generateFollowUp's scenario
+// branching, keyed by kind + which step in the sequence this is.
+async function _generateFollowUpContent(job, candidate, user) {
+  const kind = job.followUpKind || 'outreach';
+  if (kind === 'review')  return claudeSvc.generateReviewFollowUp(candidate, user);
+  if (kind === 'victory') return claudeSvc.generateVictoryFollowUp(candidate, user);
+  return claudeSvc.generateFollowUp(candidate, user, undefined, kind, job.followUpIndex || 0);
+}
+
 async function _processFollowUpJob(job) {
   const storageSvc = require('./services/storage');
   const user      = await storageSvc.getUserById(job.userId);
@@ -541,23 +552,64 @@ async function _processFollowUpJob(job) {
 
   if (!user || !candidate) { queueSvc.updateJob(job.id, { status: 'cancelled', reason: 'missing' }); return; }
 
-  // Skip if bounced, replied, or moved past the waiting stage
-  const hasReplied = (candidate.thread || []).some(m => m.direction === 'inbound');
-  const movedOn = !['Outreach Sent'].includes(candidate.stage || '');
   if (candidate.bounced) {
     queueSvc.updateJob(job.id, { status: 'cancelled', reason: 'bounced' });
     console.log(`Queue: follow-up skipped (bounced) → ${candidate.name}`);
     return;
   }
-  if (hasReplied || movedOn) {
+  if (candidate.stage === 'Closed') {
+    queueSvc.updateJob(job.id, { status: 'cancelled', reason: 'closed' });
+    return;
+  }
+  // Cancel only if they replied SINCE this specific touchpoint went out — not
+  // "have they ever replied." Every candidate past Outreach Sent has already
+  // replied at least once by definition, so an "ever replied" check would
+  // immediately cancel every later-stage sequence (roleJD, resumeRequested,
+  // review, victory) the moment it's scheduled.
+  const sinceMs = job.sinceTimestamp ? new Date(job.sinceTimestamp).getTime() : 0;
+  const repliedSince = (candidate.thread || []).some(m =>
+    m.direction === 'inbound' && new Date(m.timestamp).getTime() > sinceMs);
+  if (repliedSince) {
     queueSvc.updateJob(job.id, { status: 'cancelled', reason: 'candidate_responded' });
     console.log(`Queue: follow-up skipped (candidate responded) → ${candidate.name}`);
     return;
   }
+
+  const mode = job.mode || 'auto';
+
+  if (mode === 'draft') {
+    // Generate and save as a pending draft for the recruiter to review — never
+    // auto-sent. Used for later, higher-stakes touchpoints (review, victory).
+    if ((user.credits || 0) <= 0) throw new Error('Insufficient credits');
+    const result = await _generateFollowUpContent(job, candidate, user);
+    if (result.costCents) {
+      user.credits    = Math.max(0, (user.credits    || 0) - result.costCents);
+      user.totalSpent = (user.totalSpent || 0) + result.costCents;
+      await storageSvc.saveUser(user);
+    }
+    const subject = candidate.originalSubject
+      ? 'Re: ' + candidate.originalSubject.replace(/^re:\s*/i, '')
+      : (candidate.lastSubject || 'Following up');
+    candidate.pendingFollowUpDraft = {
+      kind: job.followUpKind, subject, body: result.text, createdAt: new Date().toISOString()
+    };
+    await storageSvc.saveCandidate(candidate);
+    pushSvc.sendNotification(user.id, {
+      title: '✍️ Follow-up draft ready',
+      body: `A follow-up for ${candidate.name} is ready to review`,
+      tag: `followup-draft-${candidate.id}`,
+      url: '/dashboard'
+    }).catch(() => {});
+    queueSvc.updateJob(job.id, { status: 'sent', sentAt: new Date().toISOString(), reason: 'drafted' });
+    console.log(`Queue: follow-up draft ready (${job.followUpKind}) → ${candidate.name}`);
+    return;
+  }
+
+  // mode === 'auto' — generate and send immediately, no review
   if (!_isEmailConnected(user)) throw new Error('No email provider connected');
   if ((user.credits || 0) <= 0) throw new Error('Insufficient credits');
 
-  const result = await claudeSvc.generateFollowUp(candidate, user);
+  const result = await _generateFollowUpContent(job, candidate, user);
   const draft = result.text;
   if (result.costCents) {
     user.credits    = Math.max(0, (user.credits    || 0) - result.costCents);
@@ -585,7 +637,7 @@ async function _processFollowUpJob(job) {
   candidate.thread.push({
     id: queueUuid(), direction: 'outbound', subject, body: draft,
     timestamp: new Date().toISOString(), gmailMessageId, gmailThreadId, smtpMessageId,
-    read: true, isFollowUp: true, followUpIndex: job.followUpIndex
+    read: true, isFollowUp: true, followUpIndex: job.followUpIndex, followUpKind: job.followUpKind || 'outreach'
   });
   candidate.lastGmailMessageId = gmailMessageId;
   if (smtpMessageId) {
@@ -597,7 +649,7 @@ async function _processFollowUpJob(job) {
   await storageSvc.saveCandidate(candidate);
 
   queueSvc.updateJob(job.id, { status: 'sent', sentAt: new Date().toISOString() });
-  console.log(`Queue: follow-up #${(job.followUpIndex || 0) + 1} sent → ${candidate.name}`);
+  console.log(`Queue: follow-up #${(job.followUpIndex || 0) + 1} (${job.followUpKind || 'outreach'}) sent → ${candidate.name}`);
 }
 
 queueSvc.resetStuckJobs(); // recover any jobs frozen mid-send by a server crash

@@ -1105,7 +1105,7 @@ Write the reply now:`;
   return { text: response.content[0].text.trim(), costCents: calcCostCents(response.usage, response.provider) };
 }
 
-async function generateFollowUp(candidate, user, instructions) {
+async function generateFollowUp(candidate, user, instructions, kind = 'outreach', followUpIndex = 0) {
   const candidateInfo = formatCandidateContext(candidate);
   const styleInfo     = formatUserStyle(user);
   const company = getCompanyContext(user);
@@ -1126,7 +1126,45 @@ async function generateFollowUp(candidate, user, instructions) {
   // Determine the specific follow-up context
   let scenarioInstructions;
 
-  if (steps.resumeRequested && !steps.resumeReceived) {
+  if (kind === 'roleJD' && followUpIndex === 0) {
+    // First touch on the JD — simple, low-pressure resonance check
+    scenarioInstructions = `FOLLOW-UP SCENARIO: Role description sent ${daysSinceStr}, first check-in — asking if it resonates.
+
+WHAT TO WRITE (keep it to 2-3 short paragraphs):
+1. Open with "Dear ${firstName}," — reference the role description you shared, don't say "just following up."
+2. Ask plainly and warmly whether the role resonates with them — where they're at, what stood out (or didn't). Reference one specific thing from their background that makes the fit worth exploring.
+3. Low-friction close: even a one-line reaction tells you where they stand.
+Signature: ${user.name}\n${recruiterTitle} at ${company.name}`;
+
+  } else if (kind === 'roleJD' && followUpIndex >= 1) {
+    // Second touch — real urgency, direct interest check
+    scenarioInstructions = `FOLLOW-UP SCENARIO: Second follow-up on the role description ${daysSinceStr} after the first check-in went unanswered — create genuine urgency.
+
+WHAT TO WRITE (keep it to 2-3 short paragraphs):
+1. Open with "Dear ${firstName}," — brief, no guilt-tripping about the earlier email.
+2. Be direct: the role's availability is closing soon, and you want to know plainly whether they're still interested before that window shuts. Make the urgency feel real and specific to the search's timeline, not manufactured.
+3. Ask directly: are they still interested? A quick yes/no is fine.
+Signature: ${user.name}\n${recruiterTitle} at ${company.name}`;
+
+  } else if (kind === 'resumeRequested' && followUpIndex === 0) {
+    scenarioInstructions = `FOLLOW-UP SCENARIO: Resume requested ${daysSinceStr}, still waiting — first check-in.
+
+WHAT TO WRITE (keep it to 2-3 short paragraphs):
+1. Open with "Dear ${firstName}," — warm, non-pressuring. Let them know you're still expecting their resume for review.
+2. Make it easy — offer to answer any questions if something's holding them up.
+3. Soft close, no hard deadline yet.
+Signature: ${user.name}\n${recruiterTitle} at ${company.name}`;
+
+  } else if (kind === 'resumeRequested' && followUpIndex >= 1) {
+    scenarioInstructions = `FOLLOW-UP SCENARIO: Resume requested ${daysSinceStr}, second check-in with no resume yet — gauge whether they're still interested.
+
+WHAT TO WRITE (keep it to 2-3 short paragraphs):
+1. Open with "Dear ${firstName}," — brief, warm, not accusatory about the silence.
+2. Ask directly whether they're still interested in the role — it's fine if timing isn't right, you just want to know so you can plan around it either way.
+3. Leave the door open: if they are still interested, the resume is the only thing standing between them and the next step.
+Signature: ${user.name}\n${recruiterTitle} at ${company.name}`;
+
+  } else if (steps.resumeRequested && !steps.resumeReceived) {
     // Waiting for resume
     scenarioInstructions = `FOLLOW-UP SCENARIO: Resume requested, not yet received.
 You asked ${firstName} for their resume ${daysSinceStr} and haven't received it yet.
@@ -1201,6 +1239,89 @@ Write the follow-up email now:`;
 
   const response = await callAI(appendInstructions(prompt, instructions), 600, pickProvider(user, instructions));
 
+  return { text: response.content[0].text.trim(), costCents: calcCostCents(response.usage, response.provider) };
+}
+
+// ── Review-stage follow-up (draft only — recruiter approves before sending) ───
+// Fires when a resume review was sent and the candidate has gone quiet. Asks
+// plainly whether they're fixing the resume themselves or want to be
+// connected to the recruiter's resume consultant partner.
+async function generateReviewFollowUp(candidate, user, instructions) {
+  const candidateInfo = formatCandidateContext(candidate);
+  const styleInfo      = formatUserStyle(user);
+  const company        = getCompanyContext(user);
+  const recruiterTitle = (user.title && user.title.trim()) ? user.title.trim() : 'Senior Talent Acquisition Coordinator';
+  const firstName      = (candidate.name || '').split(' ')[0];
+  const thread         = candidate.thread || [];
+  const lastOut = [...thread].reverse().find(m => m.direction === 'outbound');
+  const daysSince = lastOut ? Math.floor((Date.now() - new Date(lastOut.timestamp)) / 86400000) : null;
+  const daysSinceStr = daysSince != null ? `${daysSince} day${daysSince !== 1 ? 's' : ''} ago` : 'recently';
+  const partnerName = (user.resumeConsultantName || '').trim() || 'our resume consultant';
+
+  const prompt = `You are ${user.name}, ${recruiterTitle} at ${company.name}, writing a short check-in to an executive candidate. You sent them honest resume feedback ${daysSinceStr} and haven't heard back since.
+${styleInfo ? '\nSTYLE GUIDANCE:\n' + styleInfo + '\n' : ''}
+CANDIDATE INFORMATION:
+${candidateInfo}
+
+WHAT TO WRITE (keep it to 2-3 short paragraphs):
+1. Open with "Dear ${firstName}," — warm, brief check-in referencing the resume feedback you sent, not a generic "just following up."
+2. Ask plainly and directly: are they planning to work on the resume themselves, or would they like to be connected with ${partnerName}, the resume consultant you work with, to help strengthen it? Make it a genuine, low-pressure either/or question — not a pitch.
+3. Warm, simple close — no pressure either way, just want to know where they stand.
+
+${voiceGuidance(user)}
+CRITICAL RULES:
+- Keep the entire email body under 130 words
+- The core ask is the either/or question about fixing it themselves vs. being connected to ${partnerName} — do not bury it
+- Sound like a real person, not a template
+- Do NOT add a signature, sign-off name, title, or company at the end — the sender's email signature is appended automatically
+- Output ONLY the email body starting with "Dear ${firstName}," — no subject line, no commentary
+
+Write the check-in email now:`;
+
+  const response = await callAI(appendInstructions(prompt, instructions), 500, prefersClaude(user));
+  return { text: response.content[0].text.trim(), costCents: calcCostCents(response.usage, response.provider) };
+}
+
+// ── Victory-stage follow-up (draft only — recruiter approves before sending) ──
+// Fires after the consultant introduction was sent and the candidate has gone
+// quiet. Checks in on the consultant conversation and asks for the revised
+// resume so it can be included in upcoming application submissions.
+async function generateVictoryFollowUp(candidate, user, instructions) {
+  const candidateInfo = formatCandidateContext(candidate);
+  const styleInfo      = formatUserStyle(user);
+  const company        = getCompanyContext(user);
+  const recruiterTitle = (user.title && user.title.trim()) ? user.title.trim() : 'Senior Talent Acquisition Coordinator';
+  const firstName      = (candidate.name || '').split(' ')[0];
+  const partnerName    = (user.resumeConsultantName || '').trim() || 'the resume consultant';
+
+  const prompt = `You are ${user.name}, ${recruiterTitle} at ${company.name}, writing a check-in email to an executive candidate you introduced to ${partnerName}, a resume consultant you work with.
+${styleInfo ? '\nSTYLE GUIDANCE:\n' + styleInfo + '\n' : ''}
+CANDIDATE INFORMATION:
+${candidateInfo}
+
+GOLD STANDARD EXAMPLE (follow this structure and tone closely — adapt names/specifics, keep the substance):
+---
+Dear ${firstName},
+
+I hope this message finds you well.
+
+I wanted to briefly check in and see how your conversation with ${partnerName}, the resume consultant, has been progressing. I hope the discussion has been helpful as you work on strengthening the executive impact and measurable outcomes within your resume.
+
+I will be submitting several applications for internal review shortly and would be glad to ensure your updated materials are included once they are ready. At your convenience, please feel free to forward the revised version for review.
+
+I appreciate your time and continued interest, and I look forward to reconnecting soon.
+---
+
+${voiceGuidance(user)}
+CRITICAL RULES:
+- Follow the structure and tone of the example closely — this is a proven format, don't rewrite it into something unrecognizable
+- Reference their actual background naturally if it fits, but don't force it — this email is deliberately simple and process-focused
+- Do NOT add a signature, sign-off name, title, or company at the end — the sender's email signature is appended automatically
+- Output ONLY the email body starting with "Dear ${firstName}," — no subject line, no commentary
+
+Write the check-in email now:`;
+
+  const response = await callAI(appendInstructions(prompt, instructions), 500, prefersClaude(user));
   return { text: response.content[0].text.trim(), costCents: calcCostCents(response.usage, response.provider) };
 }
 
@@ -1320,6 +1441,8 @@ module.exports = {
   generateVictoryEmail,
   generateReply,
   generateFollowUp,
+  generateReviewFollowUp,
+  generateVictoryFollowUp,
   generateProposal,
   scoreCandidate,
   classifyReply,

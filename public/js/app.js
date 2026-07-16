@@ -483,11 +483,12 @@ async function loadTodayPage() {
   // Buckets from the already-loaded candidate list
   const active = c => !['Closed'].includes(c.stage || '');
   const replies  = allCandidates.filter(c => c.unread);
-  const interested = allCandidates.filter(c => c.replySentiment === 'interested' && active(c) && !c.unread);
+  const followUpDrafts = allCandidates.filter(c => c.pendingFollowUpDraft && active(c) && !c.unread);
+  const interested = allCandidates.filter(c => c.replySentiment === 'interested' && active(c) && !c.unread && !c.pendingFollowUpDraft);
   const now = new Date();
   const ACT = ['Outreach Sent', 'Replied', 'Resume Requested', 'Resume Received', 'Interviewing'];
-  // Dedupe by priority: a candidate shows under replies > interested > follow-ups, once
-  const claimed = new Set([...replies, ...interested].map(c => c.id));
+  // Dedupe by priority: a candidate shows under replies > drafts > interested > follow-ups, once
+  const claimed = new Set([...replies, ...followUpDrafts, ...interested].map(c => c.id));
   const followups = allCandidates.filter(c => {
     if (claimed.has(c.id)) return false;
     const stage = c.stage || 'Imported';
@@ -535,7 +536,7 @@ async function loadTodayPage() {
       </div>`;
   };
 
-  const allClear = replies.length + interested.length + followups.length === 0 && unknownLeads.length === 0;
+  const allClear = replies.length + followUpDrafts.length + interested.length + followups.length === 0 && unknownLeads.length === 0;
 
   // Autopilot strip
   let apHtml = '';
@@ -594,6 +595,7 @@ async function loadTodayPage() {
       const last = [...(c.thread || [])].reverse().find(m => m.direction === 'inbound');
       return last ? formatRelativeHL(last.timestamp) : 'New';
     })}
+    ${section('✍️', 'Follow-up drafts ready to review', followUpDrafts, '#0891b2', c => 'Draft ready')}
     ${section('🔥', 'Interested — move these forward', interested, '#ef4444', c => 'Interested')}
     ${section('⏰', 'Follow-ups due', followups, '#d97706', c => c.followUpDate ? formatRelativeHL(c.followUpDate) : 'No reply yet')}
     ${hotOpened.length ? `<div style="margin-bottom:22px"><a id="today-hotleads-link" style="font-size:0.84rem;color:var(--blue);cursor:pointer">⚡ ${hotOpened.length} opened your email but haven't replied →</a></div>` : ''}
