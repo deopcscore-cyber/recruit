@@ -227,10 +227,13 @@ async function fetchAccountInfo(accessToken, apiBase = API_BASE_DEFAULT) {
 // inlined in the send payload itself.
 async function uploadAttachment(apiBase, accountId, token, attachment) {
   const url = `${apiBase}/accounts/${accountId}/messages/attachments?fileName=${encodeURIComponent(attachment.filename)}`;
+  // Zoho's upload endpoint 415s on the file's real MIME type (e.g.
+  // application/pdf) — it only accepts raw binary declared as octet-stream;
+  // the fileName query param carries the actual type/name.
   const res = await axios.post(url, attachment.content, {
     headers: {
       Authorization: `Zoho-oauthtoken ${token}`,
-      'Content-Type': attachment.contentType || 'application/octet-stream'
+      'Content-Type': 'application/octet-stream'
     }
   });
   // Zoho returns data as an object for single raw uploads but as an array in
