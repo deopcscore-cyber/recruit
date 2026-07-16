@@ -34,7 +34,7 @@ function isEmailConnected(user) {
 // Send a user-composed email to a candidate: tracking pixel, reply threading,
 // thread persistence, follow-up sequencing, and CC-mirroring.
 // Mutates and saves the candidate; returns { gmailMessageId, gmailThreadId, candidate }.
-async function sendComposed(user, candidate, { subject, body, isReply = false, cc = null, isFollowUp = false }) {
+async function sendComposed(user, candidate, { subject, body, isReply = false, cc = null, isFollowUp = false, attachments = null }) {
   // Fresh tracking pixel for every outbound email — resets the opened badge
   candidate.trackingId = uuidv4();
   candidate.opened     = false;
@@ -48,7 +48,8 @@ async function sendComposed(user, candidate, { subject, body, isReply = false, c
     subject,
     body,
     trackingId: candidate.trackingId,
-    ...(cc ? { cc } : {})
+    ...(cc ? { cc } : {}),
+    ...(attachments && attachments.length ? { attachments } : {})
   };
 
   // Threading — pass threadId AND the correct SMTP Message-ID for In-Reply-To
@@ -204,7 +205,27 @@ async function sendComposed(user, candidate, { subject, body, isReply = false, c
   return { gmailMessageId, gmailThreadId, candidate };
 }
 
+// Build the role-JD PDF attachment from structured variant data. Used by both
+// the immediate-send route and the scheduled-send queue job (variants are
+// stored as plain JSON on the job, and the PDF is rebuilt fresh at whichever
+// point the send actually happens — a Buffer can't be persisted in the
+// queue's JSON file).
+async function buildRoleJDAttachment(candidate, user, roleJDVariants, jdLocation) {
+  if (!roleJDVariants || !roleJDVariants.length) return null;
+  const pdfSvc = require('./pdf');
+  const company = (user.companyName || '').trim() || 'Confidential Role Overview';
+  const buffer = await pdfSvc.buildRoleJDPdf({
+    companyName: company,
+    candidateName: candidate.name || '',
+    jdLocation: jdLocation || '',
+    variants: roleJDVariants
+  });
+  const safeName = (candidate.name || 'Candidate').replace(/[^a-zA-Z0-9 _-]/g, '').trim() || 'Candidate';
+  return { filename: `Role Description - ${safeName}.pdf`, content: buffer, contentType: 'application/pdf' };
+}
+
 module.exports = {
   sendComposed, getEmailService, isEmailConnected,
-  isZohoOAuthReady, isOutlookReady, isSmtpReady
+  isZohoOAuthReady, isOutlookReady, isSmtpReady,
+  buildRoleJDAttachment
 };

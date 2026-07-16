@@ -99,7 +99,7 @@ async function getAccessToken(user) {
 
 // ── Send email ────────────────────────────────────────────────────────────────
 
-async function sendEmail(userId, { to, subject, body, trackingId, inReplyTo, references }) {
+async function sendEmail(userId, { to, subject, body, trackingId, inReplyTo, references, attachments }) {
   const user  = await storage.getUserById(userId);
   const token = await getAccessToken(user);
 
@@ -124,6 +124,15 @@ async function sendEmail(userId, { to, subject, body, trackingId, inReplyTo, ref
       { name: 'In-Reply-To', value: `<${inReplyTo.replace(/^<|>$/g, '')}>` },
       { name: 'References',  value: references || `<${inReplyTo.replace(/^<|>$/g, '')}>` }
     ];
+  }
+
+  if (attachments && attachments.length) {
+    message.attachments = attachments.map(a => ({
+      '@odata.type': '#microsoft.graph.fileAttachment',
+      name: a.filename,
+      contentType: a.contentType || 'application/octet-stream',
+      contentBytes: a.content.toString('base64')
+    }));
   }
 
   await axios.post(`${GRAPH_BASE}/me/sendMail`, { message, saveToSentItems: true }, {

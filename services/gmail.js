@@ -185,7 +185,7 @@ function stripToPlainText(body) {
     .trim();
 }
 
-function buildRawEmail({ from, to, cc, subject, body, signatureHtml = '', signaturePlain = '', threadId, inReplyTo, references, trackingId, baseUrl }) {
+function buildRawEmail({ from, to, cc, subject, body, signatureHtml = '', signaturePlain = '', threadId, inReplyTo, references, trackingId, baseUrl, attachments = [] }) {
   const boundary = `_wt_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
 
   // ── Plain-text part ───────────────────────────────────────────────────────────
@@ -219,6 +219,9 @@ function buildRawEmail({ from, to, cc, subject, body, signatureHtml = '', signat
     ? `=?UTF-8?B?${Buffer.from(subject, 'utf8').toString('base64')}?=`
     : subject;
 
+  const hasAttachments = attachments && attachments.length > 0;
+  const outerBoundary = hasAttachments ? `_wtx_${Date.now()}_${Math.random().toString(36).slice(2, 10)}` : null;
+
   const headers = [
     `From: ${from}`,
     `To: ${to}`,
@@ -226,7 +229,11 @@ function buildRawEmail({ from, to, cc, subject, body, signatureHtml = '', signat
     `Date: ${new Date().toUTCString()}`,
     `Subject: ${safeSubject}`,
     'MIME-Version: 1.0',
-    `Content-Type: multipart/alternative; boundary="${boundary}"`
+    // With attachments, the outer envelope is multipart/mixed and the
+    // text/html alternative pair becomes a nested part inside it.
+    hasAttachments
+      ? `Content-Type: multipart/mixed; boundary="${outerBoundary}"`
+      : `Content-Type: multipart/alternative; boundary="${boundary}"`
   ];
 
   if (inReplyTo) {
@@ -240,10 +247,7 @@ function buildRawEmail({ from, to, cc, subject, body, signatureHtml = '', signat
   const plainB64 = Buffer.from(plainText, 'utf8').toString('base64').match(/.{1,76}/g).join('\r\n');
   const htmlB64  = Buffer.from(fullHtml,  'utf8').toString('base64').match(/.{1,76}/g).join('\r\n');
 
-  // ── Assemble multipart/alternative body ──────────────────────────────────────
-  const rawEmail = [
-    headers.join('\r\n'),
-    '',
+  const alternativePart = [
     `--${boundary}`,
     'Content-Type: text/plain; charset=utf-8',
     'Content-Transfer-Encoding: base64',
@@ -257,7 +261,40 @@ function buildRawEmail({ from, to, cc, subject, body, signatureHtml = '', signat
     htmlB64,
     '',
     `--${boundary}--`
-  ].join('\r\n');
+  ];
+
+  let bodyLines;
+  if (hasAttachments) {
+    const attachmentParts = attachments.flatMap(att => {
+      const safeName = /[^\x00-\x7F]/.test(att.filename)
+        ? `=?UTF-8?B?${Buffer.from(att.filename, 'utf8').toString('base64')}?=`
+        : att.filename;
+      const b64 = att.content.toString('base64').match(/.{1,76}/g).join('\r\n');
+      return [
+        `--${outerBoundary}`,
+        `Content-Type: ${att.contentType || 'application/octet-stream'}; name="${safeName}"`,
+        'Content-Transfer-Encoding: base64',
+        `Content-Disposition: attachment; filename="${safeName}"`,
+        '',
+        b64,
+        ''
+      ];
+    });
+
+    bodyLines = [
+      `--${outerBoundary}`,
+      `Content-Type: multipart/alternative; boundary="${boundary}"`,
+      '',
+      ...alternativePart,
+      '',
+      ...attachmentParts,
+      `--${outerBoundary}--`
+    ];
+  } else {
+    bodyLines = alternativePart;
+  }
+
+  const rawEmail = [headers.join('\r\n'), '', ...bodyLines].join('\r\n');
 
   return Buffer.from(rawEmail)
     .toString('base64')
@@ -266,7 +303,7 @@ function buildRawEmail({ from, to, cc, subject, body, signatureHtml = '', signat
     .replace(/=+$/, '');
 }
 
-async function sendEmail(userId, { to, cc, subject, body, threadId, inReplyTo, references, trackingId }) {
+async function sendEmail(userId, { to, cc, subject, body, threadId, inReplyTo, references, trackingId, attachments }) {
   const user = await storage.getUserById(userId);
   if (!user) throw new Error('User not found');
 
@@ -292,7 +329,7 @@ async function sendEmail(userId, { to, cc, subject, body, threadId, inReplyTo, r
   const signatureHtml  = buildSignatureHtml(user);
   const signaturePlain = buildSignaturePlainText(user);
 
-  const raw = buildRawEmail({ from, to, cc, subject, body, signatureHtml, signaturePlain, threadId, inReplyTo, references, trackingId, baseUrl: BASE_URL });
+  const raw = buildRawEmail({ from, to, cc, subject, body, signatureHtml, signaturePlain, threadId, inReplyTo, references, trackingId, baseUrl: BASE_URL, attachments });
 
   const requestBody = { raw };
   if (threadId) requestBody.threadId = threadId;

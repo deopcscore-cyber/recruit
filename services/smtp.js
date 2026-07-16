@@ -36,7 +36,7 @@ function makeTransporter(cfg, resolvedHost) {
 // Shared platform Resend account (RESEND_API_KEY env var). Railway blocks
 // outbound SMTP ports, so custom-domain sending routes over HTTPS instead.
 // The consultant's domain must be verified in the Resend account.
-async function sendViaResend({ from, to, cc, subject, html, text, inReplyTo, references }) {
+async function sendViaResend({ from, to, cc, subject, html, text, inReplyTo, references, attachments }) {
   const axios = require('axios');
   const headers = {};
   if (inReplyTo)  headers['In-Reply-To'] = `<${inReplyTo.replace(/[<>]/g, '')}>`;
@@ -49,7 +49,10 @@ async function sendViaResend({ from, to, cc, subject, html, text, inReplyTo, ref
     html,
     text,
     ...(cc ? { cc: [cc] } : {}),
-    ...(Object.keys(headers).length ? { headers } : {})
+    ...(Object.keys(headers).length ? { headers } : {}),
+    ...(attachments && attachments.length
+      ? { attachments: attachments.map(a => ({ filename: a.filename, content: a.content.toString('base64') })) }
+      : {})
   };
 
   const res = await axios.post('https://api.resend.com/emails', payload, {
@@ -60,7 +63,7 @@ async function sendViaResend({ from, to, cc, subject, html, text, inReplyTo, ref
 }
 
 // ─── Send via SMTP (or Resend when configured) ────────────────────────────────
-async function sendEmail(userId, { to, cc, subject, body, inReplyTo, references, trackingId }) {
+async function sendEmail(userId, { to, cc, subject, body, inReplyTo, references, trackingId, attachments }) {
   const user = await storage.getUserById(userId);
   if (!user?.smtp?.host) throw new Error('SMTP not configured');
 
@@ -77,7 +80,7 @@ async function sendEmail(userId, { to, cc, subject, body, inReplyTo, references,
   // Prefer Resend when the platform key is set — Railway blocks raw SMTP
   if (process.env.RESEND_API_KEY) {
     try {
-      const id = await sendViaResend({ from, to, cc, subject, html, text, inReplyTo, references });
+      const id = await sendViaResend({ from, to, cc, subject, html, text, inReplyTo, references, attachments });
       return { gmailMessageId: id, gmailThreadId: null, smtpMessageId: id };
     } catch (err) {
       const status = err.response?.status;
@@ -103,7 +106,10 @@ async function sendEmail(userId, { to, cc, subject, body, inReplyTo, references,
     html,
     ...(cc        ? { cc }                         : {}),
     ...(inReplyTo ? { inReplyTo: `<${inReplyTo.replace(/[<>]/g, '')}>` } : {}),
-    ...(references? { references }                  : {})
+    ...(references? { references }                  : {}),
+    ...(attachments && attachments.length
+      ? { attachments: attachments.map(a => ({ filename: a.filename, content: a.content, contentType: a.contentType })) }
+      : {})
   };
 
   const info = await transporter.sendMail(mail);

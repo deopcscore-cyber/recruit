@@ -521,10 +521,29 @@ Write the outreach email now:`;
   return { text: response.content[0].text.trim(), costCents: calcCostCents(response.usage, response.provider) };
 }
 
+// Builds the JSON schema instructions for one role variant, reused for both
+// the "current level" and "step up" variants so their structure stays
+// identical (only the seniority/scope differs).
+function _roleVariantSchemaBlock(label, angle) {
+  return `{
+  "variantLabel": "${label}",
+  "title": "specific role title matching this angle: ${angle}",
+  "whyForYou": "2-3 sentences, deeply personal — reference their actual companies, roles, and career transitions by name. Not generic.",
+  "responsibilities": ["6-8 bullet points, strategic responsibilities tailored to this candidate and this variant's scope"],
+  "qualifications": ["6-8 bullet points mirroring their actual experience and strengths — reference real companies/roles they've held"],
+  "leadershipProfile": "3-4 sentences describing the kind of leader this role calls for, matched to this candidate's demonstrated style",
+  "compensation": "a specific, premium-feeling compensation description for THIS variant's level (base range, bonus, equity/benefits) — the step-up variant's number should read higher than the current-level variant's",
+  "mission": "2-3 sentences on the company's unique position and why it matters",
+  "team": "1-2 sentences on the collaborative, high-performance culture",
+  "growth": "1-2 sentences on the trajectory and upward mobility for the right person"
+}`;
+}
+
 async function generateRoleJD(candidate, user, instructions) {
   const candidateInfo = formatCandidateContext(candidate);
   const styleInfo = formatUserStyle(user);
   const company = getCompanyContext(user);
+  const firstName = (candidate.name || '').trim().split(/\s+/)[0] || 'there';
 
   // Derive a readable location for the JD header
   const candidateLocation = (candidate.location || '').trim();
@@ -532,63 +551,81 @@ async function generateRoleJD(candidate, user, instructions) {
 
   const convoContext = formatConversationContext(candidate);
 
-  const prompt = `You are creating a tailored leadership role description for ${company.name} to present to a specific executive candidate.
+  const prompt = `You are ${user.name}, writing to an executive candidate at ${company.name}. You are producing TWO things at once: (1) a short personal email, and (2) two tailored role-description variants that will be attached as a PDF (referenced from the email, not pasted into it).
 
 RECRUITER STYLE:
 ${styleInfo}
 
 CANDIDATE INFORMATION:
 ${candidateInfo}
-${convoContext ? '\n' + convoContext + '\nUse the conversation above where it helps: if the candidate shared motivations, priorities, questions, or constraints, let the "Why This Role Was Created With You In Mind" section and the offer sections speak to them directly.\n' : ''}
-INSTRUCTIONS:
-Create a detailed, personalized role description that feels written specifically for this person. Use markdown formatting — headers (##), bold (**text**), bullet points (-). Structure it as six sections:
+${convoContext ? '\n' + convoContext + '\n' : ''}
+═══════════════════════════════════════════
+PART 1 — THE EMAIL BODY
+═══════════════════════════════════════════
+GOLD STANDARD EXAMPLE (follow this exact structure and tone — adapt to this specific candidate, don't copy wording verbatim):
+---
+Dear ${firstName},
 
-## [Role Title] — craft a specific title based on their background and the company's needs
-**${company.name} | ${jdLocation} (Hybrid)**
+I'm thrilled to hear that you're interested in connecting further! Your experience as [their actual title] at [their actual company], coupled with [a specific real detail from their background], positions you uniquely to contribute meaningfully to ${company.name}'s mission. I'm eager to explore how your skills and insights can align with our objectives.
 
+To keep the momentum going, I'd like to ask you to take a look at the role descriptions attached. I've put together two versions for you to consider — one that mirrors where you are today, and one that reflects a step up — so you can tell me which direction resonates more. Please take a moment to consider whether either aligns with your vision and where you want to make your next move. If one (or both) resonates, just reply and let me know your thoughts — even a one-line reaction helps me understand where you stand. If not, no worries at all.
+
+[ROLE DESCRIPTIONS ATTACHED]
+
+Looking forward to hearing your thoughts!
 ---
 
-## Why This Role Was Created With You In Mind
-2-3 sentences that feel deeply personal — reference their actual companies, roles, and career transitions by name. Do not be generic.
+RULES FOR THE EMAIL BODY:
+1. If there is a candidate conversation above, the opening paragraph MUST directly acknowledge and respond to their latest message — reference their actual words, answer anything they asked, don't ignore it and open generically. If there's no conversation yet (first time sending a JD), open warmly referencing their actual background instead.
+2. Mention that you've attached TWO role versions — one matching their current level, one a step up — so they can tell you which resonates.
+3. Keep total length similar to the example — do not pad it out.
+4. Include the literal line "[ROLE DESCRIPTIONS ATTACHED]" on its own line where the attachment would be referenced.
+5. Do NOT add a signature, sign-off name, title, or company at the end — the sender's email signature is appended automatically. End right after "Looking forward to hearing your thoughts!" or equivalent.
+6. ${styleInfo ? 'Follow the style guidance above.' : 'Warm, professional, not salesy.'}
 
----
+═══════════════════════════════════════════
+PART 2 — TWO ROLE VARIANTS (for the attached PDF)
+═══════════════════════════════════════════
+Variant A — "Aligned to Your Current Level": a role that closely mirrors their current title/scope, so it feels like an easy, low-risk lateral move into ${company.name}.
+Variant B — "Your Step Up": a role one clear level above their current title/scope — same functional area, meaningfully more scope/seniority/ownership — so it reads as an aspirational next move, not a fantasy leap.
+Both must be built from their REAL background — reference actual companies, roles, and transitions by name in whyForYou and qualifications. Never generic boilerplate.
+${company.salaryRange ? `Company's general salary range for context (use as a loose anchor, adjust per variant level): ${company.salaryRange}.` : ''}
 
-## What You Will Own
-8-10 bullet points covering strategic responsibilities, each tailored specifically to this candidate's background.
+═══════════════════════════════════════════
+OUTPUT FORMAT — valid JSON only, no markdown fences, no commentary:
+═══════════════════════════════════════════
+{
+  "emailSubject": "a short, specific, non-generic subject line",
+  "emailBody": "the full email body as described in PART 1",
+  "variants": [
+    ${_roleVariantSchemaBlock('Aligned to Your Current Level', 'closely mirrors their current title and scope')},
+    ${_roleVariantSchemaBlock('Your Step Up', 'one clear level above their current title/scope')}
+  ]
+}
 
----
+Return ONLY the JSON object.`;
 
-## What You Bring
-8-10 bullet points mirroring their actual experience and strengths — reference real companies and roles they have held.
+  const response = await callAI(appendInstructions(prompt, instructions), 4000, pickProvider(user, instructions));
+  const raw = response.content[0].text.trim();
+  const costCents = calcCostCents(response.usage, response.provider);
 
----
+  let parsed;
+  try {
+    const clean = raw.replace(/^```json\s*/i, '').replace(/```\s*$/, '').trim();
+    parsed = JSON.parse(clean);
+  } catch (err) {
+    const match = raw.match(/\{[\s\S]*\}/);
+    if (match) parsed = JSON.parse(match[0]);
+    else throw new Error('Could not parse role JD response as JSON');
+  }
 
-## Leadership Profile
-3-4 sentences describing the kind of leader ${company.name} is looking for, written to match this candidate's demonstrated style.
-
----
-
-## What ${company.name} Offers
-
-**Compensation:** ${company.salaryRange ? `Base salary range: **${company.salaryRange}**. Also include` : 'Include'} performance bonus, equity/long-term incentives, and full benefits package. Make it feel premium and specific.
-
-**Mission:** 2-3 sentences on ${company.name}'s unique position and why it matters. Draw from: "${company.pitch}"
-
-**Team:** 1-2 sentences on the collaborative, high-performance culture.
-
-**Growth:** 1-2 sentences on the clear trajectory and upward mobility for the right person.
-
----
-
-*Confidential | Prepared exclusively for [candidate first name]*
-
-Make every section compelling and specific — not generic boilerplate. Reference their real background throughout. Output ONLY the role description, no additional commentary.
-
-Write the role description now:`;
-
-  const response = await callAI(appendInstructions(prompt, instructions), 3000, pickProvider(user, instructions));
-
-  return { text: response.content[0].text.trim(), costCents: calcCostCents(response.usage, response.provider) };
+  return {
+    subject: parsed.emailSubject || '',
+    text: parsed.emailBody || '',
+    variants: Array.isArray(parsed.variants) ? parsed.variants : [],
+    jdLocation,
+    costCents
+  };
 }
 
 async function _generateRecruiterResumeFeedback(candidate, user, instructions) {

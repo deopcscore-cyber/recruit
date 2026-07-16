@@ -522,12 +522,23 @@ async function _processScheduledSendJob(job) {
   if (!user || !candidate) { queueSvc.updateJob(job.id, { status: 'cancelled', reason: 'missing' }); return; }
   if (!outbound.isEmailConnected(user)) throw new Error('No email provider connected');
 
+  let attachments = null;
+  if (job.roleJDVariants && job.roleJDVariants.length) {
+    try {
+      const att = await outbound.buildRoleJDAttachment(candidate, user, job.roleJDVariants, job.jdLocation);
+      if (att) attachments = [att];
+    } catch (pdfErr) {
+      console.error('Role JD PDF build failed (scheduled send):', pdfErr.message);
+    }
+  }
+
   await outbound.sendComposed(user, candidate, {
     subject: job.subject,
     body:    job.body,
     isReply: !!job.isReply,
     isFollowUp: !!job.isFollowUp,
-    cc:      job.cc || null
+    cc:      job.cc || null,
+    attachments
   });
 
   queueSvc.updateJob(job.id, { status: 'sent', sentAt: new Date().toISOString() });

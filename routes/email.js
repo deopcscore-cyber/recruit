@@ -87,7 +87,7 @@ const gmailCallback = async (req, res) => {
 // POST /api/email/send
 router.post('/send', requireAuth, async (req, res) => {
   try {
-    const { candidateId, subject, body, isReply, cc, scheduledAt, isFollowUp } = req.body;
+    const { candidateId, subject, body, isReply, cc, scheduledAt, isFollowUp, roleJDVariants, jdLocation } = req.body;
 
     if (!candidateId || !subject || !body) {
       return res.status(400).json({ error: 'candidateId, subject, and body are required' });
@@ -123,6 +123,8 @@ router.post('/send', requireAuth, async (req, res) => {
           isReply:       !!isReply,
           isFollowUp:    !!isFollowUp,
           cc:            cc || null,
+          roleJDVariants: roleJDVariants || null,
+          jdLocation:    jdLocation || '',
           scheduledAt:   new Date(t).toISOString(),
           status:        'pending',
           createdAt:     new Date().toISOString()
@@ -132,9 +134,22 @@ router.post('/send', requireAuth, async (req, res) => {
       }
     }
 
+    // Role JD sends carry structured variant data — build the PDF fresh here
+    // and attach it rather than pasting the JD into the email body.
+    let attachments = null;
+    if (roleJDVariants && roleJDVariants.length) {
+      try {
+        const att = await outbound.buildRoleJDAttachment(candidate, user, roleJDVariants, jdLocation);
+        if (att) attachments = [att];
+      } catch (pdfErr) {
+        console.error('Role JD PDF build failed:', pdfErr.message);
+        return res.status(500).json({ error: 'Failed to build the role description PDF: ' + pdfErr.message });
+      }
+    }
+
     let sendResult;
     try {
-      sendResult = await outbound.sendComposed(user, candidate, { subject, body, isReply: !!isReply, isFollowUp: !!isFollowUp, cc: cc || null });
+      sendResult = await outbound.sendComposed(user, candidate, { subject, body, isReply: !!isReply, isFollowUp: !!isFollowUp, cc: cc || null, attachments });
     } catch (sendErr) {
       // Gmail rate limit: instead of bouncing the user, queue this exact draft
       // to send automatically once the quota clears. Nothing was persisted —
@@ -158,6 +173,8 @@ router.post('/send', requireAuth, async (req, res) => {
         isReply:       !!isReply,
         isFollowUp:    !!isFollowUp,
         cc:            cc || null,
+        roleJDVariants: roleJDVariants || null,
+        jdLocation:    jdLocation || '',
         // small buffer past the reported reset so the retry doesn't hit the same window
         scheduledAt:   new Date(retryAt.getTime() + 90 * 1000).toISOString(),
         status:        'pending',

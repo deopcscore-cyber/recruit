@@ -93,7 +93,13 @@ router.post('/role-jd', async (req, res) => {
 
     const result = await claude.generateRoleJD(ctx.candidate, ctx.user, req.body.instructions);
     await deductCredits(ctx.user, result.costCents, 'Role & JD', ctx.candidate.name);
-    return res.json({ draft: result.text, creditsRemaining: ctx.user.credits });
+    return res.json({
+      draft: result.text,
+      subject: result.subject,
+      variants: result.variants,
+      jdLocation: result.jdLocation,
+      creditsRemaining: ctx.user.credits
+    });
   } catch (err) {
     console.error('AI role JD error:', err);
     return res.status(500).json({ error: 'Failed to generate role JD: ' + err.message });

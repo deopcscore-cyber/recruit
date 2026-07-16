@@ -968,14 +968,16 @@ function renderOutreachTab(body) {
 function renderRoleJDTab(body) {
   const c = _modalCandidate;
   const done = (c.stepsCompleted||{}).roleJD;
+  let jdVariants = null;
+  let jdLocationVal = '';
 
   body.innerHTML = `
     <div class="tab-scroll">
       ${done ? `<div class="step-done-banner">✓ Role JD has been sent</div>` : ''}
       <div class="tab-section">
-        <h4>Tailored Leadership Role Description</h4>
-        <p class="tab-desc">AI builds a customized JD for <strong>${escapeHtml(c.name||'this candidate')}</strong> — references their actual companies, mirrors their experience. Review and approve before sending.</p>
-        <button class="btn btn-secondary btn-sm" id="gen-jd-btn">✦ ${done?'Regenerate Role JD':'Generate Role JD'}</button>
+        <h4>Tailored Leadership Role — Two Options</h4>
+        <p class="tab-desc">AI writes a short personal email for <strong>${escapeHtml(c.name||'this candidate')}</strong> that responds to their last message, plus two role variants — one matching their current level, one a step up — attached as a formatted PDF for them to choose between.</p>
+        <button class="btn btn-secondary btn-sm" id="gen-jd-btn">✦ ${done?'Regenerate':'Generate Email + Role PDF'}</button>
         <div style="margin-top:8px">
           <button type="button" onclick="(function(){var w=document.getElementById('jd-instructions-wrap');w.style.display=w.style.display==='none'?'':'none'})()" class="btn btn-ghost btn-sm" style="font-size:0.75rem;padding:2px 8px;color:var(--text-muted)">✎ Add instructions</button>
           <div id="jd-instructions-wrap" style="display:none;margin-top:6px">
@@ -986,24 +988,17 @@ function renderRoleJDTab(body) {
       <div class="draft-area" id="jd-draft-area" style="display:none">
         <div class="tab-section">
           <div class="draft-label">
-            <h4>Role Description Draft</h4>
-            <div style="display:flex;gap:8px;align-items:center">
-              <span class="text-xs text-muted">Markdown → formatted email on send</span>
-              <button class="btn btn-ghost btn-xs" id="jd-toggle-preview">👁 Preview</button>
-            </div>
+            <h4>Email Draft</h4>
           </div>
           <div class="form-group">
             <label>Subject Line</label>
-            <input type="text" id="jd-subject" placeholder="The Welltower opportunity — created with you in mind" />
+            <input type="text" id="jd-subject" placeholder="A quick thought on your next move" />
           </div>
           <div class="form-group" id="jd-edit-area">
-            <label>Message <span class="text-xs text-muted">(markdown)</span></label>
-            <textarea id="jd-body" class="draft-textarea" style="min-height:380px;font-family:monospace;font-size:13px"></textarea>
+            <label>Message</label>
+            <textarea id="jd-body" class="draft-textarea" style="min-height:260px;font-size:13.5px"></textarea>
           </div>
-          <div class="form-group" id="jd-preview-area" style="display:none">
-            <label>Formatted Preview <span class="text-xs text-muted">(how it looks in the email)</span></label>
-            <div id="jd-preview-content" style="border:1px solid var(--border);border-radius:8px;padding:20px;min-height:380px;overflow-y:auto;background:var(--bg-primary)"></div>
-          </div>
+          <div id="jd-variants-preview" style="margin:10px 0"></div>
           <div class="draft-actions">
             <button class="btn btn-ghost btn-sm" id="jd-regen">↺ Regenerate</button>
             <button class="btn btn-primary" id="jd-send">Approve & Send</button>
@@ -1013,23 +1008,19 @@ function renderRoleJDTab(body) {
     </div>
   `;
 
-  // Preview toggle
-  const toggleBtn = body.querySelector('#jd-toggle-preview');
-  const editArea = body.querySelector('#jd-edit-area');
-  const previewArea = body.querySelector('#jd-preview-area');
-  const previewContent = body.querySelector('#jd-preview-content');
-  let showingPreview = false;
-  if (toggleBtn) {
-    toggleBtn.addEventListener('click', () => {
-      showingPreview = !showingPreview;
-      editArea.style.display = showingPreview ? 'none' : '';
-      previewArea.style.display = showingPreview ? '' : 'none';
-      toggleBtn.textContent = showingPreview ? '✏ Edit' : '👁 Preview';
-      if (showingPreview) {
-        const md = body.querySelector('#jd-body').value;
-        previewContent.innerHTML = markdownToHtmlPreview(md);
-      }
-    });
+  function renderVariantsPreview() {
+    const el = body.querySelector('#jd-variants-preview');
+    if (!el) return;
+    if (!jdVariants || !jdVariants.length) { el.innerHTML = ''; return; }
+    el.innerHTML = `
+      <div style="border:1px solid var(--border);border-radius:8px;padding:12px 14px;background:var(--bg-primary)">
+        <div style="font-size:0.78rem;font-weight:600;color:var(--text-muted);margin-bottom:8px">📎 ${jdVariants.length} role variant${jdVariants.length===1?'':'s'} will be attached as a PDF</div>
+        ${jdVariants.map(v => `
+          <div style="padding:6px 0;border-top:1px solid var(--border)">
+            <div style="font-size:0.72rem;font-weight:700;color:var(--blue);text-transform:uppercase;letter-spacing:0.03em">${escapeHtml(v.variantLabel || 'Role option')}</div>
+            <div style="font-size:0.88rem;font-weight:600;color:var(--text)">${escapeHtml(v.title || '')}</div>
+          </div>`).join('')}
+      </div>`;
   }
 
   wireAIDraft(body, {
@@ -1039,11 +1030,19 @@ function renderRoleJDTab(body) {
     bodyId: 'jd-body',
     regenBtnId: 'jd-regen',
     sendBtnId: 'jd-send',
-    defaultSubject: `The Welltower opportunity — created with you in mind`,
+    defaultSubject: `A quick thought on your next move`,
     stepKey: 'roleJD',
     stageTo: null,
     instructionsId: 'jd-instructions',
-    generate: (instructions) => API.ai.roleJD(c.id, instructions)
+    generate: (instructions) => API.ai.roleJD(c.id, instructions),
+    onGenerated: (result) => {
+      jdVariants = result.variants || null;
+      jdLocationVal = result.jdLocation || '';
+      renderVariantsPreview();
+    },
+    extraSendParams: () => (jdVariants && jdVariants.length
+      ? { roleJDVariants: jdVariants, jdLocation: jdLocationVal }
+      : {})
   });
 }
 
@@ -1895,7 +1894,7 @@ function renderThreadTab(body) {
 // SHARED: AI Draft Wire-up
 // ================================================================
 
-function wireAIDraft(body, { genBtnId, draftAreaId, subjectId, bodyId, regenBtnId, sendBtnId, defaultSubject, stepKey, stageTo, cc, instructionsId, generate }) {
+function wireAIDraft(body, { genBtnId, draftAreaId, subjectId, bodyId, regenBtnId, sendBtnId, defaultSubject, stepKey, stageTo, cc, instructionsId, generate, onGenerated, extraSendParams }) {
   const c = _modalCandidate;
 
   const genBtn = body.querySelector('#' + genBtnId);
@@ -1931,6 +1930,7 @@ function wireAIDraft(body, { genBtnId, draftAreaId, subjectId, bodyId, regenBtnI
         subjectEl.value = (result.subject && result.subject.trim()) || subjectEl.value || defaultSubject;
         subjectEl.dispatchEvent(new Event('input'));
       }
+      if (onGenerated) onGenerated(result);
       draftArea.style.display = '';
       bodyEl && bodyEl.focus();
     } catch (err) { Toast.error(err.message); }
@@ -1954,7 +1954,8 @@ function wireAIDraft(body, { genBtnId, draftAreaId, subjectId, bodyId, regenBtnI
       sendBtn.disabled = true; sendBtn.textContent = 'Sending…';
       try {
         const isReply = (c.thread||[]).some(m => m.direction === 'outbound');
-        const result = await API.email.send({ candidateId: c.id, subject, body: msgBody, isReply, ...(cc ? { cc } : {}) });
+        const extra = extraSendParams ? extraSendParams() : {};
+        const result = await API.email.send({ candidateId: c.id, subject, body: msgBody, isReply, ...(cc ? { cc } : {}), ...extra });
         if (result.candidate) Object.assign(_modalCandidate, result.candidate);
 
         // Mark step complete

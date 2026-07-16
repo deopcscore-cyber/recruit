@@ -221,8 +221,29 @@ async function fetchAccountInfo(accessToken, apiBase = API_BASE_DEFAULT) {
   return { accountId: acct.accountId, address, displayName };
 }
 
+// Upload a file to Zoho's attachment store, returning the reference object
+// the send endpoint expects. Zoho requires attachments to be pre-uploaded
+// (raw binary POST) before referencing them in a send — they can't be
+// inlined in the send payload itself.
+async function uploadAttachment(apiBase, accountId, token, attachment) {
+  const url = `${apiBase}/accounts/${accountId}/messages/attachments?fileName=${encodeURIComponent(attachment.filename)}`;
+  const res = await axios.post(url, attachment.content, {
+    headers: {
+      Authorization: `Zoho-oauthtoken ${token}`,
+      'Content-Type': attachment.contentType || 'application/octet-stream'
+    }
+  });
+  const info = res.data && res.data.data;
+  if (!info || !info.storeName) throw new Error('Zoho attachment upload returned no storeName');
+  return {
+    storeName: info.storeName,
+    attachmentPath: info.attachmentPath,
+    attachmentName: attachment.filename
+  };
+}
+
 // ── Send email via Zoho REST API ──────────────────────────────────────────────
-async function sendEmail(userId, { to, cc, subject, body, inReplyTo, references, trackingId }) {
+async function sendEmail(userId, { to, cc, subject, body, inReplyTo, references, trackingId, attachments }) {
   const user = await storage.getUserById(userId);
   if (!user) throw new Error('User not found');
 
@@ -247,6 +268,20 @@ async function sendEmail(userId, { to, cc, subject, body, inReplyTo, references,
   if (inReplyTo) payload.inReplyTo = inReplyTo;
 
   let apiBase = userApiBase(user);
+
+  // Attachments must be uploaded separately first. If the upload fails,
+  // don't block the whole send over it — log and send without it.
+  if (attachments && attachments.length) {
+    try {
+      const uploaded = [];
+      for (const att of attachments) {
+        uploaded.push(await uploadAttachment(apiBase, accountId, token, att));
+      }
+      payload.attachments = uploaded;
+    } catch (attErr) {
+      console.error('Zoho attachment upload failed, sending without it:', attErr.message);
+    }
+  }
   let sendUrl = `${apiBase}/accounts/${accountId}/messages`;
   console.log('Zoho send →', sendUrl, '| from:', fromAddr, '| to:', to);
   let resp;
