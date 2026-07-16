@@ -92,9 +92,8 @@ function addCareersVariant(doc, companyName, jdLocation, variant, isFirst) {
     .text(variant.title || 'Role Overview', { lineGap: 1 });
   doc.moveDown(0.35);
 
-  // Meta line: Full-Time · On-site · Location · Posted <date>
-  const posted = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
-  const meta = [variant.employmentType || 'Full-Time', variant.workMode, jdLocation, `Posted ${posted}`]
+  // Meta line: Full-Time · On-site · Location
+  const meta = [variant.employmentType || 'Full-Time', variant.workMode, jdLocation]
     .filter(Boolean).join('   ·   ');
   doc.fillColor(MUTED).font('Helvetica').fontSize(10).text(meta);
   doc.moveDown(0.8);
