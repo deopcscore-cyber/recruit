@@ -207,6 +207,38 @@ router.post('/send', requireAuth, async (req, res) => {
   }
 });
 
+// POST /api/email/role-jd-preview — render the role-JD PDF on demand so the
+// user can review it before sending. Variants are already generated
+// client-side (from a prior /api/ai/role-jd call) — this just builds the PDF
+// bytes; no AI call, no credits, no send.
+router.post('/role-jd-preview', requireAuth, async (req, res) => {
+  try {
+    const { candidateId, roleJDVariants, jdLocation } = req.body;
+    if (!candidateId || !roleJDVariants || !roleJDVariants.length) {
+      return res.status(400).json({ error: 'candidateId and roleJDVariants are required' });
+    }
+    const candidate = await storage.getCandidateById(candidateId);
+    if (!candidate) return res.status(404).json({ error: 'Candidate not found' });
+    if (candidate.userId !== req.session.userId) return res.status(403).json({ error: 'Forbidden' });
+
+    const user = await storage.getUserById(req.session.userId);
+    if (!user) return res.status(404).json({ error: 'User not found' });
+
+    const attachment = await outbound.buildRoleJDAttachment(candidate, user, roleJDVariants, jdLocation);
+    if (!attachment) return res.status(400).json({ error: 'No role variants to preview' });
+
+    res.set({
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': `inline; filename="${attachment.filename.replace(/"/g, '')}"`,
+      'Cache-Control': 'no-store'
+    });
+    return res.send(attachment.content);
+  } catch (err) {
+    console.error('Role JD preview error:', err);
+    return res.status(500).json({ error: 'Failed to build PDF preview: ' + err.message });
+  }
+});
+
 // GET /api/email/scheduled/:candidateId — pending scheduled sends for one candidate
 router.get('/scheduled/:candidateId', requireAuth, (req, res) => {
   try {

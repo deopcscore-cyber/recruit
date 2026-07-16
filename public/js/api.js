@@ -73,6 +73,21 @@ const API = {
     send(data) { return API.post('/api/email/send', data); },
     scheduled(candidateId) { return API.get(`/api/email/scheduled/${candidateId}`); },
     cancelScheduled(jobId) { return API.delete(`/api/email/scheduled/${jobId}`); },
+    // Returns a Blob (PDF bytes), not JSON — bypasses API.request's res.json() parsing.
+    async previewRoleJDPdf(candidateId, roleJDVariants, jdLocation) {
+      const res = await fetch('/api/email/role-jd-preview', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ candidateId, roleJDVariants, jdLocation })
+      });
+      if (res.status === 401) { window.location.href = '/login'; return null; }
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || `Request failed (${res.status})`);
+      }
+      return res.blob();
+    },
     fetch() { return API.post('/api/email/fetch'); },
     test() { return API.post('/api/email/test'); },
     checkPriorContact(emails) { return API.post('/api/email/check-prior-contact', { emails }); },

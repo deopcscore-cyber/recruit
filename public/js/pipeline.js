@@ -1001,6 +1001,7 @@ function renderRoleJDTab(body) {
           <div id="jd-variants-preview" style="margin:10px 0"></div>
           <div class="draft-actions">
             <button class="btn btn-ghost btn-sm" id="jd-regen">↺ Regenerate</button>
+            <button class="btn btn-secondary btn-sm" id="jd-preview-pdf" style="display:none">👁 Preview PDF</button>
             <button class="btn btn-primary" id="jd-send">Approve & Send</button>
           </div>
         </div>
@@ -1010,6 +1011,8 @@ function renderRoleJDTab(body) {
 
   function renderVariantsPreview() {
     const el = body.querySelector('#jd-variants-preview');
+    const previewBtn = body.querySelector('#jd-preview-pdf');
+    if (previewBtn) previewBtn.style.display = (jdVariants && jdVariants.length) ? '' : 'none';
     if (!el) return;
     if (!jdVariants || !jdVariants.length) { el.innerHTML = ''; return; }
     el.innerHTML = `
@@ -1044,6 +1047,30 @@ function renderRoleJDTab(body) {
       ? { roleJDVariants: jdVariants, jdLocation: jdLocationVal }
       : {})
   });
+
+  const previewBtn = body.querySelector('#jd-preview-pdf');
+  if (previewBtn) {
+    previewBtn.addEventListener('click', async () => {
+      if (!jdVariants || !jdVariants.length) { Toast.warning('Generate the role description first'); return; }
+      // Open the tab synchronously (inside the click handler) so browsers
+      // don't treat it as an unrequested popup — we fill in its URL once the
+      // PDF bytes come back from the async fetch below.
+      const previewWin = window.open('', '_blank');
+      const orig = previewBtn.textContent;
+      previewBtn.disabled = true; previewBtn.textContent = 'Loading…';
+      try {
+        const blob = await API.email.previewRoleJDPdf(c.id, jdVariants, jdLocationVal);
+        const url = URL.createObjectURL(blob);
+        if (previewWin) previewWin.location.href = url;
+        else Toast.warning('Preview blocked by your browser\'s pop-up blocker — allow pop-ups for this site and try again.');
+      } catch (err) {
+        if (previewWin) previewWin.close();
+        Toast.error(err.message);
+      } finally {
+        previewBtn.disabled = false; previewBtn.textContent = orig;
+      }
+    });
+  }
 }
 
 // ================================================================
