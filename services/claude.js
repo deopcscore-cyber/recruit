@@ -527,15 +527,21 @@ Write the outreach email now:`;
 function _roleVariantSchemaBlock(label, angle) {
   return `{
   "variantLabel": "${label}",
-  "title": "specific role title matching this angle: ${angle}",
-  "whyForYou": "2-3 sentences, deeply personal — reference their actual companies, roles, and career transitions by name. Not generic.",
-  "responsibilities": ["6-8 bullet points, strategic responsibilities tailored to this candidate and this variant's scope"],
-  "qualifications": ["6-8 bullet points mirroring their actual experience and strengths — reference real companies/roles they've held"],
-  "leadershipProfile": "3-4 sentences describing the kind of leader this role calls for, matched to this candidate's demonstrated style",
-  "compensation": "a specific, premium-feeling compensation description for THIS role's level (base range, bonus, equity/benefits), positioned above what their current seat would typically pay",
-  "mission": "2-3 sentences on the company's unique position and why it matters",
-  "team": "1-2 sentences on the collaborative, high-performance culture",
-  "growth": "1-2 sentences on the trajectory and upward mobility for the right person"
+  "title": "role title matching this angle: ${angle} — formatted like a real corporate posting title, e.g. \\"VP, Construction & Development\\"",
+  "employmentType": "Full-Time (or what fits)",
+  "workMode": "On-site, Hybrid, or Remote — whichever fits the role and the candidate's location",
+  "companyIntro": {
+    "headline": "an all-caps company banner headline, e.g. \\"ACME — REIMAGINE SENIOR CARE WITH US\\"",
+    "body": "2 short paragraphs (separated by \\\\n\\\\n) selling the company's mission and culture in an ambitious, confident careers-page voice, drawn from the company pitch. End with a sentence about the kind of person the company wants."
+  },
+  "summary": "2 paragraphs (separated by \\\\n\\\\n) describing the role's mandate, scope, and where it sits in the organization — written so this candidate's real background is obviously the profile it calls for, but phrased like a genuine posting (never name the candidate)",
+  "responsibilityGroups": [
+    { "heading": "thematic subheading, e.g. \\"Strategic Leadership\\"", "bullets": ["3-5 responsibility bullets for this theme"] },
+    { "heading": "…4 to 6 groups total — themes chosen to fit this role and showcase this candidate's strengths", "bullets": ["…"] }
+  ],
+  "travel": "one line on expected travel (e.g. \\"20% out-of-area travel may be expected.\\"), or \\"\\" if not relevant",
+  "requirements": ["7-10 bullets: education, years of experience, domain expertise, tools — written so THIS candidate clearly meets every one (mirror their actual years, domains, scope, and transitions) but phrased as a genuine public posting: never name the candidate or their employers"],
+  "whatWeOffer": ["5-7 bullets. FIRST bullet is compensation for this role's level (base range + bonus/equity, positioned above what their current seat would typically pay); then benefits and perks in the company's voice"]
 }`;
 }
 
@@ -590,7 +596,7 @@ RULES FOR THE EMAIL BODY:
 PART 2 — THE ROLE DESCRIPTION (for the attached PDF)
 ═══════════════════════════════════════════
 "Your Next Step": a role one clear level above their current title/scope — same functional area, meaningfully more scope/seniority/ownership — so it reads as an aspirational but credible next move, not a fantasy leap.
-It must be built from their REAL background — reference actual companies, roles, and transitions by name in whyForYou and qualifications. Never generic boilerplate.
+Write it in the style of an official corporate careers-site posting (like a Fortune-500 job page): confident, polished, impersonal in voice. The tailoring is invisible: the summary, responsibility themes, and requirements are engineered from this candidate's REAL background (their years, domains, scope, transitions) so they will recognise themselves in every line and clearly qualify — but the document itself never names the candidate or their employers. Never generic boilerplate.
 ${company.salaryRange ? `Company's general salary range for context (use as a loose anchor, positioned for the step-up level): ${company.salaryRange}.` : ''}
 
 ═══════════════════════════════════════════
@@ -606,7 +612,7 @@ OUTPUT FORMAT — valid JSON only, no markdown fences, no commentary:
 
 Return ONLY the JSON object.`;
 
-  const response = await callAI(appendInstructions(prompt, instructions), 4000, pickProvider(user, instructions));
+  const response = await callAI(appendInstructions(prompt, instructions), 5000, pickProvider(user, instructions));
   const raw = response.content[0].text.trim();
   const costCents = calcCostCents(response.usage, response.provider);
 
