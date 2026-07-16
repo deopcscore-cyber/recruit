@@ -532,7 +532,7 @@ function _roleVariantSchemaBlock(label, angle) {
   "responsibilities": ["6-8 bullet points, strategic responsibilities tailored to this candidate and this variant's scope"],
   "qualifications": ["6-8 bullet points mirroring their actual experience and strengths — reference real companies/roles they've held"],
   "leadershipProfile": "3-4 sentences describing the kind of leader this role calls for, matched to this candidate's demonstrated style",
-  "compensation": "a specific, premium-feeling compensation description for THIS variant's level (base range, bonus, equity/benefits) — the step-up variant's number should read higher than the current-level variant's",
+  "compensation": "a specific, premium-feeling compensation description for THIS role's level (base range, bonus, equity/benefits), positioned above what their current seat would typically pay",
   "mission": "2-3 sentences on the company's unique position and why it matters",
   "team": "1-2 sentences on the collaborative, high-performance culture",
   "growth": "1-2 sentences on the trajectory and upward mobility for the right person"
@@ -551,7 +551,7 @@ async function generateRoleJD(candidate, user, instructions) {
 
   const convoContext = formatConversationContext(candidate);
 
-  const prompt = `You are ${user.name}, writing to an executive candidate at ${company.name}. You are producing TWO things at once: (1) a short personal email, and (2) two tailored role-description variants that will be attached as a PDF (referenced from the email, not pasted into it).
+  const prompt = `You are ${user.name}, writing to an executive candidate at ${company.name}. You are producing TWO things at once: (1) a short personal email, and (2) ONE tailored role description — a clear step up from the candidate's current level — that will be attached as a PDF (referenced from the email, not pasted into it).
 
 RECRUITER STYLE:
 ${styleInfo}
@@ -568,28 +568,30 @@ Dear ${firstName},
 
 I'm thrilled to hear that you're interested in connecting further! Your experience as [their actual title] at [their actual company], coupled with [a specific real detail from their background], positions you uniquely to contribute meaningfully to ${company.name}'s mission. I'm eager to explore how your skills and insights can align with our objectives.
 
-To keep the momentum going, I'd like to ask you to take a look at the role descriptions attached. I've put together two versions for you to consider — one that mirrors where you are today, and one that reflects a step up — so you can tell me which direction resonates more. Please take a moment to consider whether either aligns with your vision and where you want to make your next move. If one (or both) resonates, just reply and let me know your thoughts — even a one-line reaction helps me understand where you stand. If not, no worries at all.
+To keep the momentum going, I've attached the role description I have in mind for you. I'll be upfront: it's a step up from where you are today — deliberately so, because I think your background has outgrown your current seat. Please take a moment to read it and consider whether it aligns with your vision and where you want to make your next move. Even a one-line reaction helps me understand where you stand.
 
-[ROLE DESCRIPTIONS ATTACHED]
+[ROLE DESCRIPTION ATTACHED]
+
+And if, after reading it, you feel this kind of step isn't what you're ready for right now — just tell me. That's genuinely useful to know, and we may well have something else that fits you better.
 
 Looking forward to hearing your thoughts!
 ---
 
 RULES FOR THE EMAIL BODY:
 1. If there is a candidate conversation above, the opening paragraph MUST directly acknowledge and respond to their latest message — reference their actual words, answer anything they asked, don't ignore it and open generically. If there's no conversation yet (first time sending a JD), open warmly referencing their actual background instead.
-2. Mention that you've attached TWO role versions — one matching their current level, one a step up — so they can tell you which resonates.
-3. Keep total length similar to the example — do not pad it out.
-4. Include the literal line "[ROLE DESCRIPTIONS ATTACHED]" on its own line where the attachment would be referenced.
-5. Do NOT add a signature, sign-off name, title, or company at the end — the sender's email signature is appended automatically. End right after "Looking forward to hearing your thoughts!" or equivalent.
-6. ${styleInfo ? 'Follow the style guidance above.' : 'Warm, professional, not salesy.'}
+2. Mention that you've attached ONE role description and be upfront that it represents a step up from their current level.
+3. REQUIRED, near the end: tell them plainly that if they don't feel ready for this kind of step, they should let you know — you may have something else for them. Keep it warm and pressure-free (their honesty helps you), never condescending.
+4. Keep total length similar to the example — do not pad it out.
+5. Include the literal line "[ROLE DESCRIPTION ATTACHED]" on its own line where the attachment would be referenced.
+6. Do NOT add a signature, sign-off name, title, or company at the end — the sender's email signature is appended automatically. End right after "Looking forward to hearing your thoughts!" or equivalent.
+7. ${styleInfo ? 'Follow the style guidance above.' : 'Warm, professional, not salesy.'}
 
 ═══════════════════════════════════════════
-PART 2 — TWO ROLE VARIANTS (for the attached PDF)
+PART 2 — THE ROLE DESCRIPTION (for the attached PDF)
 ═══════════════════════════════════════════
-Variant A — "Aligned to Your Current Level": a role that closely mirrors their current title/scope, so it feels like an easy, low-risk lateral move into ${company.name}.
-Variant B — "Your Step Up": a role one clear level above their current title/scope — same functional area, meaningfully more scope/seniority/ownership — so it reads as an aspirational next move, not a fantasy leap.
-Both must be built from their REAL background — reference actual companies, roles, and transitions by name in whyForYou and qualifications. Never generic boilerplate.
-${company.salaryRange ? `Company's general salary range for context (use as a loose anchor, adjust per variant level): ${company.salaryRange}.` : ''}
+"Your Next Step": a role one clear level above their current title/scope — same functional area, meaningfully more scope/seniority/ownership — so it reads as an aspirational but credible next move, not a fantasy leap.
+It must be built from their REAL background — reference actual companies, roles, and transitions by name in whyForYou and qualifications. Never generic boilerplate.
+${company.salaryRange ? `Company's general salary range for context (use as a loose anchor, positioned for the step-up level): ${company.salaryRange}.` : ''}
 
 ═══════════════════════════════════════════
 OUTPUT FORMAT — valid JSON only, no markdown fences, no commentary:
@@ -598,8 +600,7 @@ OUTPUT FORMAT — valid JSON only, no markdown fences, no commentary:
   "emailSubject": "a short, specific, non-generic subject line",
   "emailBody": "the full email body as described in PART 1",
   "variants": [
-    ${_roleVariantSchemaBlock('Aligned to Your Current Level', 'closely mirrors their current title and scope')},
-    ${_roleVariantSchemaBlock('Your Step Up', 'one clear level above their current title/scope')}
+    ${_roleVariantSchemaBlock('Your Next Step', 'one clear level above their current title/scope')}
   ]
 }
 

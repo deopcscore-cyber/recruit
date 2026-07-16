@@ -975,8 +975,8 @@ function renderRoleJDTab(body) {
     <div class="tab-scroll">
       ${done ? `<div class="step-done-banner">✓ Role JD has been sent</div>` : ''}
       <div class="tab-section">
-        <h4>Tailored Leadership Role — Two Options</h4>
-        <p class="tab-desc">AI writes a short personal email for <strong>${escapeHtml(c.name||'this candidate')}</strong> that responds to their last message, plus two role variants — one matching their current level, one a step up — attached as a formatted PDF for them to choose between.</p>
+        <h4>Tailored Leadership Role — The Step Up</h4>
+        <p class="tab-desc">AI writes a short personal email for <strong>${escapeHtml(c.name||'this candidate')}</strong> that responds to their last message, plus one step-up role description attached as a formatted PDF. The email invites them to say so if they're not ready for this kind of step — you may have something else for them.</p>
         <button class="btn btn-secondary btn-sm" id="gen-jd-btn">✦ ${done?'Regenerate':'Generate Email + Role PDF'}</button>
         <div style="margin-top:8px">
           <button type="button" onclick="(function(){var w=document.getElementById('jd-instructions-wrap');w.style.display=w.style.display==='none'?'':'none'})()" class="btn btn-ghost btn-sm" style="font-size:0.75rem;padding:2px 8px;color:var(--text-muted)">✎ Add instructions</button>

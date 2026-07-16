@@ -233,8 +233,13 @@ async function uploadAttachment(apiBase, accountId, token, attachment) {
       'Content-Type': attachment.contentType || 'application/octet-stream'
     }
   });
-  const info = res.data && res.data.data;
-  if (!info || !info.storeName) throw new Error('Zoho attachment upload returned no storeName');
+  // Zoho returns data as an object for single raw uploads but as an array in
+  // some regions/modes — accept both.
+  const d = res.data && res.data.data;
+  const info = Array.isArray(d) ? d[0] : d;
+  if (!info || !info.storeName) {
+    throw new Error('Zoho attachment upload returned no storeName: ' + JSON.stringify(res.data));
+  }
   return {
     storeName: info.storeName,
     attachmentPath: info.attachmentPath,
@@ -269,17 +274,35 @@ async function sendEmail(userId, { to, cc, subject, body, inReplyTo, references,
 
   let apiBase = userApiBase(user);
 
-  // Attachments must be uploaded separately first. If the upload fails,
-  // don't block the whole send over it — log and send without it.
+  // Attachments must be uploaded to Zoho's store before the send references
+  // them. The email's whole point may be the attachment (role JD PDF), so a
+  // failed upload FAILS the send — never silently deliver without it.
   if (attachments && attachments.length) {
-    try {
+    async function uploadAll(base) {
       const uploaded = [];
       for (const att of attachments) {
-        uploaded.push(await uploadAttachment(apiBase, accountId, token, att));
+        uploaded.push(await uploadAttachment(base, accountId, token, att));
       }
-      payload.attachments = uploaded;
+      return uploaded;
+    }
+    try {
+      payload.attachments = await uploadAll(apiBase);
     } catch (attErr) {
-      console.error('Zoho attachment upload failed, sending without it:', attErr.message);
+      // The upload runs before the send's own wrong-region fallback can fire,
+      // so a stale apiBase hits here first. Re-detect the region and retry
+      // once; any other failure propagates.
+      const errBody = attErr.response ? attErr.response.data : null;
+      const wrongRegion = errBody && (
+        (errBody.data && errBody.data.errorCode === 'URL_RULE_NOT_CONFIGURED') ||
+        (errBody.status && errBody.status.code === 404)
+      );
+      if (!wrongRegion) {
+        const detail = attErr.response ? `${attErr.response.status} ${JSON.stringify(attErr.response.data)}` : attErr.message;
+        throw new Error('Zoho attachment upload failed — email NOT sent: ' + detail);
+      }
+      console.log('Zoho: attachment upload hit wrong region, re-detecting…');
+      apiBase = await detectAndSaveApiBase(user, token);
+      payload.attachments = await uploadAll(apiBase);
     }
   }
   let sendUrl = `${apiBase}/accounts/${accountId}/messages`;
