@@ -3,7 +3,7 @@
    Renders a role description in the style of a corporate
    careers-site posting (modeled on Welltower's careers pages):
    big title + meta line, all-caps company banner, SUMMARY,
-   KEY RESPONSIBILITIES grouped under bold subheadings, TRAVEL,
+   KEY RESPONSIBILITIES grouped under bold subheadings,
    MINIMUM REQUIREMENTS, WHAT WE OFFER. No requisition numbers,
    no apply buttons — official and professional.
    ============================================================ */
@@ -129,11 +129,6 @@ function addCareersVariant(doc, companyName, jdLocation, variant, isFirst) {
     });
   }
 
-  if (variant.travel && String(variant.travel).trim()) {
-    addCapsHeader(doc, 'Travel');
-    addParagraphs(doc, variant.travel);
-  }
-
   if (variant.requirements && variant.requirements.length) {
     addCapsHeader(doc, 'Minimum Requirements');
     addBullets(doc, variant.requirements);
@@ -194,7 +189,7 @@ function addLegacyVariant(doc, companyName, jdLocation, variant, isFirst) {
 /**
  * Build a role-description PDF containing one or more variants.
  * Careers-post shape: { title, employmentType, workMode, companyIntro{headline,body},
- *   summary, responsibilityGroups[{heading,bullets[]}], travel, requirements[], whatWeOffer[] }
+ *   summary, responsibilityGroups[{heading,bullets[]}], requirements[], whatWeOffer[] }
  * Legacy shape (pre-redesign queued jobs): { variantLabel, title, whyForYou,
  *   responsibilities[], qualifications[], leadershipProfile, compensation, mission, team, growth }
  * Returns a Promise<Buffer>.
@@ -222,7 +217,7 @@ function buildRoleJDPdf({ companyName, candidateName, jdLocation, variants }) {
       addRule(doc);
       doc.moveDown(0.4);
       doc.fillColor(MUTED).font('Helvetica').fontSize(8.5)
-        .text(`Confidential — this role overview was prepared for ${candidateName || 'the recipient'} and is not a public posting.`, {
+        .text(`Confidential — this role overview was prepared for ${candidateName || 'the recipient'}.`, {
           width: contentWidth(doc)
         });
 
