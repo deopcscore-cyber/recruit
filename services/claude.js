@@ -656,7 +656,14 @@ JSON SAFETY (this is machine-parsed — a single violation breaks the whole resp
 
 Return ONLY the JSON object.`;
 
-  const response = await callAI(appendInstructions(prompt, instructions), 8000, pickProvider(user, instructions));
+  // 700-1200+ words of role content plus a full email, as strict escaped
+  // JSON, routinely ran past 8000 tokens and got cut off mid-response —
+  // jsonrepair can patch the truncated JSON into something parseable, but
+  // the actual content inside is incomplete, which surfaced downstream as
+  // "came back incomplete" on nearly every generation. Raised comfortably
+  // below both providers' output caps (GPT-4o-mini: 16,384) so truncation
+  // stops being the default outcome for a response this long.
+  const response = await callAI(appendInstructions(prompt, instructions), 12000, pickProvider(user, instructions));
   const raw = response.content[0].text.trim();
   const costCents = calcCostCents(response.usage, response.provider);
 
