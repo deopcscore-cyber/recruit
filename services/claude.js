@@ -21,6 +21,46 @@ const CLAUDE_OUT = 1500;  // $15.00
 const OPENAI_IN  = 15;    // $0.15
 const OPENAI_OUT = 60;    // $0.60
 
+function _isPlainObject(v) {
+  return v !== null && typeof v === 'object' && !Array.isArray(v);
+}
+
+// Parse a model response that's supposed to be JSON. Models reliably produce
+// a small number of malformed spots at this output size — an unescaped
+// double-quote inside a long generated sentence, a response cut short by the
+// token budget — and a bare JSON.parse has no recovery from either. Escalates
+// through three attempts before giving up: (1) strict parse after stripping
+// any ```json fence, (2) strict parse of just the outermost {...} block in
+// case there's leading/trailing prose around it, (3) jsonrepair on that same
+// block, which specifically fixes unescaped quotes and truncated structures.
+// Every schema we ask for is a top-level object, so any attempt whose result
+// isn't a plain object is treated as a failure too — jsonrepair will happily
+// "repair" a plain-English refusal like "Sorry, I can't help with that" into
+// a valid-but-meaningless JSON array of words, which must not be accepted as
+// a good parse. Throws (with the original text attached) if nothing works —
+// callers decide their own fallback.
+function parseAIJson(raw) {
+  const clean = (raw || '').replace(/^```json\s*/i, '').replace(/```\s*$/, '').trim();
+  const match = clean.match(/\{[\s\S]*\}/);
+  const candidate = match ? match[0] : clean;
+
+  for (const str of [clean, candidate]) {
+    try {
+      const val = JSON.parse(str);
+      if (_isPlainObject(val)) return val;
+    } catch { /* try the next tier */ }
+  }
+  try {
+    const { jsonrepair } = require('jsonrepair');
+    const val = JSON.parse(jsonrepair(candidate));
+    if (_isPlainObject(val)) return val;
+  } catch { /* fall through to the throw below */ }
+
+  const err = new Error('Could not parse model response as JSON — expected a JSON object.');
+  err.rawText = raw;
+  throw err;
+}
+
 function calcCostCents(usage, provider) {
   if (!usage) return 0;
   const inp = usage.input_tokens  || 0;
@@ -299,8 +339,7 @@ Output ONLY valid JSON. No markdown, no commentary.`;
   const raw = response.content[0].text.trim();
   const costCents = calcCostCents(response.usage, response.provider);
   try {
-    const clean = raw.replace(/^```json\s*/i, '').replace(/```\s*$/, '').trim();
-    const parsed = JSON.parse(clean);
+    const parsed = parseAIJson(raw);
     return { text: parsed.body || parsed.text || raw, subject: parsed.subject || '', costCents };
   } catch {
     return { text: raw, subject: '', costCents };
@@ -379,8 +418,7 @@ Write the email now:`;
   const raw = response.content[0].text.trim();
   const costCents = calcCostCents(response.usage, response.provider);
   try {
-    const clean = raw.replace(/^```json\s*/i, '').replace(/```\s*$/, '').trim();
-    const parsed = JSON.parse(clean);
+    const parsed = parseAIJson(raw);
     return { text: parsed.body || parsed.text || raw, subject: parsed.subject || '', costCents };
   } catch {
     // Fallback: treat whole response as body text
@@ -602,6 +640,12 @@ ${company.salaryRange ? `Company's general salary range for context (use as a lo
 ═══════════════════════════════════════════
 OUTPUT FORMAT — valid JSON only, no markdown fences, no commentary:
 ═══════════════════════════════════════════
+JSON SAFETY (this is machine-parsed — a single violation breaks the whole response):
+- Every double-quote character (") inside any text value MUST be escaped as \\". Simpler: avoid literal " inside text entirely — use single quotes ' instead if you want to quote something.
+- Never use smart/curly quotes ("  "  '  ') anywhere — straight quotes only, and only where JSON syntax requires them.
+- Paragraph breaks inside a string are the two-character escape sequence \\n\\n, never a literal newline.
+- No trailing commas after the last item in an array or object.
+
 {
   "emailSubject": "a short, specific, non-generic subject line",
   "emailBody": "the full email body as described in PART 1",
@@ -618,12 +662,10 @@ Return ONLY the JSON object.`;
 
   let parsed;
   try {
-    const clean = raw.replace(/^```json\s*/i, '').replace(/```\s*$/, '').trim();
-    parsed = JSON.parse(clean);
+    parsed = parseAIJson(raw);
   } catch (err) {
-    const match = raw.match(/\{[\s\S]*\}/);
-    if (match) parsed = JSON.parse(match[0]);
-    else throw new Error('Could not parse role JD response as JSON');
+    console.error('Role JD JSON parse failed after all repair attempts. Raw response (first 2000 chars):', raw.slice(0, 2000));
+    throw new Error('Could not parse role JD response as JSON — please try regenerating.');
   }
 
   return {
@@ -717,11 +759,8 @@ Return ONLY the JSON object, no markdown, no extra text.`;
   const text = response.content[0].text.trim();
   const costCents = calcCostCents(response.usage, response.provider);
   try {
-    const clean = text.replace(/^```json\s*/i, '').replace(/```\s*$/, '').trim();
-    return { ...JSON.parse(clean), costCents };
-  } catch (err) {
-    const match = text.match(/\{[\s\S]*\}/);
-    if (match) return { ...JSON.parse(match[0]), costCents };
+    return { ...parseAIJson(text), costCents };
+  } catch {
     return { gaps: text, email: '', costCents };
   }
 }
@@ -1033,11 +1072,8 @@ Return ONLY the JSON. No markdown, no extra text.`;
   const text = response.content[0].text.trim();
   const costCents = calcCostCents(response.usage, response.provider);
   try {
-    const clean = text.replace(/^```json\s*/i, '').replace(/```\s*$/, '').trim();
-    return { ...JSON.parse(clean), costCents };
+    return { ...parseAIJson(text), costCents };
   } catch {
-    const match = text.match(/\{[\s\S]*\}/);
-    if (match) return { ...JSON.parse(match[0]), costCents };
     return { gaps: '', email: text, costCents };
   }
 }
@@ -1395,12 +1431,9 @@ Return ONLY the JSON.`;
 
   const text = response.content[0].text.trim();
   const costCents = calcCostCents(response.usage, response.provider);
-  const clean = text.replace(/^```json\s*/i, '').replace(/```\s*$/, '').trim();
   try {
-    return { ...JSON.parse(clean), costCents };
+    return { ...parseAIJson(text), costCents };
   } catch {
-    const match = text.match(/\{[\s\S]*\}/);
-    if (match) return { ...JSON.parse(match[0]), costCents };
     throw new Error('Could not parse score response');
   }
 }
@@ -1429,8 +1462,7 @@ Return ONLY valid JSON: {"label":"<one of the four>","reason":"<5-10 word justif
   const costCents = calcCostCents(response.usage, response.provider);
   const VALID = ['interested', 'question', 'not_now', 'not_interested'];
   try {
-    const clean = text.replace(/^```json\s*/i, '').replace(/```\s*$/, '').trim();
-    const parsed = JSON.parse(clean.match(/\{[\s\S]*\}/)[0]);
+    const parsed = parseAIJson(text);
     if (!VALID.includes(parsed.label)) parsed.label = 'question';
     return { ...parsed, costCents };
   } catch {
@@ -1469,8 +1501,7 @@ Return ONLY valid JSON:
   const text = response.content[0].text.trim();
   const costCents = calcCostCents(response.usage, response.provider);
   try {
-    const clean = text.replace(/^```json\s*/i, '').replace(/```\s*$/, '').trim();
-    const parsed = JSON.parse(clean.match(/\{[\s\S]*\}/)[0]);
+    const parsed = parseAIJson(text);
     return { original, rewritten: parsed.rewritten || '', summary: parsed.summary || '', costCents };
   } catch {
     // If JSON parsing fails, treat the whole response as the rewrite
