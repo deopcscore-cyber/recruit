@@ -511,45 +511,72 @@ async function loadTodayPage() {
     unknownLeads = (c && c.leads) ? c.leads : [];
   } catch {}
 
-  const row = (c, meta) => `
-    <div class="today-row" data-id="${c.id}" style="display:flex;align-items:center;gap:12px;padding:11px 14px;border:1px solid var(--border);border-radius:9px;background:var(--bg-card);cursor:pointer;transition:border-color .12s">
+  // One consistent row style, tagged with WHY it needs attention — replaces
+  // four separately-headed lists (Replies / Drafts / Interested / Follow-ups)
+  // with a single scannable list, in priority order.
+  const TYPE_META = {
+    reply:      { label: 'Reply',      color: '#7c3aed', icon: '💬' },
+    draft:      { label: 'Draft',      color: '#0891b2', icon: '✍️' },
+    interested: { label: 'Interested', color: '#ef4444', icon: '🔥' },
+    followup:   { label: 'Follow-up',  color: '#d97706', icon: '⏰' }
+  };
+
+  const row = (c, type, meta) => {
+    const tm = TYPE_META[type];
+    return `
+    <div class="today-row" data-id="${c.id}" style="display:flex;align-items:center;gap:12px;padding:11px 14px;border:1px solid var(--border);border-left:3px solid ${tm.color};border-radius:9px;background:var(--bg-card);cursor:pointer;transition:border-color .12s">
       <div style="flex:1;min-width:0">
         <div style="font-weight:600;color:var(--text);font-size:0.9rem">${escapeHtml(c.name || 'Unknown')}</div>
         <div style="font-size:0.78rem;color:var(--text-muted);margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(c.title || '')}${c.company ? ' · ' + escapeHtml(c.company) : ''}</div>
       </div>
-      <div style="font-size:0.76rem;color:var(--text-faint);flex-shrink:0;text-align:right">${meta || ''}</div>
+      <div style="flex-shrink:0;text-align:right">
+        <div style="font-size:0.72rem;font-weight:700;color:${tm.color}">${tm.icon} ${tm.label}</div>
+        <div style="font-size:0.74rem;color:var(--text-faint);margin-top:2px">${meta || ''}</div>
+      </div>
     </div>`;
-
-  const section = (icon, title, items, color, renderMeta, emptyHint) => {
-    if (items.length === 0) return '';
-    return `
-      <div style="margin-bottom:22px">
-        <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
-          <span style="font-size:1.1rem">${icon}</span>
-          <h3 style="margin:0;font-size:0.95rem;color:var(--text)">${title}</h3>
-          <span style="background:${color}1f;color:${color};font-size:0.74rem;font-weight:700;border-radius:10px;padding:1px 9px">${items.length}</span>
-        </div>
-        <div style="display:flex;flex-direction:column;gap:8px">
-          ${items.slice(0, 8).map(c => row(c, renderMeta ? renderMeta(c) : '')).join('')}
-          ${items.length > 8 ? `<div style="font-size:0.78rem;color:var(--text-muted);padding:4px 2px">+ ${items.length - 8} more</div>` : ''}
-        </div>
-      </div>`;
   };
 
-  const allClear = replies.length + followUpDrafts.length + interested.length + followups.length === 0 && unknownLeads.length === 0;
+  // Priority order: replies > drafts > interested > follow-ups (each candidate
+  // appears once, under the highest-priority reason — same dedupe as before).
+  const needsAttention = [
+    ...replies.map(c => {
+      const last = [...(c.thread || [])].reverse().find(m => m.direction === 'inbound');
+      return { c, type: 'reply', meta: last ? formatRelativeHL(last.timestamp) : 'New' };
+    }),
+    ...followUpDrafts.map(c => ({ c, type: 'draft', meta: 'Ready to review' })),
+    ...interested.map(c => ({ c, type: 'interested', meta: 'Reply back' })),
+    ...followups.map(c => ({ c, type: 'followup', meta: c.followUpDate ? formatRelativeHL(c.followUpDate) : 'No reply yet' }))
+  ];
 
-  // Autopilot strip
+  const allClear = needsAttention.length === 0 && unknownLeads.length === 0;
+
+  const SHOW_MAX = 10;
+  let attentionHtml = '';
+  if (needsAttention.length) {
+    attentionHtml = `
+      <div style="margin-bottom:24px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+          <h3 style="margin:0;font-size:0.95rem;color:var(--text)">Needs your attention</h3>
+          <span style="background:var(--border);color:var(--text-muted);font-size:0.74rem;font-weight:700;border-radius:10px;padding:1px 9px">${needsAttention.length}</span>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:8px">
+          ${needsAttention.slice(0, SHOW_MAX).map(x => row(x.c, x.type, x.meta)).join('')}
+          ${needsAttention.length > SHOW_MAX ? `<div style="font-size:0.78rem;color:var(--text-muted);padding:4px 2px">+ ${needsAttention.length - SHOW_MAX} more</div>` : ''}
+        </div>
+      </div>`;
+  }
+
+  // Status strip — compact, single line each, informational not actionable
+  // (except the deliverability warning, which stays dismissible).
   let apHtml = '';
   if (ap && ap.enabled) {
     const next = ap.nextAt ? new Date(ap.nextAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—';
-    apHtml = `<div style="display:flex;align-items:center;gap:10px;padding:11px 14px;background:#eef2ff;border:1px solid #c7d2fe;border-radius:9px;font-size:0.82rem;color:#3730a3;margin-bottom:22px">
-      <span style="font-size:1rem">🚀</span>
-      <span><strong>Autopilot</strong> · sent ${ap.sentToday} today · ${ap.pendingToday} queued · next ${next} · ${ap.eligibleRemaining} left in pipeline</span>
+    apHtml = `<div style="display:flex;align-items:center;gap:8px;padding:7px 12px;font-size:0.78rem;color:var(--text-muted)">
+      <span>🚀</span>
+      <span>Autopilot: sent ${ap.sentToday} today · ${ap.pendingToday} queued · next ${next} · ${ap.eligibleRemaining} left</span>
     </div>`;
   }
 
-  // Deliverability warning — dismissible for 24h so it doesn't nag every load,
-  // but comes back if the problem is still there the next day.
   let dwHtml = '';
   const dw = analytics && analytics.deliverabilityWarning;
   if (dw) {
@@ -558,52 +585,33 @@ async function loadTodayPage() {
     const stillDismissed = Date.now() - dismissedAt < 24 * 60 * 60 * 1000;
     if (!stillDismissed) {
       const icon = dw.type === 'open_rate' ? '📪' : '📝';
-      dwHtml = `<div id="dw-banner" style="display:flex;align-items:flex-start;gap:10px;padding:11px 14px;background:#fef3c7;border:1px solid #fde68a;border-radius:9px;font-size:0.82rem;color:#92400e;margin-bottom:22px">
+      dwHtml = `<div id="dw-banner" style="display:flex;align-items:flex-start;gap:10px;padding:10px 12px;background:#fef3c7;border:1px solid #fde68a;border-radius:9px;font-size:0.8rem;color:#92400e">
         <span style="font-size:1rem">${icon}</span>
         <span style="flex:1">${escapeHtml(dw.message)}</span>
         <button id="dw-dismiss-btn" data-key="${dismissKey}" style="background:none;border:none;color:#92400e;cursor:pointer;font-size:0.95rem;line-height:1;padding:0 2px;flex-shrink:0" title="Dismiss for 24h">×</button>
       </div>`;
     }
   }
+  const statusStripHtml = (apHtml || dwHtml)
+    ? `<div style="display:flex;flex-direction:column;gap:6px;margin-bottom:22px;padding-bottom:14px;border-bottom:1px solid var(--border)">${dwHtml}${apHtml}</div>`
+    : '';
 
-  // Week stats strip
-  let statsHtml = '';
-  if (analytics) {
-    const stat = (label, val, color) => `<div style="flex:1;text-align:center;padding:12px 8px"><div style="font-size:1.4rem;font-weight:700;color:${color||'var(--text)'}">${val}</div><div style="font-size:0.72rem;color:var(--text-muted);margin-top:2px">${label}</div></div>`;
-    statsHtml = `
-      <div style="margin-top:10px">
-        <h3 style="font-size:0.95rem;color:var(--text);margin:0 0 10px">📊 Your pipeline</h3>
-        <div style="display:flex;border:1px solid var(--border);border-radius:10px;background:var(--bg-card);divide-x">
-          ${stat('Total', analytics.total, '#6366f1')}
-          ${stat('Contacted', analytics.contacted, '#2563eb')}
-          ${stat('Open rate', analytics.openRate + '%', '#0891b2')}
-          ${stat('Reply rate', analytics.responseRate + '%', '#16a34a')}
-        </div>
-      </div>`;
+  // Secondary, lower-priority items — worth knowing, not urgent
+  let secondaryHtml = '';
+  const secondaryParts = [];
+  if (hotOpened.length) {
+    secondaryParts.push(`<a id="today-hotleads-link" style="font-size:0.84rem;color:var(--blue);cursor:pointer">⚡ ${hotOpened.length} opened your email but haven't replied →</a>`);
+  }
+  if (secondaryParts.length) {
+    secondaryHtml = `<div style="margin-bottom:22px;display:flex;flex-direction:column;gap:8px">${secondaryParts.join('')}</div>`;
   }
 
-  el.innerHTML = `
-    ${dwHtml}
-    ${apHtml}
-    ${allClear ? `
-      <div style="text-align:center;padding:40px 20px;border:1px dashed var(--border);border-radius:12px;margin-bottom:22px">
-        <div style="font-size:2.2rem;margin-bottom:8px">✅</div>
-        <h3 style="color:var(--text);margin:0 0 4px">You're all caught up</h3>
-        <p style="color:var(--text-muted);font-size:0.88rem;margin:0">No replies, hot leads, or follow-ups need you right now. Nice.</p>
-      </div>` : ''}
-    ${section('💬', 'Replies need you', replies, '#7c3aed', c => {
-      const last = [...(c.thread || [])].reverse().find(m => m.direction === 'inbound');
-      return last ? formatRelativeHL(last.timestamp) : 'New';
-    })}
-    ${section('✍️', 'Follow-up drafts ready to review', followUpDrafts, '#0891b2', c => 'Draft ready')}
-    ${section('🔥', 'Interested — move these forward', interested, '#ef4444', c => 'Interested')}
-    ${section('⏰', 'Follow-ups due', followups, '#d97706', c => c.followUpDate ? formatRelativeHL(c.followUpDate) : 'No reply yet')}
-    ${hotOpened.length ? `<div style="margin-bottom:22px"><a id="today-hotleads-link" style="font-size:0.84rem;color:var(--blue);cursor:pointer">⚡ ${hotOpened.length} opened your email but haven't replied →</a></div>` : ''}
-    ${unknownLeads.length ? `
-      <div style="margin-bottom:22px">
+  let unknownLeadsHtml = '';
+  if (unknownLeads.length) {
+    unknownLeadsHtml = `
+      <div style="margin-bottom:24px">
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
-          <span style="font-size:1.1rem">📬</span>
-          <h3 style="margin:0;font-size:0.95rem;color:var(--text)">New leads from inbox</h3>
+          <h3 style="margin:0;font-size:0.95rem;color:var(--text)">📬 New leads from inbox</h3>
           <span style="background:#0891b21f;color:#0891b2;font-size:0.74rem;font-weight:700;border-radius:10px;padding:1px 9px">${unknownLeads.length}</span>
         </div>
         <div style="display:flex;flex-direction:column;gap:8px">
@@ -623,7 +631,36 @@ async function loadTodayPage() {
             </div>`).join('')}
           ${unknownLeads.length > 8 ? `<div style="font-size:0.78rem;color:var(--text-muted);padding:4px 2px">+ ${unknownLeads.length - 8} more</div>` : ''}
         </div>
+      </div>`;
+  }
+
+  // Week stats strip
+  let statsHtml = '';
+  if (analytics) {
+    const stat = (label, val, color) => `<div style="flex:1;text-align:center;padding:12px 8px"><div style="font-size:1.4rem;font-weight:700;color:${color||'var(--text)'}">${val}</div><div style="font-size:0.72rem;color:var(--text-muted);margin-top:2px">${label}</div></div>`;
+    statsHtml = `
+      <div style="margin-top:10px;padding-top:14px;border-top:1px solid var(--border)">
+        <h3 style="font-size:0.95rem;color:var(--text);margin:0 0 10px">📊 Your pipeline</h3>
+        <div style="display:flex;border:1px solid var(--border);border-radius:10px;background:var(--bg-card);divide-x">
+          ${stat('Total', analytics.total, '#6366f1')}
+          ${stat('Contacted', analytics.contacted, '#2563eb')}
+          ${stat('Open rate', analytics.openRate + '%', '#0891b2')}
+          ${stat('Reply rate', analytics.responseRate + '%', '#16a34a')}
+        </div>
+      </div>`;
+  }
+
+  el.innerHTML = `
+    ${statusStripHtml}
+    ${allClear ? `
+      <div style="text-align:center;padding:40px 20px;border:1px dashed var(--border);border-radius:12px;margin-bottom:22px">
+        <div style="font-size:2.2rem;margin-bottom:8px">✅</div>
+        <h3 style="color:var(--text);margin:0 0 4px">You're all caught up</h3>
+        <p style="color:var(--text-muted);font-size:0.88rem;margin:0">Nothing needs you right now. Nice.</p>
       </div>` : ''}
+    ${attentionHtml}
+    ${secondaryHtml}
+    ${unknownLeadsHtml}
     ${statsHtml}
   `;
 
