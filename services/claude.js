@@ -668,10 +668,30 @@ Return ONLY the JSON object.`;
     throw new Error('Could not parse role JD response as JSON — please try regenerating.');
   }
 
+  // The prompt always asks for exactly one variant. When the raw JSON was
+  // corrupted deep inside the variant's own content (a broken string a few
+  // fields into "Your Next Step"), jsonrepair can recover a structurally
+  // valid array that's semantically wrong — the one real variant plus
+  // several near-empty stub objects where it guessed a boundary. A variant
+  // with no title and no actual role content isn't a second option, it's
+  // repair debris, so filter those out rather than attaching blank pages —
+  // and only fail the generation if nothing substantive survives.
+  const rawVariants = Array.isArray(parsed.variants) ? parsed.variants : [];
+  const variants = rawVariants
+    .filter(v => v && typeof v.title === 'string' && v.title.trim() && (
+      (Array.isArray(v.responsibilityGroups) && v.responsibilityGroups.some(g => g && Array.isArray(g.bullets) && g.bullets.length)) ||
+      (Array.isArray(v.responsibilities) && v.responsibilities.length) // legacy shape
+    ))
+    .slice(0, 1);
+  if (!variants.length) {
+    console.error('Role JD parsed but no substantive variant survived validation. Raw (first 2000 chars):', raw.slice(0, 2000));
+    throw new Error('The AI response came back incomplete — please try regenerating.');
+  }
+
   return {
     subject: parsed.emailSubject || '',
     text: parsed.emailBody || '',
-    variants: Array.isArray(parsed.variants) ? parsed.variants : [],
+    variants,
     jdLocation,
     costCents
   };
