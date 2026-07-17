@@ -480,22 +480,23 @@ async function loadTodayPage() {
   const greet = document.getElementById('today-greeting');
   if (greet) greet.innerHTML = `${part}${first ? ', ' + escapeHtml(first) : ''} <span style="font-size:0.8rem;font-weight:400;color:var(--text-muted);margin-left:8px">${dateStr}</span>`;
 
-  // Buckets from the already-loaded candidate list
+  // Today only shows things that need a decision right now — not status info
+  // (Interested / stage reminders live on the Pipeline board instead, since
+  // that's redundant now that follow-ups auto-schedule per stage).
   const active = c => !['Closed'].includes(c.stage || '');
-  const replies  = allCandidates.filter(c => c.unread);
+  const replies = allCandidates.filter(c => c.unread);
   const followUpDrafts = allCandidates.filter(c => c.pendingFollowUpDraft && active(c) && !c.unread);
-  const interested = allCandidates.filter(c => c.replySentiment === 'interested' && active(c) && !c.unread && !c.pendingFollowUpDraft);
+  // Narrow catch for the one gap automation doesn't cover: they replied, the
+  // recruiter saw it (unread cleared), but nothing was ever sent back — no
+  // step was completed, so no follow-up sequence ever started. 3-day grace
+  // period before flagging so it doesn't nag same-day.
   const now = new Date();
-  const ACT = ['Outreach Sent', 'Replied', 'Resume Requested', 'Resume Received', 'Interviewing'];
-  // Dedupe by priority: a candidate shows under replies > drafts > interested > follow-ups, once
-  const claimed = new Set([...replies, ...followUpDrafts, ...interested].map(c => c.id));
-  const followups = allCandidates.filter(c => {
-    if (claimed.has(c.id)) return false;
-    const stage = c.stage || 'Imported';
-    if (stage === 'Closed' || stage === 'Imported') return false;
-    if (c.followUpDate && new Date(c.followUpDate) <= now) return true;
-    if (ACT.includes(stage) && !c.followUpDate) return true;
-    return false;
+  const stalled = allCandidates.filter(c => {
+    if (!active(c) || c.unread || c.pendingFollowUpDraft) return false;
+    const thread = c.thread || [];
+    const last = thread[thread.length - 1];
+    if (!last || last.direction !== 'inbound') return false;
+    return (now - new Date(last.timestamp)) / 86400000 >= 3;
   });
   const hotOpened = allCandidates.filter(c => c.opened && !(c.thread || []).some(m => m.direction === 'inbound'));
 
@@ -515,15 +516,12 @@ async function loadTodayPage() {
   // four separately-headed lists (Replies / Drafts / Interested / Follow-ups)
   // with a single scannable list, in priority order.
   const TYPE_META = {
-    reply:      { label: 'Reply',      color: '#7c3aed', icon: '💬' },
-    draft:      { label: 'Draft',      color: '#0891b2', icon: '✍️' },
-    interested: { label: 'Interested', color: '#ef4444', icon: '🔥' },
-    followup:   { label: 'Follow-up',  color: '#d97706', icon: '⏰' }
+    reply:   { label: 'Reply',      color: '#7c3aed', icon: '💬' },
+    draft:   { label: 'Draft',      color: '#0891b2', icon: '✍️' },
+    stalled: { label: 'No reply sent', color: '#d97706', icon: '📭' }
   };
 
-  // subtext explains WHY a row is here (e.g. the AI's reason for tagging a
-  // reply "interested") — without it, a whole list of "🔥 Interested" tags
-  // with no context is just unexplained noise.
+  // subtext optionally explains more about why a row is here
   const row = (c, type, meta, subtext) => {
     const tm = TYPE_META[type];
     return `
@@ -540,20 +538,17 @@ async function loadTodayPage() {
     </div>`;
   };
 
-  // Priority order: replies > drafts > interested > follow-ups (each candidate
-  // appears once, under the highest-priority reason — same dedupe as before).
+  // Priority order: replies > drafts > stalled (each candidate appears once).
   const needsAttention = [
     ...replies.map(c => {
       const last = [...(c.thread || [])].reverse().find(m => m.direction === 'inbound');
       return { c, type: 'reply', meta: last ? formatRelativeHL(last.timestamp) : 'New' };
     }),
     ...followUpDrafts.map(c => ({ c, type: 'draft', meta: 'Ready to review' })),
-    ...interested.map(c => ({
-      c, type: 'interested',
-      meta: c.replySentimentAt ? formatRelativeHL(c.replySentimentAt) : 'Reply back',
-      subtext: c.replySentimentReason ? `"${c.replySentimentReason}"` : ''
-    })),
-    ...followups.map(c => ({ c, type: 'followup', meta: c.followUpDate ? formatRelativeHL(c.followUpDate) : 'No reply yet' }))
+    ...stalled.map(c => {
+      const last = c.thread[c.thread.length - 1];
+      return { c, type: 'stalled', meta: formatRelativeHL(last.timestamp) };
+    })
   ];
 
   const allClear = needsAttention.length === 0 && unknownLeads.length === 0;
