@@ -492,6 +492,7 @@ router.post('/fetch', requireAuth, async (req, res) => {
         const sent = await claude.classifyReply(candidate, reply.body, user);
         if (sent && sent.label) {
           candidate.replySentiment = sent.label;
+          candidate.replySentimentReason = sent.reason || '';
           candidate.replySentimentAt = new Date().toISOString();
           if (sent.costCents) {
             user.credits    = Math.max(0, (user.credits    || 0) - sent.costCents);

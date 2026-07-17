@@ -521,13 +521,17 @@ async function loadTodayPage() {
     followup:   { label: 'Follow-up',  color: '#d97706', icon: '⏰' }
   };
 
-  const row = (c, type, meta) => {
+  // subtext explains WHY a row is here (e.g. the AI's reason for tagging a
+  // reply "interested") — without it, a whole list of "🔥 Interested" tags
+  // with no context is just unexplained noise.
+  const row = (c, type, meta, subtext) => {
     const tm = TYPE_META[type];
     return `
     <div class="today-row" data-id="${c.id}" style="display:flex;align-items:center;gap:12px;padding:11px 14px;border:1px solid var(--border);border-left:3px solid ${tm.color};border-radius:9px;background:var(--bg-card);cursor:pointer;transition:border-color .12s">
       <div style="flex:1;min-width:0">
         <div style="font-weight:600;color:var(--text);font-size:0.9rem">${escapeHtml(c.name || 'Unknown')}</div>
         <div style="font-size:0.78rem;color:var(--text-muted);margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(c.title || '')}${c.company ? ' · ' + escapeHtml(c.company) : ''}</div>
+        ${subtext ? `<div style="font-size:0.76rem;color:var(--text-faint);margin-top:3px;font-style:italic;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(subtext)}</div>` : ''}
       </div>
       <div style="flex-shrink:0;text-align:right">
         <div style="font-size:0.72rem;font-weight:700;color:${tm.color}">${tm.icon} ${tm.label}</div>
@@ -544,7 +548,11 @@ async function loadTodayPage() {
       return { c, type: 'reply', meta: last ? formatRelativeHL(last.timestamp) : 'New' };
     }),
     ...followUpDrafts.map(c => ({ c, type: 'draft', meta: 'Ready to review' })),
-    ...interested.map(c => ({ c, type: 'interested', meta: 'Reply back' })),
+    ...interested.map(c => ({
+      c, type: 'interested',
+      meta: c.replySentimentAt ? formatRelativeHL(c.replySentimentAt) : 'Reply back',
+      subtext: c.replySentimentReason ? `"${c.replySentimentReason}"` : ''
+    })),
     ...followups.map(c => ({ c, type: 'followup', meta: c.followUpDate ? formatRelativeHL(c.followUpDate) : 'No reply yet' }))
   ];
 
@@ -560,7 +568,7 @@ async function loadTodayPage() {
           <span style="background:var(--border);color:var(--text-muted);font-size:0.74rem;font-weight:700;border-radius:10px;padding:1px 9px">${needsAttention.length}</span>
         </div>
         <div style="display:flex;flex-direction:column;gap:8px">
-          ${needsAttention.slice(0, SHOW_MAX).map(x => row(x.c, x.type, x.meta)).join('')}
+          ${needsAttention.slice(0, SHOW_MAX).map(x => row(x.c, x.type, x.meta, x.subtext)).join('')}
           ${needsAttention.length > SHOW_MAX ? `<div style="font-size:0.78rem;color:var(--text-muted);padding:4px 2px">+ ${needsAttention.length - SHOW_MAX} more</div>` : ''}
         </div>
       </div>`;
