@@ -73,13 +73,13 @@ const API = {
     send(data) { return API.post('/api/email/send', data); },
     scheduled(candidateId) { return API.get(`/api/email/scheduled/${candidateId}`); },
     cancelScheduled(jobId) { return API.delete(`/api/email/scheduled/${jobId}`); },
-    // Returns a Blob (PDF bytes), not JSON — bypasses API.request's res.json() parsing.
-    async previewRoleJDPdf(candidateId, roleJDVariants, jdLocation) {
-      const res = await fetch('/api/email/role-jd-preview', {
+    // Returns a Blob (DOCX bytes), not JSON — bypasses API.request's res.json() parsing.
+    async downloadRoleJDDocx(candidateId, { roleJDVariants, jdLocation, customAttachmentId, customAttachmentFilename } = {}) {
+      const res = await fetch('/api/email/role-jd-download', {
         method: 'POST',
         credentials: 'same-origin',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ candidateId, roleJDVariants, jdLocation })
+        body: JSON.stringify({ candidateId, roleJDVariants, jdLocation, customAttachmentId, customAttachmentFilename })
       });
       if (res.status === 401) { window.location.href = '/login'; return null; }
       if (!res.ok) {
@@ -87,6 +87,13 @@ const API = {
         throw new Error(data.error || `Request failed (${res.status})`);
       }
       return res.blob();
+    },
+    // Recruiter's edited role-JD file — multipart upload.
+    uploadRoleJDAttachment(candidateId, file) {
+      const formData = new FormData();
+      formData.append('candidateId', candidateId);
+      formData.append('file', file);
+      return API.postForm('/api/email/role-jd-attachment-upload', formData);
     },
     fetch() { return API.post('/api/email/fetch'); },
     test() { return API.post('/api/email/test'); },

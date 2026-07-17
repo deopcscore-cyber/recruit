@@ -5,12 +5,54 @@
    follow-up behaviour stay identical on both paths.
    ============================================================ */
 
+const fs   = require('fs');
+const path = require('path');
 const { v4: uuidv4 } = require('uuid');
 const storage        = require('./storage');
 const gmailService   = require('./gmail');
 const zohoService    = require('./zoho');
 const outlookService = require('./outlook');
 const smtpService    = require('./smtp');
+const { DATA_DIR }   = require('../config');
+
+const JD_ATTACHMENTS_DIR = path.join(DATA_DIR, 'jd-attachments');
+function ensureJdAttachmentsDir() {
+  if (!fs.existsSync(JD_ATTACHMENTS_DIR)) fs.mkdirSync(JD_ATTACHMENTS_DIR, { recursive: true });
+}
+function jdAttachmentPath(id) {
+  // id is always a freshly generated uuidv4 (from the upload route) — never
+  // user-supplied text — so this can't be used for path traversal.
+  return path.join(JD_ATTACHMENTS_DIR, `${id}.docx`);
+}
+
+// Persist an uploaded "recruiter's edited version" DOCX to disk, keyed by a
+// fresh id. Scheduled sends can be up to 30 days out, so this can't live
+// only in request/response memory — it has to survive until send time.
+function saveCustomAttachment(buffer) {
+  ensureJdAttachmentsDir();
+  const id = uuidv4();
+  fs.writeFileSync(jdAttachmentPath(id), buffer);
+  return id;
+}
+
+function deleteCustomAttachment(id) {
+  if (!id) return;
+  try { fs.unlinkSync(jdAttachmentPath(id)); } catch { /* already gone — fine */ }
+}
+
+// Periodic safety-net sweep for attachments uploaded but never sent (e.g. the
+// recruiter closed the tab). Scheduled sends cap at 30 days out, so anything
+// older than that is definitely orphaned.
+function pruneOldCustomAttachments(maxAgeMs = 32 * 24 * 60 * 60 * 1000) {
+  ensureJdAttachmentsDir();
+  const cutoff = Date.now() - maxAgeMs;
+  for (const f of fs.readdirSync(JD_ATTACHMENTS_DIR)) {
+    const full = path.join(JD_ATTACHMENTS_DIR, f);
+    try {
+      if (fs.statSync(full).mtimeMs < cutoff) fs.unlinkSync(full);
+    } catch { /* race with another delete — fine */ }
+  }
+}
 
 function isZohoOAuthReady(user) {
   return !!(user.zoho?.connected && user.zoho.accessToken);
@@ -205,27 +247,51 @@ async function sendComposed(user, candidate, { subject, body, isReply = false, c
   return { gmailMessageId, gmailThreadId, candidate };
 }
 
-// Build the role-JD PDF attachment from structured variant data. Used by both
-// the immediate-send route and the scheduled-send queue job (variants are
-// stored as plain JSON on the job, and the PDF is rebuilt fresh at whichever
-// point the send actually happens — a Buffer can't be persisted in the
-// queue's JSON file).
+const DOCX_MIME = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+
+// Build the role-JD DOCX attachment from structured variant data. Used by
+// both the immediate-send route and the scheduled-send queue job (variants
+// are stored as plain JSON on the job, and the document is rebuilt fresh at
+// whichever point the send actually happens — a Buffer can't be persisted in
+// the queue's JSON file). DOCX rather than PDF so a recruiter can open and
+// edit the wording before it's attached to an outbound email.
 async function buildRoleJDAttachment(candidate, user, roleJDVariants, jdLocation) {
   if (!roleJDVariants || !roleJDVariants.length) return null;
-  const pdfSvc = require('./pdf');
+  const docxSvc = require('./docx');
   const company = (user.companyName || '').trim() || 'Confidential Role Overview';
-  const buffer = await pdfSvc.buildRoleJDPdf({
+  const buffer = await docxSvc.buildRoleJDDocx({
     companyName: company,
     candidateName: candidate.name || '',
     jdLocation: jdLocation || '',
     variants: roleJDVariants
   });
   const safeName = (candidate.name || 'Candidate').replace(/[^a-zA-Z0-9 _-]/g, '').trim() || 'Candidate';
-  return { filename: `Role Description - ${safeName}.pdf`, content: buffer, contentType: 'application/pdf' };
+  return { filename: `Role Description - ${safeName}.docx`, content: buffer, contentType: DOCX_MIME };
+}
+
+// Single point of truth for "what attachment does this send carry", used by
+// both the immediate /send route and the scheduled-send queue job so they
+// can never drift: a recruiter's uploaded edit always wins over the
+// AI-generated variants, whether the send happens now or days from now.
+async function resolveRoleJDAttachment(candidate, user, { roleJDVariants, jdLocation, customAttachmentId, customAttachmentFilename } = {}) {
+  if (customAttachmentId) {
+    const filePath = jdAttachmentPath(customAttachmentId);
+    if (!fs.existsSync(filePath)) {
+      throw new Error('Your edited file could not be found — it may have expired. Please re-attach it.');
+    }
+    const content = fs.readFileSync(filePath);
+    const safeName = (customAttachmentFilename || 'Role Description.docx').replace(/[\\/]/g, '_');
+    return { filename: safeName, content, contentType: DOCX_MIME };
+  }
+  if (roleJDVariants && roleJDVariants.length) {
+    return buildRoleJDAttachment(candidate, user, roleJDVariants, jdLocation);
+  }
+  return null;
 }
 
 module.exports = {
   sendComposed, getEmailService, isEmailConnected,
   isZohoOAuthReady, isOutlookReady, isSmtpReady,
-  buildRoleJDAttachment
+  buildRoleJDAttachment, resolveRoleJDAttachment, DOCX_MIME,
+  saveCustomAttachment, deleteCustomAttachment, pruneOldCustomAttachments
 };

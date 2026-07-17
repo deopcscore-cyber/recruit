@@ -970,14 +970,17 @@ function renderRoleJDTab(body) {
   const done = (c.stepsCompleted||{}).roleJD;
   let jdVariants = null;
   let jdLocationVal = '';
+  // Set once the recruiter uploads their own edited version — when present,
+  // this is what actually gets attached on send, not the AI variants.
+  let customAttachment = null;
 
   body.innerHTML = `
     <div class="tab-scroll">
       ${done ? `<div class="step-done-banner">✓ Role JD has been sent</div>` : ''}
       <div class="tab-section">
         <h4>Tailored Leadership Role — The Step Up</h4>
-        <p class="tab-desc">AI writes a short personal email for <strong>${escapeHtml(c.name||'this candidate')}</strong> that responds to their last message, plus one step-up role description attached as a formatted PDF. The email invites them to say so if they're not ready for this kind of step — you may have something else for them.</p>
-        <button class="btn btn-secondary btn-sm" id="gen-jd-btn">✦ ${done?'Regenerate':'Generate Email + Role PDF'}</button>
+        <p class="tab-desc">AI writes a short personal email for <strong>${escapeHtml(c.name||'this candidate')}</strong> that responds to their last message, plus one step-up role description attached as an editable Word document. You can download it, edit the wording yourself, and attach your version instead. The email invites the candidate to say so if they're not ready for this kind of step — you may have something else for them.</p>
+        <button class="btn btn-secondary btn-sm" id="gen-jd-btn">✦ ${done?'Regenerate':'Generate Email + Role Doc'}</button>
         <div style="margin-top:8px">
           <button type="button" onclick="(function(){var w=document.getElementById('jd-instructions-wrap');w.style.display=w.style.display==='none'?'':'none'})()" class="btn btn-ghost btn-sm" style="font-size:0.75rem;padding:2px 8px;color:var(--text-muted)">✎ Add instructions</button>
           <div id="jd-instructions-wrap" style="display:none;margin-top:6px">
@@ -999,9 +1002,12 @@ function renderRoleJDTab(body) {
             <textarea id="jd-body" class="draft-textarea" style="min-height:260px;font-size:13.5px"></textarea>
           </div>
           <div id="jd-variants-preview" style="margin:10px 0"></div>
+          <div id="jd-attachment-actions" style="display:none;margin:10px 0"></div>
+          <input type="file" id="jd-attachment-file-input" accept=".docx" style="display:none" />
           <div class="draft-actions">
             <button class="btn btn-ghost btn-sm" id="jd-regen">↺ Regenerate</button>
-            <button class="btn btn-secondary btn-sm" id="jd-preview-pdf" style="display:none">👁 Preview PDF</button>
+            <button class="btn btn-secondary btn-sm" id="jd-download-docx" style="display:none">⬇ Download DOCX</button>
+            <button class="btn btn-secondary btn-sm" id="jd-attach-edited" style="display:none">📎 Attach Edited Version</button>
             <button class="btn btn-primary" id="jd-send">Approve & Send</button>
           </div>
         </div>
@@ -1011,19 +1017,43 @@ function renderRoleJDTab(body) {
 
   function renderVariantsPreview() {
     const el = body.querySelector('#jd-variants-preview');
-    const previewBtn = body.querySelector('#jd-preview-pdf');
-    if (previewBtn) previewBtn.style.display = (jdVariants && jdVariants.length) ? '' : 'none';
+    const downloadBtn = body.querySelector('#jd-download-docx');
+    const attachBtn = body.querySelector('#jd-attach-edited');
+    const hasContent = (jdVariants && jdVariants.length) || customAttachment;
+    if (downloadBtn) downloadBtn.style.display = hasContent ? '' : 'none';
+    if (attachBtn) attachBtn.style.display = hasContent ? '' : 'none';
     if (!el) return;
     if (!jdVariants || !jdVariants.length) { el.innerHTML = ''; return; }
     el.innerHTML = `
       <div style="border:1px solid var(--border);border-radius:8px;padding:12px 14px;background:var(--bg-primary)">
-        <div style="font-size:0.78rem;font-weight:600;color:var(--text-muted);margin-bottom:8px">📎 ${jdVariants.length} role variant${jdVariants.length===1?'':'s'} will be attached as a PDF</div>
+        <div style="font-size:0.78rem;font-weight:600;color:var(--text-muted);margin-bottom:8px">📎 ${jdVariants.length} role variant${jdVariants.length===1?'':'s'} will be attached as a Word document</div>
         ${jdVariants.map(v => `
           <div style="padding:6px 0;border-top:1px solid var(--border)">
             <div style="font-size:0.72rem;font-weight:700;color:var(--blue);text-transform:uppercase;letter-spacing:0.03em">${escapeHtml(v.variantLabel || 'Role option')}</div>
             <div style="font-size:0.88rem;font-weight:600;color:var(--text)">${escapeHtml(v.title || '')}</div>
           </div>`).join('')}
       </div>`;
+  }
+
+  function renderAttachmentBanner() {
+    const el = body.querySelector('#jd-attachment-actions');
+    if (!el) return;
+    if (!customAttachment) { el.innerHTML = ''; el.style.display = 'none'; return; }
+    el.style.display = '';
+    el.innerHTML = `
+      <div style="border:1px solid var(--green);border-radius:8px;padding:10px 14px;background:var(--bg-primary);display:flex;align-items:center;gap:10px;font-size:0.82rem">
+        <span style="font-size:1rem">✓</span>
+        <span style="flex:1;min-width:0">
+          <strong>Using your edited version</strong> — sends <em>${escapeHtml(customAttachment.filename)}</em> instead of the AI draft.
+        </span>
+        <button class="btn btn-ghost btn-sm" id="jd-use-ai-instead">Use AI draft instead</button>
+      </div>`;
+    el.querySelector('#jd-use-ai-instead').addEventListener('click', () => {
+      customAttachment = null;
+      renderAttachmentBanner();
+      renderVariantsPreview();
+      Toast.info('Reverted to the AI-generated role document');
+    });
   }
 
   wireAIDraft(body, {
@@ -1041,33 +1071,65 @@ function renderRoleJDTab(body) {
     onGenerated: (result) => {
       jdVariants = result.variants || null;
       jdLocationVal = result.jdLocation || '';
+      // A fresh (re)generation supersedes any edited file the recruiter had
+      // attached — they asked for new AI content, so start from that again.
+      customAttachment = null;
+      renderAttachmentBanner();
       renderVariantsPreview();
     },
-    extraSendParams: () => (jdVariants && jdVariants.length
-      ? { roleJDVariants: jdVariants, jdLocation: jdLocationVal }
-      : {})
+    extraSendParams: () => (customAttachment
+      ? { customAttachmentId: customAttachment.id, customAttachmentFilename: customAttachment.filename, jdLocation: jdLocationVal }
+      : (jdVariants && jdVariants.length ? { roleJDVariants: jdVariants, jdLocation: jdLocationVal } : {}))
   });
 
-  const previewBtn = body.querySelector('#jd-preview-pdf');
-  if (previewBtn) {
-    previewBtn.addEventListener('click', async () => {
-      if (!jdVariants || !jdVariants.length) { Toast.warning('Generate the role description first'); return; }
-      // Open the tab synchronously (inside the click handler) so browsers
-      // don't treat it as an unrequested popup — we fill in its URL once the
-      // PDF bytes come back from the async fetch below.
-      const previewWin = window.open('', '_blank');
-      const orig = previewBtn.textContent;
-      previewBtn.disabled = true; previewBtn.textContent = 'Loading…';
+  const downloadBtn = body.querySelector('#jd-download-docx');
+  if (downloadBtn) {
+    downloadBtn.addEventListener('click', async () => {
+      if (!jdVariants?.length && !customAttachment) { Toast.warning('Generate the role description first'); return; }
+      const orig = downloadBtn.textContent;
+      downloadBtn.disabled = true; downloadBtn.textContent = 'Preparing…';
       try {
-        const blob = await API.email.previewRoleJDPdf(c.id, jdVariants, jdLocationVal);
+        const blob = await API.email.downloadRoleJDDocx(c.id, customAttachment
+          ? { customAttachmentId: customAttachment.id, customAttachmentFilename: customAttachment.filename }
+          : { roleJDVariants: jdVariants, jdLocation: jdLocationVal });
         const url = URL.createObjectURL(blob);
-        if (previewWin) previewWin.location.href = url;
-        else Toast.warning('Preview blocked by your browser\'s pop-up blocker — allow pop-ups for this site and try again.');
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = customAttachment ? customAttachment.filename : `Role Description - ${(c.name || 'Candidate').replace(/[^a-zA-Z0-9 _-]/g, '')}.docx`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 4000);
       } catch (err) {
-        if (previewWin) previewWin.close();
         Toast.error(err.message);
       } finally {
-        previewBtn.disabled = false; previewBtn.textContent = orig;
+        downloadBtn.disabled = false; downloadBtn.textContent = orig;
+      }
+    });
+  }
+
+  const attachBtn = body.querySelector('#jd-attach-edited');
+  const fileInput = body.querySelector('#jd-attachment-file-input');
+  if (attachBtn && fileInput) {
+    attachBtn.addEventListener('click', () => fileInput.click());
+    fileInput.addEventListener('change', async () => {
+      const file = fileInput.files && fileInput.files[0];
+      fileInput.value = '';
+      if (!file) return;
+      if (!file.name.toLowerCase().endsWith('.docx')) { Toast.warning('Please choose a .docx file'); return; }
+      if (file.size > 15 * 1024 * 1024) { Toast.warning('File is too large (15MB max)'); return; }
+      const orig = attachBtn.textContent;
+      attachBtn.disabled = true; attachBtn.textContent = 'Uploading…';
+      try {
+        const result = await API.email.uploadRoleJDAttachment(c.id, file);
+        customAttachment = { id: result.attachmentId, filename: result.filename };
+        renderAttachmentBanner();
+        renderVariantsPreview();
+        Toast.success('Your edited version will be sent instead of the AI draft');
+      } catch (err) {
+        Toast.error(err.message);
+      } finally {
+        attachBtn.disabled = false; attachBtn.textContent = orig;
       }
     });
   }

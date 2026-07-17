@@ -422,6 +422,12 @@ async function processQueueJob() {
     } else {
       console.error(`Queue job ${job.id} failed: ${err.message}`);
       queueSvc.updateJob(job.id, { status: 'failed', error: err.message });
+      // A permanently-failed job never gets another shot at using the
+      // recruiter's uploaded file — the periodic sweep would eventually
+      // catch it, but there's no reason to wait.
+      if (job.customAttachmentId) {
+        try { require('./services/outbound').deleteCustomAttachment(job.customAttachmentId); } catch { /* best-effort */ }
+      }
     }
   } finally {
     queueBusy = false;
@@ -522,15 +528,16 @@ async function _processScheduledSendJob(job) {
   if (!user || !candidate) { queueSvc.updateJob(job.id, { status: 'cancelled', reason: 'missing' }); return; }
   if (!outbound.isEmailConnected(user)) throw new Error('No email provider connected');
 
+  // Role JD sends carry either structured AI variant data or a recruiter's
+  // uploaded edited DOCX (resolveRoleJDAttachment prefers the upload). Let a
+  // build failure propagate — an email promising an attached role description
+  // that silently has none is worse than a job the user can see failed and retry.
   let attachments = null;
-  if (job.roleJDVariants && job.roleJDVariants.length) {
-    try {
-      const att = await outbound.buildRoleJDAttachment(candidate, user, job.roleJDVariants, job.jdLocation);
-      if (att) attachments = [att];
-    } catch (pdfErr) {
-      console.error('Role JD PDF build failed (scheduled send):', pdfErr.message);
-    }
-  }
+  const att = await outbound.resolveRoleJDAttachment(candidate, user, {
+    roleJDVariants: job.roleJDVariants, jdLocation: job.jdLocation,
+    customAttachmentId: job.customAttachmentId, customAttachmentFilename: job.customAttachmentFilename
+  });
+  if (att) attachments = [att];
 
   await outbound.sendComposed(user, candidate, {
     subject: job.subject,
@@ -540,6 +547,8 @@ async function _processScheduledSendJob(job) {
     cc:      job.cc || null,
     attachments
   });
+
+  if (job.customAttachmentId) outbound.deleteCustomAttachment(job.customAttachmentId);
 
   queueSvc.updateJob(job.id, { status: 'sent', sentAt: new Date().toISOString() });
   console.log(`Queue: scheduled send delivered → ${candidate.name} <${candidate.email}>`);
@@ -669,6 +678,9 @@ queueSvc.resetStuckJobs(); // recover any jobs frozen mid-send by a server crash
 setInterval(processQueueJob, 30 * 1000);
 // Prune old completed jobs every 6 hours
 setInterval(() => queueSvc.pruneOld(), 6 * 60 * 60 * 1000);
+// Safety-net sweep for role-JD edits uploaded but never sent (closed tab,
+// abandoned draft) — normal cleanup happens at send/cancel/failure time.
+setInterval(() => require('./services/outbound').pruneOldCustomAttachments(), 6 * 60 * 60 * 1000);
 
 // ─── Daily auto-outreach (Autopilot) ─────────────────────────────────────────
 // Every 15 min, for each user with autopilot on, schedule today's drip batch

@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const path = require('path');
 const fs = require('fs');
+const multer = require('multer');
 const { v4: uuidv4 } = require('uuid');
 const { google } = require('googleapis');
 const gmailService   = require('../services/gmail');
@@ -87,7 +88,7 @@ const gmailCallback = async (req, res) => {
 // POST /api/email/send
 router.post('/send', requireAuth, async (req, res) => {
   try {
-    const { candidateId, subject, body, isReply, cc, scheduledAt, isFollowUp, roleJDVariants, jdLocation } = req.body;
+    const { candidateId, subject, body, isReply, cc, scheduledAt, isFollowUp, roleJDVariants, jdLocation, customAttachmentId, customAttachmentFilename } = req.body;
 
     if (!candidateId || !subject || !body) {
       return res.status(400).json({ error: 'candidateId, subject, and body are required' });
@@ -125,6 +126,8 @@ router.post('/send', requireAuth, async (req, res) => {
           cc:            cc || null,
           roleJDVariants: roleJDVariants || null,
           jdLocation:    jdLocation || '',
+          customAttachmentId:       customAttachmentId || null,
+          customAttachmentFilename: customAttachmentFilename || null,
           scheduledAt:   new Date(t).toISOString(),
           status:        'pending',
           createdAt:     new Date().toISOString()
@@ -134,22 +137,24 @@ router.post('/send', requireAuth, async (req, res) => {
       }
     }
 
-    // Role JD sends carry structured variant data — build the PDF fresh here
-    // and attach it rather than pasting the JD into the email body.
+    // Role JD sends carry either structured AI variant data or a recruiter's
+    // uploaded edited DOCX — resolveRoleJDAttachment prefers the upload.
     let attachments = null;
-    if (roleJDVariants && roleJDVariants.length) {
-      try {
-        const att = await outbound.buildRoleJDAttachment(candidate, user, roleJDVariants, jdLocation);
-        if (att) attachments = [att];
-      } catch (pdfErr) {
-        console.error('Role JD PDF build failed:', pdfErr.message);
-        return res.status(500).json({ error: 'Failed to build the role description PDF: ' + pdfErr.message });
-      }
+    try {
+      const att = await outbound.resolveRoleJDAttachment(candidate, user, { roleJDVariants, jdLocation, customAttachmentId, customAttachmentFilename });
+      if (att) attachments = [att];
+    } catch (attErr) {
+      console.error('Role JD attachment build failed:', attErr.message);
+      return res.status(500).json({ error: 'Failed to build the role description attachment: ' + attErr.message });
     }
 
     let sendResult;
     try {
       sendResult = await outbound.sendComposed(user, candidate, { subject, body, isReply: !!isReply, isFollowUp: !!isFollowUp, cc: cc || null, attachments });
+      // An uploaded custom attachment is single-use once it's actually gone
+      // out — the scheduled path cleans up separately since it may still be
+      // pending.
+      if (customAttachmentId) outbound.deleteCustomAttachment(customAttachmentId);
     } catch (sendErr) {
       // Gmail rate limit: instead of bouncing the user, queue this exact draft
       // to send automatically once the quota clears. Nothing was persisted —
@@ -175,6 +180,8 @@ router.post('/send', requireAuth, async (req, res) => {
         cc:            cc || null,
         roleJDVariants: roleJDVariants || null,
         jdLocation:    jdLocation || '',
+        customAttachmentId:       customAttachmentId || null,
+        customAttachmentFilename: customAttachmentFilename || null,
         // small buffer past the reported reset so the retry doesn't hit the same window
         scheduledAt:   new Date(retryAt.getTime() + 90 * 1000).toISOString(),
         status:        'pending',
@@ -207,15 +214,17 @@ router.post('/send', requireAuth, async (req, res) => {
   }
 });
 
-// POST /api/email/role-jd-preview — render the role-JD PDF on demand so the
-// user can review it before sending. Variants are already generated
-// client-side (from a prior /api/ai/role-jd call) — this just builds the PDF
-// bytes; no AI call, no credits, no send.
-router.post('/role-jd-preview', requireAuth, async (req, res) => {
+// POST /api/email/role-jd-download — render the role-JD as a DOCX on demand
+// so the recruiter can open it in Word, review it, and edit the wording
+// before it's attached to an outbound email. Variants are already generated
+// client-side (from a prior /api/ai/role-jd call) — this just builds the
+// document bytes; no AI call, no credits, no send. Unlike a PDF, a browser
+// can't render this inline, so the response is a real download.
+router.post('/role-jd-download', requireAuth, async (req, res) => {
   try {
-    const { candidateId, roleJDVariants, jdLocation } = req.body;
-    if (!candidateId || !roleJDVariants || !roleJDVariants.length) {
-      return res.status(400).json({ error: 'candidateId and roleJDVariants are required' });
+    const { candidateId, roleJDVariants, jdLocation, customAttachmentId, customAttachmentFilename } = req.body;
+    if (!candidateId || (!(roleJDVariants && roleJDVariants.length) && !customAttachmentId)) {
+      return res.status(400).json({ error: 'candidateId and roleJDVariants (or customAttachmentId) are required' });
     }
     const candidate = await storage.getCandidateById(candidateId);
     if (!candidate) return res.status(404).json({ error: 'Candidate not found' });
@@ -224,19 +233,57 @@ router.post('/role-jd-preview', requireAuth, async (req, res) => {
     const user = await storage.getUserById(req.session.userId);
     if (!user) return res.status(404).json({ error: 'User not found' });
 
-    const attachment = await outbound.buildRoleJDAttachment(candidate, user, roleJDVariants, jdLocation);
-    if (!attachment) return res.status(400).json({ error: 'No role variants to preview' });
+    const attachment = await outbound.resolveRoleJDAttachment(candidate, user, { roleJDVariants, jdLocation, customAttachmentId, customAttachmentFilename });
+    if (!attachment) return res.status(400).json({ error: 'No role description to download' });
 
     res.set({
-      'Content-Type': 'application/pdf',
-      'Content-Disposition': `inline; filename="${attachment.filename.replace(/"/g, '')}"`,
+      'Content-Type': attachment.contentType,
+      'Content-Disposition': `attachment; filename="${attachment.filename.replace(/"/g, '')}"`,
       'Cache-Control': 'no-store'
     });
     return res.send(attachment.content);
   } catch (err) {
-    console.error('Role JD preview error:', err);
-    return res.status(500).json({ error: 'Failed to build PDF preview: ' + err.message });
+    console.error('Role JD download error:', err);
+    return res.status(500).json({ error: 'Failed to build the role description document: ' + err.message });
   }
+});
+
+// Multer setup for the recruiter's edited role-JD upload — memory storage,
+// the route persists it to disk itself via outbound.saveCustomAttachment
+// (needs to be retrievable at send time, possibly days later for a
+// scheduled send, so a plain in-request buffer isn't enough).
+const jdAttachmentUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 15 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (ext === '.docx') return cb(null, true);
+    cb(new Error('Only .docx files are accepted'));
+  }
+});
+
+// POST /api/email/role-jd-attachment-upload — recruiter uploads their edited
+// version of the role description. Stored on disk (not just in the request)
+// because a scheduled send referencing it can fire days later.
+router.post('/role-jd-attachment-upload', requireAuth, (req, res) => {
+  jdAttachmentUpload.single('file')(req, res, async (err) => {
+    if (err) return res.status(400).json({ error: err.message });
+    try {
+      const { candidateId } = req.body;
+      if (!candidateId) return res.status(400).json({ error: 'candidateId is required' });
+      if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+
+      const candidate = await storage.getCandidateById(candidateId);
+      if (!candidate) return res.status(404).json({ error: 'Candidate not found' });
+      if (candidate.userId !== req.session.userId) return res.status(403).json({ error: 'Forbidden' });
+
+      const attachmentId = outbound.saveCustomAttachment(req.file.buffer);
+      return res.json({ attachmentId, filename: req.file.originalname });
+    } catch (uploadErr) {
+      console.error('Role JD attachment upload error:', uploadErr);
+      return res.status(500).json({ error: 'Failed to save the uploaded file: ' + uploadErr.message });
+    }
+  });
 });
 
 // GET /api/email/scheduled/:candidateId — pending scheduled sends for one candidate
@@ -244,7 +291,11 @@ router.get('/scheduled/:candidateId', requireAuth, (req, res) => {
   try {
     const jobs = queueSvc.getJobsForUser(req.session.userId)
       .filter(j => j.type === 'scheduled_send' && j.status === 'pending' && j.candidateId === req.params.candidateId)
-      .map(j => ({ id: j.id, subject: j.subject, body: j.body, cc: j.cc, isReply: j.isReply, scheduledAt: j.scheduledAt }));
+      .map(j => ({
+        id: j.id, subject: j.subject, body: j.body, cc: j.cc, isReply: j.isReply, scheduledAt: j.scheduledAt,
+        roleJDVariants: j.roleJDVariants || null, jdLocation: j.jdLocation || '',
+        customAttachmentId: j.customAttachmentId || null, customAttachmentFilename: j.customAttachmentFilename || null
+      }));
     return res.json({ jobs });
   } catch (err) {
     return res.status(500).json({ error: err.message });
@@ -257,6 +308,9 @@ router.delete('/scheduled/:jobId', requireAuth, (req, res) => {
     const job = queueSvc.getJobsForUser(req.session.userId).find(j => j.id === req.params.jobId);
     if (!job || job.type !== 'scheduled_send') return res.status(404).json({ error: 'Scheduled send not found' });
     if (job.status !== 'pending') return res.status(400).json({ error: `Cannot cancel — already ${job.status}` });
+    // The candidate's edited file isn't reused by anything else once its job
+    // is gone — clean it up rather than leaving it for the periodic sweep.
+    if (job.customAttachmentId) outbound.deleteCustomAttachment(job.customAttachmentId);
     queueSvc.updateJob(job.id, { status: 'cancelled' });
     return res.json({ success: true });
   } catch (err) {
