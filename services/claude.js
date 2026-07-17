@@ -532,16 +532,16 @@ function _roleVariantSchemaBlock(label, angle) {
   "workMode": "On-site, Hybrid, or Remote — whichever fits the role and the candidate's location",
   "companyIntro": {
     "headline": "an all-caps company banner headline, e.g. \\"ACME — REIMAGINE SENIOR CARE WITH US\\"",
-    "body": "2 short paragraphs (separated by \\\\n\\\\n) selling the company's mission and culture in an ambitious, confident careers-page voice, drawn from the company pitch. End with a sentence about the kind of person the company wants."
+    "body": "2 substantial paragraphs (separated by \\\\n\\\\n), each 3-5 full sentences, selling the company's mission, culture, and ambition in a confident careers-page voice, drawn from the company pitch. Include a short mantra-style line if it fits naturally (e.g. a phrase that captures the company's operating philosophy). End with a sentence about the kind of person the company wants."
   },
-  "summary": "2 paragraphs (separated by \\\\n\\\\n) describing the role's mandate, scope, and where it sits in the organization — written so this candidate's real background is obviously the profile it calls for, but phrased like a genuine posting (never name the candidate)",
+  "summary": "2 dense paragraphs (separated by \\\\n\\\\n), each 4-6 full sentences, describing the role's mandate, scope, where it sits in the organization, who it partners with, and why it matters right now — written so this candidate's real background is obviously the profile it calls for, but phrased like a genuine posting (never name the candidate)",
   "responsibilityGroups": [
-    { "heading": "thematic subheading, e.g. \\"Strategic Leadership\\"", "bullets": ["3-5 responsibility bullets for this theme"] },
-    { "heading": "…4 to 6 groups total — themes chosen to fit this role and showcase this candidate's strengths", "bullets": ["…"] }
+    { "heading": "thematic subheading, e.g. \\"Strategic Leadership\\"", "bullets": ["3-6 responsibility bullets for this theme, each a complete, detailed sentence (20-35 words) — not a short fragment"] },
+    { "heading": "…6 to 8 groups total, covering the full scope of the role end-to-end (e.g. strategic leadership, a domain-specific execution group, cross-functional/partner coordination, team leadership & management, quality/compliance, process improvement & innovation) — themes chosen to fit this role and showcase this candidate's strengths in depth, not just breadth", "bullets": ["…"] }
   ],
   "travel": "one line on expected travel (e.g. \\"20% out-of-area travel may be expected.\\"), or \\"\\" if not relevant",
-  "requirements": ["7-10 bullets: education, years of experience, domain expertise, tools — written so THIS candidate clearly meets every one (mirror their actual years, domains, scope, and transitions) but phrased as a genuine public posting: never name the candidate or their employers"],
-  "whatWeOffer": ["5-7 bullets. FIRST bullet is compensation for this role's level (base range + bonus/equity, positioned above what their current seat would typically pay); then benefits and perks in the company's voice"]
+  "requirements": ["8-10 bullets, each a complete, detailed sentence (not a short fragment): education, years of experience, domain expertise, specific tools/software, track record on deals or projects of a certain size, certifications — written so THIS candidate clearly meets every one (mirror their actual years, domains, scope, and transitions) but phrased as a genuine public posting: never name the candidate or their employers"],
+  "whatWeOffer": ["6-8 bullets. FIRST bullet is compensation for this role's level (base range + bonus/equity, positioned above what their current seat would typically pay); then benefits and perks in the company's voice — PTO, stock purchase or equity program, retirement matching, tuition/professional development, health benefits, and any other perks that fit"]
 }`;
 }
 
@@ -597,6 +597,7 @@ PART 2 — THE ROLE DESCRIPTION (for the attached PDF)
 ═══════════════════════════════════════════
 "Your Next Step": a role one clear level above their current title/scope — same functional area, meaningfully more scope/seniority/ownership — so it reads as an aspirational but credible next move, not a fantasy leap.
 Write it in the style of an official corporate careers-site posting (like a Fortune-500 job page): confident, polished, impersonal in voice. The tailoring is invisible: the summary, responsibility themes, and requirements are engineered from this candidate's REAL background (their years, domains, scope, transitions) so they will recognise themselves in every line and clearly qualify — but the document itself never names the candidate or their employers. Never generic boilerplate.
+LENGTH AND DEPTH — this must read as a genuine, thorough corporate job posting, not a summary of one. Real postings at this level run 700-1200+ words across many responsibility groups with detailed, full-sentence bullets, a dense multi-paragraph summary, and a long requirements list. Err toward MORE detail and MORE groups/bullets rather than less — a thin, sparse-feeling document is a failure here. Follow the bullet/group counts in the schema below as a floor, not a ceiling.
 ${company.salaryRange ? `Company's general salary range for context (use as a loose anchor, positioned for the step-up level): ${company.salaryRange}.` : ''}
 
 ═══════════════════════════════════════════
@@ -612,7 +613,7 @@ OUTPUT FORMAT — valid JSON only, no markdown fences, no commentary:
 
 Return ONLY the JSON object.`;
 
-  const response = await callAI(appendInstructions(prompt, instructions), 5000, pickProvider(user, instructions));
+  const response = await callAI(appendInstructions(prompt, instructions), 8000, pickProvider(user, instructions));
   const raw = response.content[0].text.trim();
   const costCents = calcCostCents(response.usage, response.provider);
 
