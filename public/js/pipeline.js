@@ -171,6 +171,18 @@ function looksLikeHtml(str) {
 // Strip quoted reply history from an HTML email body using DOM parsing.
 // Removes Gmail quote divs, blockquotes, and Outlook reply headers.
 // Returns { html, trimmed } — trimmed=true if anything was removed.
+// Does this node's own text look like the start of a quoted reply block —
+// either a one-line attribution ("On ... wrote:") or a line beginning with
+// the ">" quote marker some clients preserve even inside HTML content?
+function _looksLikeQuoteStart(text) {
+  const t = (text || '').trim();
+  if (!t) return false;
+  if (/^On\b.*\bwrote:?\s*$/i.test(t)) return true;
+  if (/^>/.test(t)) return true;
+  if (/^-{2,}\s*Original Message\s*-{2,}/i.test(t)) return true;
+  return false;
+}
+
 function stripHtmlQuotes(html) {
   const wrap = document.createElement('div');
   wrap.innerHTML = html;
@@ -190,6 +202,28 @@ function stripHtmlQuotes(html) {
   });
   // Any remaining plain <blockquote> elements that are likely quote wrappers
   wrap.querySelectorAll('blockquote').forEach(el => el.remove());
+
+  // Fallback: some replies carry a quote block with no recognizable container
+  // at all — just plain paragraphs/line breaks with a "On ... wrote:" line
+  // and ">"-prefixed text (e.g. a plain-text reply that picked up a stray
+  // HTML fragment from the quoted original, tripping the HTML-vs-text
+  // detection). If the structural pass above removed nothing, scan the
+  // top-level nodes directly for that pattern and cut from the first match.
+  if (wrap.innerHTML.length === before) {
+    const nodes = Array.from(wrap.childNodes);
+    for (let i = 0; i < nodes.length; i++) {
+      const node = nodes[i];
+      const text = node.nodeType === 3 ? node.textContent : (node.innerText || node.textContent || '');
+      const nextText = nodes[i + 1]
+        ? (nodes[i + 1].nodeType === 3 ? nodes[i + 1].textContent : (nodes[i + 1].innerText || nodes[i + 1].textContent || ''))
+        : '';
+      const wraps = /^On\b.+\b(at|,)\b/i.test((text || '').trim()) && /wrote:?\s*$/i.test((nextText || '').trim());
+      if (_looksLikeQuoteStart(text) || wraps) {
+        for (let j = nodes.length - 1; j >= i; j--) wrap.removeChild(nodes[j]);
+        break;
+      }
+    }
+  }
 
   // Remove trailing empty nodes left behind
   while (wrap.lastChild && (wrap.lastChild.nodeType === 3
@@ -223,8 +257,9 @@ function stripQuotedText(text) {
     if (/^_{10,}$/.test(l)) { cut = i; break; }            // Outlook divider rule
     if (/^From:\s.+/i.test(l) &&
         /^(Sent|To|Subject|Date):/im.test(lines.slice(i + 1, i + 4).join('\n'))) { cut = i; break; }
-    // First ">"-quoted line
-    if (/^>/.test(lines[i])) { cut = i; break; }
+    // First ">"-quoted line (use the trimmed line so leading whitespace some
+    // clients add before the marker doesn't defeat detection)
+    if (/^>/.test(l)) { cut = i; break; }
   }
 
   if (cut === -1) return text;
