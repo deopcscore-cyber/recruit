@@ -286,10 +286,10 @@ function sentimentBadge(s) {
   return `<span title="Auto-detected reply sentiment" style="font-size:0.68rem;font-weight:600;background:${m.bg};color:${m.fg};border-radius:10px;padding:1px 7px">${m.label}</span>`;
 }
 
-// Hunter.io deliverability check, run automatically on CSV import (see
-// routes/candidates.js) when the recruiter has a Hunter key configured.
+// Apify deliverability check, run automatically on CSV import (see
+// routes/candidates.js) when the recruiter has an Apify key configured.
 // Only surfaces risky/undeliverable — a clean "deliverable" result isn't
-// worth cluttering every card with, and '' (never checked, no Hunter key)
+// worth cluttering every card with, and '' (never checked, no Apify key)
 // intentionally renders nothing rather than implying a problem.
 const EMAIL_STATUS_META = {
   undeliverable: { label: '✕ Bounces likely', bg: '#fee2e2', fg: '#b91c1c' },
@@ -299,7 +299,7 @@ const EMAIL_STATUS_META = {
 function emailStatusBadge(status) {
   const m = EMAIL_STATUS_META[status];
   if (!m) return '';
-  return `<span title="Email deliverability check (Hunter.io)" style="font-size:0.68rem;font-weight:600;background:${m.bg};color:${m.fg};border-radius:10px;padding:1px 7px">${m.label}</span>`;
+  return `<span title="Email deliverability check (Apify)" style="font-size:0.68rem;font-weight:600;background:${m.bg};color:${m.fg};border-radius:10px;padding:1px 7px">${m.label}</span>`;
 }
 
 // Full-detail version for the Profile tab — unlike emailStatusBadge, this
@@ -865,7 +865,7 @@ function renderProfileTab(body) {
     openLinkedInEnrich(c);
   });
 
-  // Deliverability check (Hunter.io) — checks whichever address is
+  // Deliverability check (Apify) — checks whichever address is
   // currently in the Email field above, not necessarily what's saved yet.
   body.querySelector('#pf-verify-email-btn')?.addEventListener('click', async (e) => {
     const btn = e.currentTarget;

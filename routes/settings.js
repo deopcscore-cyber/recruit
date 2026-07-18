@@ -57,6 +57,7 @@ router.get('/', async (req, res) => {
       hunterApiKey:        user.hunterApiKey        ? '••••••••' : '',
       contactOutApiKey:    user.contactOutApiKey    ? '••••••••' : '',
       apolloApiKey:        user.apolloApiKey        ? '••••••••' : '',
+      apifyApiKey:         user.apifyApiKey         ? '••••••••' : '',
       extensionToken:           user.extensionToken           || '',
       userType:                 user.userType                 || 'recruiter_company',
       aiProvider:               user.aiProvider               || 'auto',
@@ -76,7 +77,7 @@ router.get('/', async (req, res) => {
 // PUT /api/settings
 router.put('/', async (req, res) => {
   try {
-    const { tone, notes, use, avoid, name, title, companyName, companyPitch, salaryRange, hunterApiKey, contactOutApiKey, apolloApiKey, signature, secondaryTestEmail, userType, resumeConsultantName, resumeConsultantEmail } = req.body;
+    const { tone, notes, use, avoid, name, title, companyName, companyPitch, salaryRange, hunterApiKey, contactOutApiKey, apolloApiKey, apifyApiKey, signature, secondaryTestEmail, userType, resumeConsultantName, resumeConsultantEmail } = req.body;
 
     // Atomic read-modify-write — a plain getUserById + saveUser here raced
     // with concurrent writes (e.g. a credit deduction mid-AI-generation)
@@ -108,6 +109,7 @@ router.put('/', async (req, res) => {
     if (hunterApiKey     !== undefined) user.hunterApiKey     = hunterApiKey.trim();
     if (contactOutApiKey !== undefined) user.contactOutApiKey = contactOutApiKey.trim();
     if (apolloApiKey     !== undefined) user.apolloApiKey     = apolloApiKey.trim();
+    if (apifyApiKey      !== undefined) user.apifyApiKey      = apifyApiKey.trim();
 
     // Secondary test email
     if (secondaryTestEmail !== undefined) user.secondaryTestEmail = secondaryTestEmail.trim();
@@ -219,6 +221,7 @@ router.put('/', async (req, res) => {
       hunterApiKey:     user.hunterApiKey     ? '••••••••' : '',
       contactOutApiKey: user.contactOutApiKey ? '••••••••' : '',
       apolloApiKey:     user.apolloApiKey     ? '••••••••' : '',
+      apifyApiKey:      user.apifyApiKey      ? '••••••••' : '',
       signature: user.signature || {},
       secondaryTestEmail:       user.secondaryTestEmail       || '',
       userType:                 user.userType                 || 'recruiter_company',

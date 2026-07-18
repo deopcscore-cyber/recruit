@@ -884,7 +884,7 @@ async function handleImport() {
         Toast.warning(`${risky} imported email${risky !== 1 ? 's' : ''} may bounce — look for the risk badge before reaching out.`);
       }
     } else {
-      Toast.info('Tip: add a Hunter.io API key in Settings to auto-verify emails on import and cut down on bounces.');
+      Toast.info('Tip: add an Apify API key in Settings to auto-verify emails on import and cut down on bounces.');
     }
     new Modal('import-modal').close();
     fileInput.value = '';
@@ -1788,6 +1788,19 @@ function initSettingsPage() {
       Toast.success('API keys saved');
     } catch (err) { Toast.error(err.message); }
     finally { btn.disabled = false; btn.textContent = 'Save API Keys'; }
+  });
+
+  // ── Email verification (Apify) key save button ────────────────────────────
+  document.getElementById('apify-save-btn')?.addEventListener('click', async () => {
+    const btn = document.getElementById('apify-save-btn');
+    const val = document.getElementById('apify-key')?.value.trim() || '';
+    if (!val) { Toast.warning('Paste an Apify API token first'); return; }
+    btn.disabled = true; btn.textContent = 'Saving…';
+    try {
+      await API.settings.update({ apifyApiKey: val });
+      Toast.success('Apify key saved — new CSV imports will auto-verify emails');
+    } catch (err) { Toast.error(err.message); }
+    finally { btn.disabled = false; btn.textContent = 'Save API Key'; }
   });
 
   document.getElementById('connect-gmail-btn').addEventListener('click', async () => {
@@ -2806,6 +2819,7 @@ async function loadSettingsPage() {
     if (document.getElementById('profile-hunter-key'))       document.getElementById('profile-hunter-key').value       = style.hunterApiKey     === '••••••••' ? '' : (style.hunterApiKey     || '');
     if (document.getElementById('enrichment-contactout-key')) document.getElementById('enrichment-contactout-key').value = style.contactOutApiKey === '••••••••' ? '' : (style.contactOutApiKey || '');
     if (document.getElementById('enrichment-apollo-key'))     document.getElementById('enrichment-apollo-key').value     = style.apolloApiKey     === '••••••••' ? '' : (style.apolloApiKey     || '');
+    if (document.getElementById('apify-key'))                 document.getElementById('apify-key').value                 = style.apifyApiKey      === '••••••••' ? '' : (style.apifyApiKey      || '');
     document.getElementById('style-tone').value = style.tone || 'warm';
     document.getElementById('style-notes').value = style.notes || '';
     document.getElementById('style-use').value = (style.use || []).join(', ');

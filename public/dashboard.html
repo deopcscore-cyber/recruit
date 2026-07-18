@@ -380,6 +380,35 @@
             </div>
           </div>
 
+          <!-- Email Verification -->
+          <div class="settings-card">
+            <div class="settings-card-header">
+              <h3>Email Verification</h3>
+              <span class="settings-card-hint">Checks deliverability on CSV import so you avoid bounces</span>
+            </div>
+            <div class="settings-card-body">
+              <div style="background:var(--blue-light);border:1px solid #c0ceff;border-radius:var(--radius);padding:11px 14px;margin-bottom:18px;font-size:0.82rem;color:#1e3a9e;line-height:1.65">
+                Different from Email Enrichment above — that <em>finds</em> missing emails, this <em>checks</em> whether an email you already have will actually reach an inbox. Every CSV import gets auto-checked when a key is set here; individual candidates can also be re-checked from their Profile tab.
+              </div>
+              <div>
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+                  <div>
+                    <div style="font-weight:650;font-size:0.875rem;color:var(--text)">Apify <span style="font-size:0.72rem;font-weight:600;background:#dcfce7;color:#166534;padding:1px 7px;border-radius:999px;margin-left:6px">~$1 per 1,000 checks</span></div>
+                    <div style="font-size:0.77rem;color:var(--text-muted);margin-top:2px">Real SMTP-level deliverability check, much cheaper than Hunter's verifier</div>
+                  </div>
+                  <a href="https://console.apify.com/settings/integrations" target="_blank" class="btn btn-secondary btn-xs">Get free key →</a>
+                </div>
+                <div class="form-group" style="margin-bottom:4px">
+                  <input type="password" id="apify-key" placeholder="Paste Apify API token" autocomplete="off" />
+                </div>
+                <div style="font-size:0.74rem;color:var(--text-muted)">Free tier: $5/mo usage credit, no card required · <a href="https://apify.com/pricing" target="_blank" style="color:var(--blue)">See pricing</a></div>
+              </div>
+              <div style="margin-top:18px;display:flex;justify-content:flex-end">
+                <button class="btn btn-primary btn-sm" id="apify-save-btn">Save API Key</button>
+              </div>
+            </div>
+          </div>
+
           <!-- LinkedIn Import Methods -->
           <div class="settings-card">
             <div class="settings-card-header">
@@ -1051,7 +1080,7 @@ I came across your work leading...&#10;&#10;[Paste a full example email here —
         </label>
       </form>
       <p style="font-size:0.78rem;color:var(--text-muted);margin:12px 0 0;line-height:1.5">
-        If you have a Hunter.io API key set in Settings, every imported email is automatically checked for deliverability — risky or bounce-prone addresses get flagged on the candidate card.
+        If you have an Apify API key set in Settings, every imported email is automatically checked for deliverability — risky or bounce-prone addresses get flagged on the candidate card.
       </p>
     </div>
     <div class="modal-footer">

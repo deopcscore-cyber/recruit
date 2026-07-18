@@ -7,7 +7,7 @@ const multer = require('multer');
 const { parse } = require('csv-parse/sync');
 const storage = require('../services/storage');
 const requireAuth = require('../middleware/auth');
-const { verifyEmailViaHunter } = require('../services/linkedin');
+const { verifyEmailsBatch } = require('../services/apify');
 
 // All routes require auth
 router.use(requireAuth);
@@ -296,7 +296,7 @@ router.delete('/:id', async (req, res) => {
 });
 
 // POST /api/candidates/:id/verify-email
-// Manual re-check — covers candidates imported before a Hunter key was
+// Manual re-check — covers candidates imported before an Apify key was
 // configured, or whose email was hand-edited since the last check.
 router.post('/:id/verify-email', async (req, res) => {
   try {
@@ -305,14 +305,15 @@ router.post('/:id/verify-email', async (req, res) => {
     if (candidate.userId !== req.session.userId) return res.status(403).json({ error: 'Forbidden' });
 
     const user = await storage.getUserById(req.session.userId);
-    if (!user?.hunterApiKey) {
-      return res.status(400).json({ error: 'Add a Hunter.io API key in Settings to verify emails.' });
+    if (!user?.apifyApiKey) {
+      return res.status(400).json({ error: 'Add an Apify API key in Settings to verify emails.' });
     }
     if (!candidate.email) {
       return res.status(400).json({ error: 'This candidate has no email to verify.' });
     }
 
-    const result = await verifyEmailViaHunter(candidate.email, user.hunterApiKey);
+    const results = await verifyEmailsBatch([candidate.email], user.apifyApiKey);
+    const result = results.get(candidate.email.toLowerCase());
     candidate.emailStatus = result || 'unknown';
     candidate.emailVerifiedAt = new Date().toISOString();
     candidate.updatedAt = new Date().toISOString();
@@ -358,15 +359,17 @@ router.post('/import', csvUpload.single('csv'), async (req, res) => {
     console.log('CSV import — detected headers:', detectedHeaders);
 
     const existingCandidates = await storage.getUserCandidates(req.session.userId);
-    const importedCandidates = [];
+    const pendingCandidates = [];
     let skipped = 0;
     let duplicates = 0;
 
-    // Email verification (Hunter.io) — only runs if the recruiter has a key
-    // configured in Settings; skipped entirely (not just per-row) otherwise
-    // so an unconfigured account doesn't pay a network round-trip per row.
+    // Email verification (Apify) — only runs if the recruiter has a key
+    // configured in Settings; skipped entirely otherwise so an unconfigured
+    // account doesn't pay for it. Candidates are verified in one batched
+    // call after the loop below (not per-row) since the actor accepts a
+    // whole list at once — far fewer round-trips than checking one at a time.
     const importingUser = await storage.getUserById(req.session.userId);
-    const hunterApiKey = importingUser?.hunterApiKey || '';
+    const apifyApiKey = importingUser?.apifyApiKey || '';
     const verifyCounts = { deliverable: 0, risky: 0, undeliverable: 0, unknown: 0 };
 
     // Build a normalized header map once (strips BOM, lowercases, and reduces
@@ -556,25 +559,31 @@ router.post('/import', csvUpload.single('csv'), async (req, res) => {
         education: Array.isArray(education) ? education : []
       };
 
-      if (hunterApiKey) {
-        const result = await verifyEmailViaHunter(candidate.email, hunterApiKey);
-        candidate.emailStatus = result || 'unknown';
-        candidate.emailVerifiedAt = new Date().toISOString();
-        verifyCounts[candidate.emailStatus] = (verifyCounts[candidate.emailStatus] || 0) + 1;
-      }
-
-      await storage.saveCandidate(candidate);
-      importedCandidates.push(candidate);
+      pendingCandidates.push(candidate);
     }
 
-    console.log(`CSV import complete: ${importedCandidates.length} imported, ${skipped} skipped`);
+    if (apifyApiKey) {
+      const verifiedAt = new Date().toISOString();
+      const results = await verifyEmailsBatch(pendingCandidates.map(c => c.email), apifyApiKey);
+      pendingCandidates.forEach(candidate => {
+        candidate.emailStatus = results.get(candidate.email) || 'unknown';
+        candidate.emailVerifiedAt = verifiedAt;
+        verifyCounts[candidate.emailStatus] = (verifyCounts[candidate.emailStatus] || 0) + 1;
+      });
+    }
+
+    for (const candidate of pendingCandidates) {
+      await storage.saveCandidate(candidate);
+    }
+
+    console.log(`CSV import complete: ${pendingCandidates.length} imported, ${skipped} skipped`);
 
     return res.json({
-      imported: importedCandidates.length,
+      imported: pendingCandidates.length,
       skipped,
-      verified: hunterApiKey ? verifyCounts : null,
+      verified: apifyApiKey ? verifyCounts : null,
       duplicates,
-      candidates: importedCandidates
+      candidates: pendingCandidates
     });
   } catch (err) {
     console.error('Import error:', err);
