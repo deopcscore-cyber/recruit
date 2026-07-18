@@ -7,6 +7,7 @@ const multer = require('multer');
 const { parse } = require('csv-parse/sync');
 const storage = require('../services/storage');
 const requireAuth = require('../middleware/auth');
+const { verifyEmailViaHunter } = require('../services/linkedin');
 
 // All routes require auth
 router.use(requireAuth);
@@ -51,6 +52,8 @@ function makeDefaultCandidate(userId) {
     career: [],
     education: [],
     summary: '',
+    emailStatus: '',      // '' (never checked) | 'deliverable' | 'risky' | 'undeliverable' | 'unknown'
+    emailVerifiedAt: null,
     stage: 'Imported',
     thread: [],
     stepsCompleted: {
@@ -178,6 +181,14 @@ router.put('/:id', async (req, res) => {
       'originalSubject', 'gmailReferences', 'score', 'scoreDetails', 'pendingFollowUpDraft'
     ];
 
+    // A previous deliverability check no longer means anything once the
+    // address it was run against changes — clear it rather than leave a
+    // stale "Verified" badge pointing at the wrong email.
+    if (req.body.email !== undefined && req.body.email !== candidate.email) {
+      candidate.emailStatus = '';
+      candidate.emailVerifiedAt = null;
+    }
+
     allowed.forEach(key => {
       if (req.body[key] !== undefined) {
         candidate[key] = req.body[key];
@@ -284,6 +295,36 @@ router.delete('/:id', async (req, res) => {
   }
 });
 
+// POST /api/candidates/:id/verify-email
+// Manual re-check — covers candidates imported before a Hunter key was
+// configured, or whose email was hand-edited since the last check.
+router.post('/:id/verify-email', async (req, res) => {
+  try {
+    const candidate = await storage.getCandidateById(req.params.id);
+    if (!candidate) return res.status(404).json({ error: 'Candidate not found' });
+    if (candidate.userId !== req.session.userId) return res.status(403).json({ error: 'Forbidden' });
+
+    const user = await storage.getUserById(req.session.userId);
+    if (!user?.hunterApiKey) {
+      return res.status(400).json({ error: 'Add a Hunter.io API key in Settings to verify emails.' });
+    }
+    if (!candidate.email) {
+      return res.status(400).json({ error: 'This candidate has no email to verify.' });
+    }
+
+    const result = await verifyEmailViaHunter(candidate.email, user.hunterApiKey);
+    candidate.emailStatus = result || 'unknown';
+    candidate.emailVerifiedAt = new Date().toISOString();
+    candidate.updatedAt = new Date().toISOString();
+    await storage.saveCandidate(candidate);
+
+    return res.json(candidate);
+  } catch (err) {
+    console.error('Verify email error:', err);
+    return res.status(500).json({ error: 'Verification failed: ' + err.message });
+  }
+});
+
 // POST /api/candidates/import
 router.post('/import', csvUpload.single('csv'), async (req, res) => {
   try {
@@ -320,6 +361,13 @@ router.post('/import', csvUpload.single('csv'), async (req, res) => {
     const importedCandidates = [];
     let skipped = 0;
     let duplicates = 0;
+
+    // Email verification (Hunter.io) — only runs if the recruiter has a key
+    // configured in Settings; skipped entirely (not just per-row) otherwise
+    // so an unconfigured account doesn't pay a network round-trip per row.
+    const importingUser = await storage.getUserById(req.session.userId);
+    const hunterApiKey = importingUser?.hunterApiKey || '';
+    const verifyCounts = { deliverable: 0, risky: 0, undeliverable: 0, unknown: 0 };
 
     // Build a normalized header map once (strips BOM, lowercases, and reduces
     // to alphanumeric-only so "Job Title", "job_title", and "job-title" all
@@ -508,6 +556,13 @@ router.post('/import', csvUpload.single('csv'), async (req, res) => {
         education: Array.isArray(education) ? education : []
       };
 
+      if (hunterApiKey) {
+        const result = await verifyEmailViaHunter(candidate.email, hunterApiKey);
+        candidate.emailStatus = result || 'unknown';
+        candidate.emailVerifiedAt = new Date().toISOString();
+        verifyCounts[candidate.emailStatus] = (verifyCounts[candidate.emailStatus] || 0) + 1;
+      }
+
       await storage.saveCandidate(candidate);
       importedCandidates.push(candidate);
     }
@@ -517,6 +572,7 @@ router.post('/import', csvUpload.single('csv'), async (req, res) => {
     return res.json({
       imported: importedCandidates.length,
       skipped,
+      verified: hunterApiKey ? verifyCounts : null,
       duplicates,
       candidates: importedCandidates
     });

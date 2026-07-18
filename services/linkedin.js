@@ -213,6 +213,25 @@ async function findEmailViaHunter(name, company, apiKey) {
   } catch (_) { return ''; }
 }
 
+// ── Hunter.io — email verifier (deliverability check before sending) ─────
+// Distinct from findEmailViaHunter above: that one *finds* a likely address,
+// this one checks whether a specific address is actually safe to send to.
+// Returns Hunter's result enum directly ('deliverable' | 'undeliverable' |
+// 'risky' | 'unknown'), or null if verification couldn't be performed
+// (no key, no email, network/API error) — callers should treat null as
+// "not checked" rather than any particular status.
+async function verifyEmailViaHunter(email, apiKey) {
+  if (!apiKey || !email) return null;
+  try {
+    const res = await fetch(
+      `https://api.hunter.io/v2/email-verifier?email=${encodeURIComponent(email)}&api_key=${apiKey}`
+    );
+    if (!res.ok) return null;
+    const data = await res.json();
+    return (data.data && data.data.result) ? data.data.result : null;
+  } catch (_) { return null; }
+}
+
 // ── Main enrichment waterfall ─────────────────────────────────────────────
 // Tries all configured providers and returns the best result.
 // Always returns { email, personalEmail, workEmail, phone, source }
@@ -249,4 +268,4 @@ async function enrichContact({ name, company, linkedinUrl, hunterApiKey, contact
   };
 }
 
-module.exports = { scrapeFromUrl, parseFromText, findEmailViaHunter, findViaContactOut, findViaApollo, enrichContact };
+module.exports = { scrapeFromUrl, parseFromText, findEmailViaHunter, verifyEmailViaHunter, findViaContactOut, findViaApollo, enrichContact };

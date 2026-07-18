@@ -286,6 +286,38 @@ function sentimentBadge(s) {
   return `<span title="Auto-detected reply sentiment" style="font-size:0.68rem;font-weight:600;background:${m.bg};color:${m.fg};border-radius:10px;padding:1px 7px">${m.label}</span>`;
 }
 
+// Hunter.io deliverability check, run automatically on CSV import (see
+// routes/candidates.js) when the recruiter has a Hunter key configured.
+// Only surfaces risky/undeliverable — a clean "deliverable" result isn't
+// worth cluttering every card with, and '' (never checked, no Hunter key)
+// intentionally renders nothing rather than implying a problem.
+const EMAIL_STATUS_META = {
+  undeliverable: { label: '✕ Bounces likely', bg: '#fee2e2', fg: '#b91c1c' },
+  risky:         { label: '⚠ Risky email',    bg: '#fef9c3', fg: '#a16207' },
+  unknown:       { label: '? Unverified',      bg: '#f1f5f9', fg: '#64748b' }
+};
+function emailStatusBadge(status) {
+  const m = EMAIL_STATUS_META[status];
+  if (!m) return '';
+  return `<span title="Email deliverability check (Hunter.io)" style="font-size:0.68rem;font-weight:600;background:${m.bg};color:${m.fg};border-radius:10px;padding:1px 7px">${m.label}</span>`;
+}
+
+// Full-detail version for the Profile tab — unlike emailStatusBadge, this
+// also shows a "deliverable" result (a candidate page is where the
+// recruiter wants that reassurance, not the compact card list).
+const DELIVERABILITY_META = {
+  deliverable:   { label: '✓ Deliverable',     color: '#15803d' },
+  risky:         { label: '⚠ Risky — may bounce', color: '#a16207' },
+  undeliverable: { label: '✕ Likely to bounce', color: '#b91c1c' },
+  unknown:       { label: '? Inconclusive',     color: '#64748b' }
+};
+function deliverabilityLine(c) {
+  const m = DELIVERABILITY_META[c.emailStatus];
+  if (!m) return '<span style="font-size:0.75rem;color:var(--text-muted)">Not verified</span>';
+  const when = c.emailVerifiedAt ? ` · ${formatRelative(c.emailVerifiedAt)}` : '';
+  return `<span style="font-size:0.75rem;font-weight:600;color:${m.color}">${m.label}</span><span style="font-size:0.72rem;color:var(--text-faint)">${when}</span>`;
+}
+
 function escapeHtml(str) {
   if (!str) return '';
   return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
@@ -393,6 +425,7 @@ function createCandidateCard(candidate) {
           ${candidate.unread ? '<span class="badge-new">New</span>' : ''}
           ${candidate.opened ? '<span class="badge-opened" title="Email opened">Opened</span>' : ''}
           ${sentimentBadge(candidate.replySentiment)}
+          ${emailStatusBadge(candidate.emailStatus)}
         </div>
       </div>
       <div class="card-meta">${escapeHtml(candidate.title || '')}${candidate.title && candidate.company ? ' · ' : ''}${escapeHtml(candidate.company || '')}</div>
@@ -457,7 +490,7 @@ function renderListView(candidates, onRowClick) {
           <div class="list-avatar" style="background:${avatarColor(c.name)}">${initials(c.name)}</div>
           <div>
             <div class="font-medium">${escapeHtml(c.name||'Unknown')} ${c.unread?'<span class="badge-new">New</span>':''} ${c.opened?'<span class="badge-opened">Opened</span>':''}</div>
-            <div class="text-xs text-muted">${escapeHtml(c.email||'')}</div>
+            <div class="text-xs text-muted">${escapeHtml(c.email||'')} ${emailStatusBadge(c.emailStatus)}</div>
           </div>
         </div>
       </td>
@@ -713,6 +746,10 @@ function renderProfileTab(body) {
               </div>
               <div style="font-size:0.7rem;color:var(--text-muted);margin-top:3px">Click to set as the primary email above</div>
             ` : ''}
+            <div id="pf-email-verify-row" style="display:flex;align-items:center;gap:8px;margin-top:6px">
+              ${deliverabilityLine(c)}
+              <button type="button" class="btn btn-ghost btn-sm" id="pf-verify-email-btn" style="padding:2px 8px;font-size:0.72rem">${c.emailStatus ? 'Re-verify' : 'Verify Email'}</button>
+            </div>
           </div>
         </div>
         <div class="form-row">
@@ -826,6 +863,31 @@ function renderProfileTab(body) {
   // the paste/parse UI.
   body.querySelector('#pf-fetch-career')?.addEventListener('click', () => {
     openLinkedInEnrich(c);
+  });
+
+  // Deliverability check (Hunter.io) — checks whichever address is
+  // currently in the Email field above, not necessarily what's saved yet.
+  body.querySelector('#pf-verify-email-btn')?.addEventListener('click', async (e) => {
+    const btn = e.currentTarget;
+    const emailNow = body.querySelector('#pf-email')?.value.trim();
+    if (!emailNow) { Toast.warning('Enter an email address first'); return; }
+    if (emailNow !== c.email) {
+      Toast.warning('Save the profile first, then verify — verification checks the saved email.');
+      return;
+    }
+    btn.disabled = true;
+    const originalText = btn.textContent;
+    btn.textContent = 'Checking…';
+    try {
+      const updated = await API.candidates.verifyEmail(c.id);
+      Object.assign(_modalCandidate, updated);
+      _modalOnUpdate(_modalCandidate);
+      renderModalTab('profile');
+    } catch (err) {
+      Toast.error(err.message);
+      btn.disabled = false;
+      btn.textContent = originalText;
+    }
   });
 
   // Tags

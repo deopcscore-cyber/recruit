@@ -878,6 +878,14 @@ async function handleImport() {
     if (result.skipped > 0) skippedMsg.push(`${result.skipped} skipped (no email)`);
     if (result.duplicates > 0) skippedMsg.push(`${result.duplicates} duplicates`);
     Toast.success(`Imported ${result.imported} candidates${skippedMsg.length ? ` (${skippedMsg.join(', ')})` : ''}`);
+    if (result.verified) {
+      const risky = (result.verified.risky || 0) + (result.verified.undeliverable || 0);
+      if (risky > 0) {
+        Toast.warning(`${risky} imported email${risky !== 1 ? 's' : ''} may bounce — look for the risk badge before reaching out.`);
+      }
+    } else {
+      Toast.info('Tip: add a Hunter.io API key in Settings to auto-verify emails on import and cut down on bounces.');
+    }
     new Modal('import-modal').close();
     fileInput.value = '';
     await loadCandidates();

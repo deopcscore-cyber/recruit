@@ -59,6 +59,7 @@ const API = {
     update(id, data) { return API.put(`/api/candidates/${id}`, data); },
     delete(id) { return API.delete(`/api/candidates/${id}`); },
     import(formData) { return API.postForm('/api/candidates/import', formData); },
+    verifyEmail(id) { return API.post(`/api/candidates/${id}/verify-email`); },
     uploadResume(id, formData) { return API.postForm(`/api/candidates/${id}/resume`, formData); },
     downloadResume(id) { window.open(`/api/candidates/${id}/resume/download`, '_blank'); },
     addThread(id, data) { return API.post(`/api/candidates/${id}/thread`, data); },
