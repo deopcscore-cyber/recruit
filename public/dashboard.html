@@ -1036,13 +1036,17 @@ I came across your work leading...&#10;&#10;[Paste a full example email here —
     </div>
     <div class="modal-body">
       <p style="font-size:0.875rem;color:#475569;margin:0 0 16px;line-height:1.6">
-        Upload a ContactOut CSV export. Reads Full Name, Email, Title, Company, LinkedIn URL, Summary, and career/education fields. Rows without a valid email are skipped.
+        Upload a CSV export — ContactOut, LeadsFinder, or similar. Reads Full Name, Email, Title, Company, LinkedIn URL, Summary, and career/education fields where present. Rows without a valid email are skipped.
       </p>
       <form id="import-form">
         <div class="form-group">
           <label>CSV File</label>
           <input type="file" id="import-csv-file" accept=".csv" required />
         </div>
+        <label style="display:flex;align-items:center;gap:8px;font-size:0.85rem;color:var(--text-mid);cursor:pointer;margin-top:4px">
+          <input type="checkbox" id="import-prefer-personal" checked style="width:auto" />
+          Prefer personal email over work email when a row has both
+        </label>
       </form>
     </div>
     <div class="modal-footer">
@@ -1178,7 +1182,7 @@ I came across your work leading...&#10;&#10;[Paste a full example email here —
 <div class="modal-overlay" id="linkedin-import-modal">
   <div class="modal" style="max-width:580px">
     <div class="modal-header">
-      <h3>Import from LinkedIn</h3>
+      <h3 id="li-modal-title">Import from LinkedIn</h3>
       <button class="modal-close">&times;</button>
     </div>
     <div class="modal-body" style="display:flex;flex-direction:column;gap:14px">
@@ -1213,8 +1217,8 @@ I came across your work leading...&#10;&#10;[Paste a full example email here —
         </div>
         <div style="padding:14px">
           <div id="li-preview-content"></div>
-          <!-- Manual email override -->
-          <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
+          <!-- Manual email override (hidden when enriching an existing candidate — not relevant there) -->
+          <div id="li-email-override-wrap" style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
             <label style="font-size:0.79rem;font-weight:600;color:var(--text-mid);display:block;margin-bottom:5px">
               Email Address
               <span style="font-weight:400;color:var(--text-muted)"> — edit or enter manually if not found above</span>
