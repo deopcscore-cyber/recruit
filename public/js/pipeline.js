@@ -703,7 +703,17 @@ function renderProfileTab(body) {
         <h4>Contact</h4>
         <div class="form-row">
           <div class="form-group"><label>Full Name</label><input type="text" id="pf-name" value="${escapeHtml(c.name||'')}" /></div>
-          <div class="form-group"><label>Email</label><input type="email" id="pf-email" value="${escapeHtml(c.email||'')}" /></div>
+          <div class="form-group">
+            <label>Email</label>
+            <input type="email" id="pf-email" value="${escapeHtml(c.email||'')}" />
+            ${(c.personalEmail || c.workEmail) ? `
+              <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px">
+                ${c.personalEmail ? `<button type="button" class="pf-email-chip" data-email="${escapeHtml(c.personalEmail)}" style="font-size:0.7rem;background:#dcfce7;color:#166534;padding:2px 8px;border-radius:999px;font-weight:600;border:none;cursor:pointer">Personal: ${escapeHtml(c.personalEmail)}</button>` : ''}
+                ${c.workEmail ? `<button type="button" class="pf-email-chip" data-email="${escapeHtml(c.workEmail)}" style="font-size:0.7rem;background:#fef9c3;color:#854d0e;padding:2px 8px;border-radius:999px;font-weight:600;border:none;cursor:pointer">Work: ${escapeHtml(c.workEmail)}</button>` : ''}
+              </div>
+              <div style="font-size:0.7rem;color:var(--text-muted);margin-top:3px">Click to set as the primary email above</div>
+            ` : ''}
+          </div>
         </div>
         <div class="form-row">
           <div class="form-group"><label>Title</label><input type="text" id="pf-title" value="${escapeHtml(c.title||'')}" /></div>
@@ -711,7 +721,10 @@ function renderProfileTab(body) {
         </div>
         <div class="form-group">
           <label>LinkedIn URL</label>
-          <input type="text" id="pf-linkedin" value="${escapeHtml(c.linkedin||'')}" placeholder="https://linkedin.com/in/…" />
+          <div style="display:flex;gap:8px">
+            <input type="text" id="pf-linkedin" value="${escapeHtml(c.linkedin||'')}" placeholder="https://linkedin.com/in/…" style="flex:1" />
+            ${c.linkedin ? `<button type="button" class="btn btn-secondary btn-sm" id="pf-fetch-career" style="white-space:nowrap">${(c.career||[]).length ? '↺ Refresh' : '🔗 Fetch'} Career History</button>` : ''}
+          </div>
         </div>
       </div>
 
@@ -798,6 +811,21 @@ function renderProfileTab(body) {
       refreshModal();
       Toast.success('Stage updated');
     } catch (err) { Toast.error(err.message); }
+  });
+
+  // Personal/work email chips — click to make that address the primary one
+  body.querySelectorAll('.pf-email-chip').forEach(chip => {
+    chip.addEventListener('click', () => {
+      body.querySelector('#pf-email').value = chip.dataset.email;
+      Toast.info('Click "Save Profile" to keep this as the primary email');
+    });
+  });
+
+  // Fetch/refresh career history from LinkedIn — reuses the LinkedIn import
+  // modal in "enrich" mode (see openLinkedInEnrich) rather than duplicating
+  // the paste/parse UI.
+  body.querySelector('#pf-fetch-career')?.addEventListener('click', () => {
+    openLinkedInEnrich(c);
   });
 
   // Tags

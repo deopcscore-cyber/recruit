@@ -1048,6 +1048,9 @@ select { appearance: auto; }
   transition: opacity 0.18s;
 }
 .modal-overlay.open { opacity: 1; pointer-events: all; }
+/* Needs to stack above .cmodal-overlay (z-index 1000) since it can be opened
+   from within the candidate profile modal (Fetch Career History). */
+#linkedin-import-modal { z-index: 1050; }
 .modal {
   background: var(--surface);
   border-radius: var(--radius-xl);

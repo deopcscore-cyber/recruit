@@ -321,18 +321,20 @@ router.post('/import', csvUpload.single('csv'), async (req, res) => {
     let skipped = 0;
     let duplicates = 0;
 
-    // Build a normalized header map once (strips BOM, lowercases, trims)
+    // Build a normalized header map once (strips BOM, lowercases, and reduces
+    // to alphanumeric-only so "Job Title", "job_title", and "job-title" all
+    // collapse to the same key — needed for snake_case exports like
+    // LeadsFinder's alongside ContactOut's space-separated Title Case).
+    const normHeaderKey = s => (s || '').replace(/^﻿/, '').toLowerCase().replace(/[^a-z0-9]+/g, '');
     const headerMap = {};
     detectedHeaders.forEach(h => {
-      const normalized = h.replace(/^﻿/, '').toLowerCase().trim();
-      headerMap[normalized] = h;
+      headerMap[normHeaderKey(h)] = h;
     });
 
-    // Exact-match getter only — avoids false positives from contains
+    // Exact-match getter only (post-normalization) — avoids false positives from contains
     const getFromRow = (row, ...keywords) => {
       for (const kw of keywords) {
-        const kwLower = kw.toLowerCase().trim();
-        const origKey = headerMap[kwLower];
+        const origKey = headerMap[normHeaderKey(kw)];
         if (origKey && row[origKey] && String(row[origKey]).trim()) {
           return String(row[origKey]).trim();
         }
@@ -340,19 +342,24 @@ router.post('/import', csvUpload.single('csv'), async (req, res) => {
       return '';
     };
 
-    // Find the best email — tries a wide range of column names in priority order
-    const getEmail = (row) => {
-      // Ordered priority: exact names first
-      const candidate = getFromRow(row,
-        'email', 'email address', 'primary email',
-        'work email', 'work email 1', 'work email 2',
-        'email 1', 'email 2', 'email 3',
-        'email1', 'email2',
-        'personal email', 'contact email', 'business email'
+    // Personal vs. work email are frequently separate columns (e.g. LeadsFinder's
+    // "email" + "personal_email"), so pull them independently rather than
+    // collapsing to one "best guess" column — that's what makes the
+    // prefer-personal-email choice below meaningful instead of arbitrary.
+    // Only explicitly-labeled columns count as "dedicated" here — a plain
+    // "email" column is ambiguous (ContactOut's usual single-column export can
+    // hold either kind) and must never be assumed to mean "work" just because
+    // it's the only one present; it gets classified by domain below instead.
+    const getPersonalEmailCol = (row) => getFromRow(row, 'personal email', 'personal_email', 'home email', 'home_email');
+    const getWorkEmailCol     = (row) => getFromRow(row, 'work email', 'work_email', 'business email', 'business_email', 'company email');
+    const getGenericEmailCol  = (row) => {
+      const named = getFromRow(row,
+        'email', 'email address', 'primary email', 'contact email',
+        'work email 1', 'work email 2', 'email 1', 'email 2', 'email 3', 'email1', 'email2'
       );
-      if (candidate && candidate.includes('@')) return candidate;
-
-      // Fallback: scan all columns whose name contains 'email' for any valid address
+      if (named) return named;
+      // Last resort: scan all columns whose name contains 'email' for any
+      // valid address — catches unusual header names none of the lists anticipated.
       for (const [normKey, origKey] of Object.entries(headerMap)) {
         if (normKey.includes('email')) {
           const val = row[origKey] ? String(row[origKey]).trim() : '';
@@ -360,6 +367,29 @@ router.post('/import', csvUpload.single('csv'), async (req, res) => {
         }
       }
       return '';
+    };
+    const PERSONAL_DOMAIN_RE = /@(gmail|yahoo|hotmail|outlook|icloud|me|live|aol|protonmail|pm)\./i;
+    // Default true — matches the "prioritize personal email" behavior already
+    // used elsewhere in the app (extension import, LinkedIn import).
+    const preferPersonalEmail = req.body.preferPersonalEmail !== 'false';
+
+    // Resolves both addresses for a row from whichever columns are actually
+    // present. Dedicated personal/work columns always win; a generic "email"
+    // column only fills whichever slot is still empty, classified by domain
+    // (gmail/yahoo/etc. → personal, everything else → work) rather than
+    // defaulting to "work" just because it wasn't explicitly labeled.
+    const resolveEmails = (row) => {
+      let personalEmail = getPersonalEmailCol(row);
+      let workEmail      = getWorkEmailCol(row);
+      if (!personalEmail || !workEmail) {
+        const generic = getGenericEmailCol(row);
+        if (generic && generic !== personalEmail && generic !== workEmail) {
+          if (PERSONAL_DOMAIN_RE.test(generic)) { if (!personalEmail) personalEmail = generic; }
+          else                                   { if (!workEmail)     workEmail     = generic; }
+        }
+      }
+      const email = preferPersonalEmail ? (personalEmail || workEmail) : (workEmail || personalEmail);
+      return { email, personalEmail, workEmail };
     };
 
     for (const row of records) {
@@ -371,8 +401,8 @@ router.post('/import', csvUpload.single('csv'), async (req, res) => {
         if (first || last) name = `${first} ${last}`.trim();
       }
 
-      // Email — skip row if no valid email found
-      const email = getEmail(row);
+      // Email — skip row if no valid email found (personal or work)
+      const { email, personalEmail, workEmail } = resolveEmails(row);
       if (!email || !email.includes('@')) {
         skipped++;
         continue;
@@ -401,6 +431,11 @@ router.post('/import', csvUpload.single('csv'), async (req, res) => {
       );
       const background = getFromRow(row, 'background', 'notes', 'additional info', 'additional notes');
       const location = getFromRow(row, 'location', 'city', 'region', 'country', 'geography');
+      // Present in lead-gen exports (LeadsFinder etc.) that skip a free-text
+      // background column in favor of structured firmographic fields.
+      const industry  = getFromRow(row, 'industry');
+      const seniority = getFromRow(row, 'seniority level', 'seniority');
+      const companySize = getFromRow(row, 'company size', 'employee count');
 
       // Career / experience — ContactOut may export as JSON array or plain text
       let career = [];
@@ -445,15 +480,30 @@ router.post('/import', csvUpload.single('csv'), async (req, res) => {
       // Build full summary including location if available
       const fullSummary = [summary, location ? `Location: ${location}` : ''].filter(Boolean).join(' | ');
 
+      // No free-text background/notes column (LeadsFinder-style export) —
+      // fall back to a compact line built from the firmographic fields that
+      // are present, so the AI still has something to personalize against.
+      const fallbackBackground = !background
+        ? [
+            title && company ? `${title} at ${company}` : (title || company),
+            industry ? `Industry: ${industry}` : '',
+            seniority ? `Seniority: ${seniority}` : '',
+            companySize ? `Company size: ${companySize}` : ''
+          ].filter(Boolean).join(' | ')
+        : '';
+
       const candidate = {
         ...makeDefaultCandidate(req.session.userId),
         name: name || email.split('@')[0],
         email: email.toLowerCase().trim(),
+        ...(personalEmail ? { personalEmail: personalEmail.toLowerCase().trim() } : {}),
+        ...(workEmail     ? { workEmail:     workEmail.toLowerCase().trim() }     : {}),
+        ...((personalEmail || workEmail) ? { emailSource: 'CSV import' } : {}),
         title,
         company,
         linkedin,
         summary: fullSummary || summary,
-        background,
+        background: background || fallbackBackground,
         career: Array.isArray(career) ? career : [],
         education: Array.isArray(education) ? education : []
       };

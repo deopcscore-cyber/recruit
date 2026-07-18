@@ -869,8 +869,10 @@ async function handleImport() {
   const btn = document.getElementById('import-submit-btn');
   btn.disabled = true; btn.textContent = 'Importing…';
   try {
+    const preferPersonal = document.getElementById('import-prefer-personal')?.checked !== false;
     const fd = new FormData();
     fd.append('csv', file);
+    fd.append('preferPersonalEmail', preferPersonal ? 'true' : 'false');
     const result = await API.candidates.import(fd);
     const skippedMsg = [];
     if (result.skipped > 0) skippedMsg.push(`${result.skipped} skipped (no email)`);
@@ -2451,21 +2453,51 @@ function wireTemplateEditor() {
 // ================================================================
 
 let _liParsed = null;
+// Non-null while the modal is enriching an existing candidate's career
+// history rather than creating a new one — see openLinkedInEnrich().
+let _liEnrichCandidate = null;
+
+function resetLinkedInModal() {
+  _liParsed = null;
+  document.getElementById('li-url').value = '';
+  document.getElementById('li-rawtext').value = '';
+  document.getElementById('li-step-url').style.display = 'block';
+  document.getElementById('li-step-paste').style.display = 'none';
+  document.getElementById('li-preview').style.display = 'none';
+  document.getElementById('li-import-btn').style.display = 'inline-flex';
+  document.getElementById('li-import-btn').textContent = 'Import Profile';
+  document.getElementById('li-confirm-btn').style.display = 'none';
+  document.getElementById('li-paste-btn').style.display = 'none';
+  document.getElementById('li-status').textContent = '';
+}
+
+// Opens the same LinkedIn import modal used for new candidates, but in
+// "enrich" mode: pre-filled with this candidate's LinkedIn URL, and on
+// confirm it merges career/education into their existing record instead of
+// creating a new candidate. Reuses the exact same scrape → paste-fallback →
+// Claude-parse path (services/linkedin.js) rather than duplicating it —
+// automatic bulk scraping isn't reliable against LinkedIn's blocking, so
+// this stays a one-click-per-candidate action.
+function openLinkedInEnrich(candidate) {
+  resetLinkedInModal();
+  _liEnrichCandidate = candidate;
+  document.getElementById('li-modal-title').textContent = 'Fetch Career History from LinkedIn';
+  document.getElementById('li-email-override-wrap').style.display = 'none';
+  document.getElementById('li-url').value = candidate.linkedin || '';
+  new Modal('linkedin-import-modal').open();
+  // Auto-attempt the fetch immediately — the user already clicked "Fetch",
+  // no need to make them click "Import Profile" again for a URL we already have.
+  if (candidate.linkedin) document.getElementById('li-import-btn').click();
+}
 
 function wireLinkedInImport() {
   const btn = document.getElementById('linkedin-import-btn');
   if (!btn) return;
   btn.addEventListener('click', () => {
-    _liParsed = null;
-    document.getElementById('li-url').value = '';
-    document.getElementById('li-rawtext').value = '';
-    document.getElementById('li-step-url').style.display = 'block';
-    document.getElementById('li-step-paste').style.display = 'none';
-    document.getElementById('li-preview').style.display = 'none';
-    document.getElementById('li-import-btn').style.display = 'inline-flex';
-    document.getElementById('li-confirm-btn').style.display = 'none';
-    document.getElementById('li-paste-btn').style.display = 'none';
-    document.getElementById('li-status').textContent = '';
+    _liEnrichCandidate = null;
+    document.getElementById('li-email-override-wrap').style.display = '';
+    document.getElementById('li-modal-title').textContent = 'Import from LinkedIn';
+    resetLinkedInModal();
     new Modal('linkedin-import-modal').open();
   });
 
@@ -2507,6 +2539,35 @@ function wireLinkedInImport() {
 
   document.getElementById('li-confirm-btn')?.addEventListener('click', async () => {
     if (!_liParsed) return;
+
+    if (_liEnrichCandidate) {
+      const target = _liEnrichCandidate;
+      const updates = {};
+      if (_liParsed.career    && _liParsed.career.length)    updates.career    = _liParsed.career;
+      if (_liParsed.education && _liParsed.education.length) updates.education = _liParsed.education;
+      if (!Object.keys(updates).length) {
+        Toast.warning('No career history found in that profile — try pasting the full page text instead.');
+        return;
+      }
+      try {
+        const updated = await API.candidates.update(target.id, updates);
+        const idx = allCandidates.findIndex(x => x.id === target.id);
+        if (idx !== -1) allCandidates[idx] = { ...allCandidates[idx], ...updated };
+        if (typeof _modalCandidate !== 'undefined' && _modalCandidate && _modalCandidate.id === target.id) {
+          Object.assign(_modalCandidate, updated);
+          if (typeof _modalOnUpdate === 'function') _modalOnUpdate(_modalCandidate);
+          if (typeof renderModalTab === 'function') renderModalTab('profile');
+          else if (typeof refreshModal === 'function') refreshModal();
+        }
+        renderCandidates();
+        new Modal('linkedin-import-modal').close();
+        Toast.success(`Career history updated — ${updates.career?.length || 0} position${(updates.career?.length || 0) !== 1 ? 's' : ''} found`);
+      } catch (err) {
+        Toast.error('Failed to update career history: ' + err.message);
+      }
+      return;
+    }
+
     try {
       // Use manual email override if provided, else fall back to parsed email
       const emailOverride = (document.getElementById('li-email-override')?.value || '').trim();
@@ -2650,6 +2711,9 @@ function buildBookmarkletLink() {
 async function handleBookmarkletImport(token) {
   // Open the LinkedIn import modal and show a loading state
   _liParsed = null;
+  _liEnrichCandidate = null; // bookmarklet always creates a new candidate
+  document.getElementById('li-email-override-wrap').style.display = '';
+  document.getElementById('li-modal-title').textContent = 'Import from LinkedIn';
   document.getElementById('li-url').value = '';
   document.getElementById('li-rawtext').value = '';
   document.getElementById('li-step-url').style.display = 'block';
