@@ -136,6 +136,9 @@ function pickProvider(user, instructions) {
 }
 
 // Try OpenAI first; fall back to Claude on error
+// finishReason lets callers tell "the model got cut off by maxTokens" apart
+// from "the model finished normally but produced something unusable" —
+// 'length' (OpenAI) / 'max_tokens' (Claude) means the former.
 async function callAI(prompt, maxTokens, preferClaude = false) {
   if (preferClaude) {
     // Claude first, OpenAI fallback — used for career consultant profiles
@@ -144,7 +147,7 @@ async function callAI(prompt, maxTokens, preferClaude = false) {
         model: CLAUDE_MODEL, max_tokens: maxTokens,
         messages: [{ role: 'user', content: prompt }]
       });
-      return { content: res.content, usage: res.usage, provider: 'claude' };
+      return { content: res.content, usage: res.usage, provider: 'claude', finishReason: res.stop_reason };
     } catch (err) {
       console.warn('[AI] Claude unavailable, switching to OpenAI:', err.message);
     }
@@ -155,7 +158,8 @@ async function callAI(prompt, maxTokens, preferClaude = false) {
     return {
       content: [{ text: res.choices[0].message.content }],
       usage: { input_tokens: res.usage.prompt_tokens, output_tokens: res.usage.completion_tokens },
-      provider: 'openai'
+      provider: 'openai',
+      finishReason: res.choices[0].finish_reason
     };
   }
 
@@ -169,7 +173,8 @@ async function callAI(prompt, maxTokens, preferClaude = false) {
       return {
         content: [{ text: res.choices[0].message.content }],
         usage: { input_tokens: res.usage.prompt_tokens, output_tokens: res.usage.completion_tokens },
-        provider: 'openai'
+        provider: 'openai',
+        finishReason: res.choices[0].finish_reason
       };
     } catch (err) {
       console.warn('[AI] OpenAI unavailable, switching to Claude:', err.message);
@@ -180,7 +185,7 @@ async function callAI(prompt, maxTokens, preferClaude = false) {
     model: CLAUDE_MODEL, max_tokens: maxTokens,
     messages: [{ role: 'user', content: prompt }]
   });
-  return { content: res.content, usage: res.usage, provider: 'claude' };
+  return { content: res.content, usage: res.usage, provider: 'claude', finishReason: res.stop_reason };
 }
 
 // ─── Company context helper ───────────────────────────────────────────────────
@@ -660,47 +665,70 @@ Return ONLY the JSON object.`;
   // JSON, routinely ran past 8000 tokens and got cut off mid-response —
   // jsonrepair can patch the truncated JSON into something parseable, but
   // the actual content inside is incomplete, which surfaced downstream as
-  // "came back incomplete" on nearly every generation. Raised comfortably
-  // below both providers' output caps (GPT-4o-mini: 16,384) so truncation
-  // stops being the default outcome for a response this long.
-  const response = await callAI(appendInstructions(prompt, instructions), 12000, pickProvider(user, instructions));
-  const raw = response.content[0].text.trim();
-  const costCents = calcCostCents(response.usage, response.provider);
+  // "came back incomplete." Raised comfortably below both providers' output
+  // caps (GPT-4o-mini: 16,384) — and below, a single automatic retry catches
+  // the cases where even that isn't enough, rather than making the recruiter
+  // manually click regenerate every time the model runs long.
+  const MAX_TOKENS = 15000;
+  const TRUNCATED_REASON = { openai: 'length', claude: 'max_tokens' };
 
-  let parsed;
-  try {
-    parsed = parseAIJson(raw);
-  } catch (err) {
-    console.error('Role JD JSON parse failed after all repair attempts. Raw response (first 2000 chars):', raw.slice(0, 2000));
-    throw new Error('Could not parse role JD response as JSON — please try regenerating.');
+  function extractVariants(parsed) {
+    // The prompt always asks for exactly one variant. When the raw JSON was
+    // corrupted deep inside the variant's own content (a broken string a few
+    // fields into "Your Next Step"), jsonrepair can recover a structurally
+    // valid array that's semantically wrong — the one real variant plus
+    // several near-empty stub objects where it guessed a boundary. A variant
+    // with no title and no actual role content isn't a second option, it's
+    // repair debris, so filter those out rather than attaching blank pages.
+    const rawVariants = Array.isArray(parsed.variants) ? parsed.variants : [];
+    return rawVariants
+      .filter(v => v && typeof v.title === 'string' && v.title.trim() && (
+        (Array.isArray(v.responsibilityGroups) && v.responsibilityGroups.some(g => g && Array.isArray(g.bullets) && g.bullets.length)) ||
+        (Array.isArray(v.responsibilities) && v.responsibilities.length) // legacy shape
+      ))
+      .slice(0, 1);
   }
 
-  // The prompt always asks for exactly one variant. When the raw JSON was
-  // corrupted deep inside the variant's own content (a broken string a few
-  // fields into "Your Next Step"), jsonrepair can recover a structurally
-  // valid array that's semantically wrong — the one real variant plus
-  // several near-empty stub objects where it guessed a boundary. A variant
-  // with no title and no actual role content isn't a second option, it's
-  // repair debris, so filter those out rather than attaching blank pages —
-  // and only fail the generation if nothing substantive survives.
-  const rawVariants = Array.isArray(parsed.variants) ? parsed.variants : [];
-  const variants = rawVariants
-    .filter(v => v && typeof v.title === 'string' && v.title.trim() && (
-      (Array.isArray(v.responsibilityGroups) && v.responsibilityGroups.some(g => g && Array.isArray(g.bullets) && g.bullets.length)) ||
-      (Array.isArray(v.responsibilities) && v.responsibilities.length) // legacy shape
-    ))
-    .slice(0, 1);
-  if (!variants.length) {
-    console.error('Role JD parsed but no substantive variant survived validation. Raw (first 2000 chars):', raw.slice(0, 2000));
+  async function attempt(fullPrompt) {
+    const response = await callAI(fullPrompt, MAX_TOKENS, pickProvider(user, instructions));
+    const raw = response.content[0].text.trim();
+    const truncated = response.finishReason === TRUNCATED_REASON[response.provider];
+    let parsed = null, variants = [];
+    try {
+      parsed = parseAIJson(raw);
+      variants = extractVariants(parsed);
+    } catch (err) { /* parsed stays null — caller checks for that */ }
+    return { raw, parsed, variants, truncated, costCents: calcCostCents(response.usage, response.provider) };
+  }
+
+  let result = await attempt(appendInstructions(prompt, instructions));
+
+  // Only worth retrying when the model actually got cut off — a complete
+  // response that still failed to parse or came out empty has a different
+  // cause a retry with the same prompt won't fix.
+  if ((!result.parsed || !result.variants.length) && result.truncated) {
+    console.warn('Role JD generation was truncated — retrying once with a concision directive.');
+    const concisionNote = `\n\nIMPORTANT: your previous attempt at this was cut off before the JSON finished, which made the whole response unusable. This time, prioritize returning complete, fully-closed JSON over exhaustive detail — use the SHORTER end of every "X-Y" range in the schema (bullet counts, sentence counts), and keep bullets closer to 15-20 words instead of 20-35. A complete, slightly shorter document beats an incomplete long one.`;
+    const retryResult = await attempt(appendInstructions(prompt, instructions) + concisionNote);
+    retryResult.costCents += result.costCents; // both attempts actually ran, both cost real tokens
+    result = retryResult;
+  }
+
+  if (!result.parsed) {
+    console.error('Role JD JSON parse failed after all repair attempts. Raw response (first 2000 chars):', result.raw.slice(0, 2000));
+    throw new Error('Could not parse role JD response as JSON — please try regenerating.');
+  }
+  if (!result.variants.length) {
+    console.error('Role JD parsed but no substantive variant survived validation. Raw (first 2000 chars):', result.raw.slice(0, 2000));
     throw new Error('The AI response came back incomplete — please try regenerating.');
   }
 
   return {
-    subject: parsed.emailSubject || '',
-    text: parsed.emailBody || '',
-    variants,
+    subject: result.parsed.emailSubject || '',
+    text: result.parsed.emailBody || '',
+    variants: result.variants,
     jdLocation,
-    costCents
+    costCents: result.costCents
   };
 }
 
