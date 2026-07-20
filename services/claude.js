@@ -717,24 +717,32 @@ Return ONLY the JSON object.`;
   let result = await attempt(appendInstructions(prompt, instructions));
   console.log(`Role JD attempt 1: provider=${result.provider} finishReason=${result.finishReason} truncated=${result.truncated} parsed=${!!result.parsed} variants=${result.variants.length} rawLength=${result.raw.length}`);
 
-  // Only worth retrying when the model actually got cut off — a complete
-  // response that still failed to parse or came out empty has a different
-  // cause a retry with the same prompt won't fix.
-  if ((!result.parsed || !result.variants.length) && result.truncated) {
-    console.warn('Role JD generation was truncated — retrying once with a concision directive.');
-    const concisionNote = `\n\nIMPORTANT: your previous attempt at this was cut off before the JSON finished, which made the whole response unusable. This time, prioritize returning complete, fully-closed JSON over exhaustive detail — use the SHORTER end of every "X-Y" range in the schema (bullet counts, sentence counts), and keep bullets closer to 15-20 words instead of 20-35. A complete, slightly shorter document beats an incomplete long one.`;
-    const retryResult = await attempt(appendInstructions(prompt, instructions) + concisionNote);
+  // Retry once on ANY validation failure, not just detected truncation.
+  // Production logs showed complete, non-truncated (finishReason "stop")
+  // responses that still parsed to zero valid variants — the model's JSON
+  // was broken somewhere inside responsibilityGroups (almost certainly an
+  // unescaped quote/apostrophe in a bullet, despite the prompt's explicit
+  // warning about it), and jsonrepair recovered a syntactically valid
+  // object by dropping the corrupted section rather than the whole
+  // response failing outright. A truncation-only retry never caught this
+  // because it was never truncated to begin with.
+  if (!result.parsed || !result.variants.length) {
+    console.warn(`Role JD generation failed validation (truncated=${result.truncated}) — retrying once.`);
+    const retryNote = result.truncated
+      ? `\n\nIMPORTANT: your previous attempt at this was cut off before the JSON finished, which made the whole response unusable. This time, prioritize returning complete, fully-closed JSON over exhaustive detail — use the SHORTER end of every "X-Y" range in the schema (bullet counts, sentence counts), and keep bullets closer to 15-20 words instead of 20-35. A complete, slightly shorter document beats an incomplete long one.`
+      : `\n\nIMPORTANT: your previous attempt at this produced JSON that could not be used — most likely an unescaped " or ' character inside one of the text values broke the structure. This time, re-read the JSON SAFETY rules above and apply them strictly: escape every literal double-quote as \\", never use curly/smart quotes, and use \\n\\n (not a real line break) for paragraph breaks. Re-check every bullet and paragraph for stray quote characters before finishing.`;
+    const retryResult = await attempt(appendInstructions(prompt, instructions) + retryNote);
     console.log(`Role JD attempt 2 (retry): provider=${retryResult.provider} finishReason=${retryResult.finishReason} truncated=${retryResult.truncated} parsed=${!!retryResult.parsed} variants=${retryResult.variants.length} rawLength=${retryResult.raw.length}`);
     retryResult.costCents += result.costCents; // both attempts actually ran, both cost real tokens
     result = retryResult;
   }
 
   if (!result.parsed) {
-    console.error(`Role JD JSON parse failed after all repair attempts. provider=${result.provider} finishReason=${result.finishReason} raw (first 2000 chars, newlines escaped): ${oneLine(result.raw.slice(0, 2000))}`);
+    console.error(`Role JD JSON parse failed after all repair attempts. provider=${result.provider} finishReason=${result.finishReason} raw (newlines escaped, capped at 20k chars): ${oneLine(result.raw.slice(0, 20000))}`);
     throw new Error('Could not parse role JD response as JSON — please try regenerating.');
   }
   if (!result.variants.length) {
-    console.error(`Role JD parsed but no substantive variant survived validation. provider=${result.provider} finishReason=${result.finishReason} raw (first 2000 chars, newlines escaped): ${oneLine(result.raw.slice(0, 2000))}`);
+    console.error(`Role JD parsed but no substantive variant survived validation. provider=${result.provider} finishReason=${result.finishReason} raw (newlines escaped, capped at 20k chars): ${oneLine(result.raw.slice(0, 20000))}`);
     throw new Error('The AI response came back incomplete — please try regenerating.');
   }
 
