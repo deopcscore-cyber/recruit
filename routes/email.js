@@ -97,6 +97,12 @@ router.post('/send', requireAuth, async (req, res) => {
     const candidate = await storage.getCandidateById(candidateId);
     if (!candidate) return res.status(404).json({ error: 'Candidate not found' });
     if (candidate.userId !== req.session.userId) return res.status(403).json({ error: 'Forbidden' });
+    // Without this check a missing/malformed address doesn't fail until it
+    // hits the provider's API, surfacing as a cryptic "Invalid To header"
+    // instead of telling the recruiter what's actually wrong.
+    if (!candidate.email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(candidate.email.trim())) {
+      return res.status(400).json({ error: `${candidate.name || 'This candidate'} doesn't have a valid email address on file — add one before sending.` });
+    }
 
     const user = await storage.getUserById(req.session.userId);
     if (!user) return res.status(404).json({ error: 'User not found' });

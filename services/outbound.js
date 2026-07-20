@@ -77,6 +77,15 @@ function isEmailConnected(user) {
 // thread persistence, follow-up sequencing, and CC-mirroring.
 // Mutates and saves the candidate; returns { gmailMessageId, gmailThreadId, candidate }.
 async function sendComposed(user, candidate, { subject, body, isReply = false, cc = null, isFollowUp = false, attachments = null }) {
+  // Catches this before it reaches the provider API — otherwise a missing/
+  // malformed address surfaces as a cryptic "Invalid To header" (Gmail's own
+  // error text) instead of saying what's actually wrong. Covers every send
+  // path (manual, scheduled, automated follow-ups) since they all funnel
+  // through here.
+  if (!candidate.email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(candidate.email.trim())) {
+    throw new Error(`${candidate.name || 'This candidate'} doesn't have a valid email address on file.`);
+  }
+
   // Fresh tracking pixel for every outbound email — resets the opened badge
   candidate.trackingId = uuidv4();
   candidate.opened     = false;
