@@ -2,10 +2,24 @@ const express = require('express');
 const router = express.Router();
 const storage = require('../services/storage');
 const requireAuth = require('../middleware/auth');
+const scheduling = require('../services/scheduling');
 
 router.use(requireAuth);
 
 const STAGES = ['Imported','Outreach Sent','Replied','Resume Requested','Resume Received','Interviewing','Closed'];
+
+// "Today" means since midnight in the recruiter's own timezone — not a
+// rolling 24 hours back from right now. A rolling window quietly folds in
+// late-yesterday-evening activity, which reads as inflated/wrong the moment
+// someone checks "Today" mid-afternoon and sees more than they actually
+// sent today. The other windows (7/30/90 days) stay rolling, which is the
+// normal convention for those.
+function startOfTodayFor(user, now) {
+  const offset = scheduling.userOffset(user);
+  const localMs = now.getTime() + offset * 3600000;
+  const localMidnightMs = Math.floor(localMs / 86400000) * 86400000;
+  return new Date(localMidnightMs - offset * 3600000);
+}
 
 // GET /api/analytics?days=N — days is optional; omit (or 'all') for all-time.
 // Metrics split into two kinds:
@@ -21,10 +35,15 @@ const STAGES = ['Imported','Outreach Sent','Replied','Resume Requested','Resume 
 router.get('/', async (req, res) => {
   try {
     const candidates = await storage.getUserCandidates(req.session.userId);
+    const user = await storage.getUserById(req.session.userId);
     const now = new Date();
 
     const daysParam = req.query.days && req.query.days !== 'all' ? parseInt(req.query.days, 10) : null;
-    const cutoff = (daysParam && daysParam > 0) ? new Date(now.getTime() - daysParam * 86400000) : null;
+    const cutoff = !daysParam || daysParam <= 0
+      ? null
+      : daysParam === 1
+        ? startOfTodayFor(user, now)
+        : new Date(now.getTime() - daysParam * 86400000);
 
     const firstOutreach = c => (c.thread || []).find(m => m.direction === 'outbound') || null;
 
@@ -156,8 +175,13 @@ router.get('/', async (req, res) => {
 router.get('/subjects', async (req, res) => {
   try {
     const candidates = await storage.getUserCandidates(req.session.userId);
+    const user = await storage.getUserById(req.session.userId);
     const daysParam = req.query.days && req.query.days !== 'all' ? parseInt(req.query.days, 10) : null;
-    const cutoff = (daysParam && daysParam > 0) ? new Date(Date.now() - daysParam * 86400000) : null;
+    const cutoff = !daysParam || daysParam <= 0
+      ? null
+      : daysParam === 1
+        ? startOfTodayFor(user, new Date())
+        : new Date(Date.now() - daysParam * 86400000);
     const bySubject = new Map(); // normalized subject → { subject, sent, opened }
 
     for (const c of candidates) {
