@@ -443,6 +443,14 @@ async function _processOutreachJob(job) {
   if (!_isEmailConnected(user)) throw new Error('No email provider connected');
   if ((user.credits || 0) <= 0) throw new Error('Insufficient credits');
 
+  // Belt-and-suspenders: pausing autopilot cancels its pending jobs at save
+  // time, but re-check here too so a job that somehow survives a pause
+  // (a race, a bug elsewhere) can never send once autopilot is off.
+  if (job.source === 'autopilot' && !user.autopilot?.enabled) {
+    queueSvc.updateJob(job.id, { status: 'cancelled', reason: 'autopilot_paused' });
+    return;
+  }
+
   // For autopilot jobs, enforce the send window — reschedule if we're outside it
   if (job.source === 'autopilot' && user.autopilot) {
     const { windowBounds } = require('./services/autopilot');

@@ -40,12 +40,16 @@ function getJobsForUser(userId) {
 }
 
 // Cancel all pending jobs for a user.
-// Optionally restrict to a single type ('outreach' | 'followup').
-function cancelPendingForUser(userId, type = null) {
+// Optionally restrict to a single type ('outreach' | 'followup') and/or a
+// single source ('autopilot' vs. a manually-queued bulk batch) — so pausing
+// autopilot doesn't also wipe out a recruiter's own manual bulk-send queue.
+function cancelPendingForUser(userId, type = null, source = null) {
   const queue = read();
   let changed = false;
   queue.forEach(j => {
-    if (j.userId === userId && j.status === 'pending' && (!type || (j.type || 'outreach') === type)) {
+    if (j.userId === userId && j.status === 'pending'
+      && (!type || (j.type || 'outreach') === type)
+      && (!source || j.source === source)) {
       j.status = 'cancelled';
       changed = true;
     }

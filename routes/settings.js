@@ -184,6 +184,17 @@ router.put('/', async (req, res) => {
     });
     if (!user) return res.status(404).json({ error: 'User not found' });
 
+    // Pausing autopilot only ever stopped it from scheduling anything NEW —
+    // outreach jobs it had already queued before the pause kept firing on
+    // their original schedule, since the queue processor never re-checks
+    // user.autopilot.enabled at send time. Cancel them here instead, the
+    // moment the pause is actually saved. Scoped to source:'autopilot' so a
+    // recruiter's own manual bulk-send batch isn't swept up in the same call.
+    if (req.body.autopilot !== undefined && user.autopilot && !user.autopilot.enabled) {
+      try { require('../services/queue').cancelPendingForUser(user.id, 'outreach', 'autopilot'); }
+      catch (e) { console.error('Autopilot pause cleanup error:', e.message); }
+    }
+
     // If autopilot is on, plan today's batch immediately so jobs queue right
     // away instead of waiting up to 15 min for the background loop.
     if (user.autopilot && user.autopilot.enabled) {
