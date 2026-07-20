@@ -689,6 +689,14 @@ Return ONLY the JSON object.`;
       .slice(0, 1);
   }
 
+  // Railway (and most log viewers) split on real newlines, so a raw AI
+  // response that contains literal line breaks — which is most of them,
+  // despite the prompt asking for \n\n escapes instead — shows up as many
+  // separate log rows with only the first ("{") visible in a quick look.
+  // Escaping newlines before logging keeps the whole thing on one line so
+  // it's actually usable for diagnosis.
+  const oneLine = s => (s || '').replace(/\r?\n/g, '\\n');
+
   async function attempt(fullPrompt) {
     const response = await callAI(fullPrompt, MAX_TOKENS, pickProvider(user, instructions));
     const raw = response.content[0].text.trim();
@@ -698,10 +706,16 @@ Return ONLY the JSON object.`;
       parsed = parseAIJson(raw);
       variants = extractVariants(parsed);
     } catch (err) { /* parsed stays null — caller checks for that */ }
-    return { raw, parsed, variants, truncated, costCents: calcCostCents(response.usage, response.provider) };
+    return {
+      raw, parsed, variants, truncated,
+      provider: response.provider,
+      finishReason: response.finishReason,
+      costCents: calcCostCents(response.usage, response.provider)
+    };
   }
 
   let result = await attempt(appendInstructions(prompt, instructions));
+  console.log(`Role JD attempt 1: provider=${result.provider} finishReason=${result.finishReason} truncated=${result.truncated} parsed=${!!result.parsed} variants=${result.variants.length} rawLength=${result.raw.length}`);
 
   // Only worth retrying when the model actually got cut off — a complete
   // response that still failed to parse or came out empty has a different
@@ -710,16 +724,17 @@ Return ONLY the JSON object.`;
     console.warn('Role JD generation was truncated — retrying once with a concision directive.');
     const concisionNote = `\n\nIMPORTANT: your previous attempt at this was cut off before the JSON finished, which made the whole response unusable. This time, prioritize returning complete, fully-closed JSON over exhaustive detail — use the SHORTER end of every "X-Y" range in the schema (bullet counts, sentence counts), and keep bullets closer to 15-20 words instead of 20-35. A complete, slightly shorter document beats an incomplete long one.`;
     const retryResult = await attempt(appendInstructions(prompt, instructions) + concisionNote);
+    console.log(`Role JD attempt 2 (retry): provider=${retryResult.provider} finishReason=${retryResult.finishReason} truncated=${retryResult.truncated} parsed=${!!retryResult.parsed} variants=${retryResult.variants.length} rawLength=${retryResult.raw.length}`);
     retryResult.costCents += result.costCents; // both attempts actually ran, both cost real tokens
     result = retryResult;
   }
 
   if (!result.parsed) {
-    console.error('Role JD JSON parse failed after all repair attempts. Raw response (first 2000 chars):', result.raw.slice(0, 2000));
+    console.error(`Role JD JSON parse failed after all repair attempts. provider=${result.provider} finishReason=${result.finishReason} raw (first 2000 chars, newlines escaped): ${oneLine(result.raw.slice(0, 2000))}`);
     throw new Error('Could not parse role JD response as JSON — please try regenerating.');
   }
   if (!result.variants.length) {
-    console.error('Role JD parsed but no substantive variant survived validation. Raw (first 2000 chars):', result.raw.slice(0, 2000));
+    console.error(`Role JD parsed but no substantive variant survived validation. provider=${result.provider} finishReason=${result.finishReason} raw (first 2000 chars, newlines escaped): ${oneLine(result.raw.slice(0, 2000))}`);
     throw new Error('The AI response came back incomplete — please try regenerating.');
   }
 
