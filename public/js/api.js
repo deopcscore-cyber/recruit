@@ -130,8 +130,9 @@ const API = {
 
   // Analytics
   analytics: {
-    get() { return API.get('/api/analytics'); },
-    subjects() { return API.get('/api/analytics/subjects'); }
+    get(days) { return API.get('/api/analytics' + (days ? `?days=${days}` : '')); },
+    subjects(days) { return API.get('/api/analytics/subjects' + (days ? `?days=${days}` : '')); },
+    followups(days) { return API.get(`/api/analytics/followups?days=${days || 30}`); }
   },
 
   // Settings
