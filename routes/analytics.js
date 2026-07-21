@@ -2,34 +2,78 @@ const express = require('express');
 const router = express.Router();
 const storage = require('../services/storage');
 const requireAuth = require('../middleware/auth');
+const scheduling = require('../services/scheduling');
 
 router.use(requireAuth);
 
 const STAGES = ['Imported','Outreach Sent','Replied','Resume Requested','Resume Received','Interviewing','Closed'];
 
-// GET /api/analytics
+// "Today" means since midnight in the recruiter's own timezone — not a
+// rolling 24 hours back from right now. A rolling window quietly folds in
+// late-yesterday-evening activity, which reads as inflated/wrong the moment
+// someone checks "Today" mid-afternoon and sees more than they actually
+// sent today. The other windows (7/30/90 days) stay rolling, which is the
+// normal convention for those.
+function startOfTodayFor(user, now) {
+  const offset = scheduling.userOffset(user);
+  const localMs = now.getTime() + offset * 3600000;
+  const localMidnightMs = Math.floor(localMs / 86400000) * 86400000;
+  return new Date(localMidnightMs - offset * 3600000);
+}
+
+// GET /api/analytics?days=N — days is optional; omit (or 'all') for all-time.
+// Metrics split into two kinds:
+//  - Period-scoped (contacted, replied, open rate, sentiment, avg days): only
+//    counts candidates whose first outreach falls inside the window, and only
+//    counts opens/sentiment that happened inside it too — this is what
+//    actually changes when you pick Today / This Week / etc.
+//  - Current-state (pipeline stage breakdown, follow-ups due, unread, queued
+//    auto follow-ups): these describe right-now inbox/pipeline state, which
+//    doesn't have a meaningful "as of last Tuesday" version without tracking
+//    stage-change history (which the app doesn't do) — always current
+//    regardless of the selected period, and labeled as such on the frontend.
 router.get('/', async (req, res) => {
   try {
     const candidates = await storage.getUserCandidates(req.session.userId);
+    const user = await storage.getUserById(req.session.userId);
     const now = new Date();
 
-    // Stage counts
+    const daysParam = req.query.days && req.query.days !== 'all' ? parseInt(req.query.days, 10) : null;
+    const cutoff = !daysParam || daysParam <= 0
+      ? null
+      : daysParam === 1
+        ? startOfTodayFor(user, now)
+        : new Date(now.getTime() - daysParam * 86400000);
+
+    const firstOutreach = c => (c.thread || []).find(m => m.direction === 'outbound') || null;
+
+    // Cohort every period-scoped metric below is computed against: candidates
+    // first contacted inside the window (or everyone, if no period given).
+    const periodCandidates = cutoff
+      ? candidates.filter(c => {
+          const first = firstOutreach(c);
+          return first && new Date(first.timestamp) >= cutoff;
+        })
+      : candidates;
+
+    // Stage counts — always current, never period-filtered (see note above)
     const stageCounts = {};
     STAGES.forEach(s => { stageCounts[s] = 0; });
     candidates.forEach(c => { if (stageCounts[c.stage] !== undefined) stageCounts[c.stage]++; });
 
-    // Contacted = anyone past Imported
-    const contacted = candidates.filter(c => c.stage !== 'Imported').length;
-    // Replied = Replied or beyond
-    const repliedCount = candidates.filter(c => ['Replied','Resume Requested','Resume Received','Interviewing','Closed'].includes(c.stage)).length;
+    // Contacted = anyone in the cohort past Imported
+    const contacted = periodCandidates.filter(c => c.stage !== 'Imported').length;
+    // Replied = Replied or beyond, among the cohort
+    const repliedCount = periodCandidates.filter(c => ['Replied','Resume Requested','Resume Received','Interviewing','Closed'].includes(c.stage)).length;
     const responseRate = contacted > 0 ? Math.round((repliedCount / contacted) * 100) : 0;
 
-    // Email open rate
-    const withOutreach = candidates.filter(c => (c.thread||[]).some(m => m.direction === 'outbound')).length;
-    const opened = candidates.filter(c => c.opened).length;
+    // Email open rate, among the cohort
+    const withOutreach = periodCandidates.filter(c => (c.thread||[]).some(m => m.direction === 'outbound')).length;
+    const opened = periodCandidates.filter(c => c.opened).length;
     const openRate = withOutreach > 0 ? Math.round((opened / withOutreach) * 100) : 0;
 
     // Follow-ups due: explicit overdue reminder OR stuck in active stage with no reminder set
+    // (always current — see note above)
     const ACTIVE_STAGES = ['Outreach Sent', 'Replied', 'Resume Requested', 'Resume Received', 'Interviewing'];
     const followUpsDue = candidates.filter(c => {
       const stage = c.stage || 'Imported';
@@ -39,23 +83,27 @@ router.get('/', async (req, res) => {
       return false;
     });
 
-    // Unread
+    // Unread — always current
     const unreadCount = candidates.filter(c => c.unread).length;
 
-    // Reply sentiment breakdown (auto-classified inbox triage)
+    // Reply sentiment breakdown (auto-classified inbox triage) — scoped to
+    // classifications that happened inside the window when one is selected
     const sentimentCounts = { interested: 0, question: 0, not_now: 0, not_interested: 0 };
     candidates.forEach(c => {
-      if (c.replySentiment && sentimentCounts[c.replySentiment] !== undefined) sentimentCounts[c.replySentiment]++;
+      if (!c.replySentiment || sentimentCounts[c.replySentiment] === undefined) return;
+      if (cutoff) {
+        if (!c.replySentimentAt || new Date(c.replySentimentAt) < cutoff) return;
+      }
+      sentimentCounts[c.replySentiment]++;
     });
 
-    // Pending automated follow-ups queued for this user
+    // Pending automated follow-ups queued for this user — always current
     let pendingFollowUps = 0;
     try { pendingFollowUps = require('../services/queue').pendingFollowUpCount(req.session.userId); } catch (e) {}
 
-    // Deliverability warning — only once there's enough volume to mean anything
-    // (a handful of sends with 0 opens is normal noise, not a signal). Below
-    // 25% open rate usually means landing in spam; healthy opens but almost
-    // no replies points to messaging, not deliverability.
+    // Deliverability warning — only once there's enough volume in the
+    // selected period to mean anything (a handful of sends with 0 opens is
+    // normal noise, not a signal).
     let deliverabilityWarning = null;
     const MIN_SAMPLE = 20;
     if (withOutreach >= MIN_SAMPLE) {
@@ -75,18 +123,18 @@ router.get('/', async (req, res) => {
       }
     }
 
-    // Avg days active (from first outbound to now, for active candidates)
-    const activeTimes = candidates
+    // Avg days active (from first outbound to now), among the cohort
+    const activeTimes = periodCandidates
       .filter(c => c.thread && c.thread.length > 0 && !['Closed'].includes(c.stage))
       .map(c => {
-        const first = c.thread.find(m => m.direction === 'outbound');
+        const first = firstOutreach(c);
         return first ? Math.floor((now - new Date(first.timestamp)) / 86400000) : 0;
       });
     const avgDays = activeTimes.length
       ? Math.round(activeTimes.reduce((a, b) => a + b, 0) / activeTimes.length)
       : 0;
 
-    // Stage-to-stage conversion funnel
+    // Stage-to-stage conversion funnel — always current, all candidates
     const funnel = [];
     for (let i = 0; i < STAGES.length - 1; i++) {
       const from = STAGES[i];
@@ -98,7 +146,9 @@ router.get('/', async (req, res) => {
     }
 
     return res.json({
-      total: candidates.length,
+      period: daysParam || 'all',
+      total: periodCandidates.length,
+      totalAllTime: candidates.length,
       stageCounts,
       contacted,
       repliedCount,
@@ -125,12 +175,20 @@ router.get('/', async (req, res) => {
 router.get('/subjects', async (req, res) => {
   try {
     const candidates = await storage.getUserCandidates(req.session.userId);
+    const user = await storage.getUserById(req.session.userId);
+    const daysParam = req.query.days && req.query.days !== 'all' ? parseInt(req.query.days, 10) : null;
+    const cutoff = !daysParam || daysParam <= 0
+      ? null
+      : daysParam === 1
+        ? startOfTodayFor(user, new Date())
+        : new Date(Date.now() - daysParam * 86400000);
     const bySubject = new Map(); // normalized subject → { subject, sent, opened }
 
     for (const c of candidates) {
       // The first outbound message's subject is the one that drove the open
       const firstOut = (c.thread || []).find(m => m.direction === 'outbound');
       if (!firstOut || !firstOut.subject) continue;
+      if (cutoff && new Date(firstOut.timestamp) < cutoff) continue;
       // Normalize: strip leading Re:, trailing first-name personalization noise
       const key = firstOut.subject.replace(/^re:\s*/i, '').trim().toLowerCase();
       if (!key) continue;

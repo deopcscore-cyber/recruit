@@ -401,16 +401,22 @@ async function processQueueJob() {
   if (!job) return;
 
   queueBusy = true;
-  queueSvc.updateJob(job.id, { status: 'sending' });
+  queueSvc.updateJob(job.id, { status: 'sending', sendingAt: new Date().toISOString() });
 
   try {
-    if ((job.type || 'outreach') === 'followup') {
-      await _processFollowUpJob(job);
-    } else if (job.type === 'scheduled_send') {
-      await _processScheduledSendJob(job);
-    } else {
-      await _processOutreachJob(job);
-    }
+    const work = ((job.type || 'outreach') === 'followup') ? _processFollowUpJob(job)
+      : (job.type === 'scheduled_send') ? _processScheduledSendJob(job)
+      : _processOutreachJob(job);
+    // Watchdog: a provider call that hangs with no timeout (a black-holed
+    // socket to Gmail/OpenAI) would otherwise hold queueBusy forever and
+    // freeze ALL sending — every job stuck 'pending', none sent, none failed,
+    // no error surfaced. 2 min is far longer than any real send, so hitting
+    // this always means the call is genuinely wedged. Mark failed (not
+    // pending) so a late-completing hung call can't cause a double-send.
+    await Promise.race([
+      work,
+      new Promise((_, reject) => setTimeout(() => reject(new Error('Queue job timed out after 120s — provider call wedged')), 120000))
+    ]);
   } catch (err) {
     const retryAt = _gmailRateLimitRetryAt(err);
     if (retryAt) {
@@ -442,6 +448,14 @@ async function _processOutreachJob(job) {
   if (!user || !candidate) throw new Error('User or candidate not found');
   if (!_isEmailConnected(user)) throw new Error('No email provider connected');
   if ((user.credits || 0) <= 0) throw new Error('Insufficient credits');
+
+  // Belt-and-suspenders: pausing autopilot cancels its pending jobs at save
+  // time, but re-check here too so a job that somehow survives a pause
+  // (a race, a bug elsewhere) can never send once autopilot is off.
+  if (job.source === 'autopilot' && !user.autopilot?.enabled) {
+    queueSvc.updateJob(job.id, { status: 'cancelled', reason: 'autopilot_paused' });
+    return;
+  }
 
   // For autopilot jobs, enforce the send window — reschedule if we're outside it
   if (job.source === 'autopilot' && user.autopilot) {
@@ -686,6 +700,10 @@ queueSvc.resetStuckJobs(); // recover any jobs frozen mid-send by a server crash
 
 // Check for due jobs every 30 seconds
 setInterval(processQueueJob, 30 * 1000);
+// Belt-and-suspenders: also sweep for jobs left in 'sending' well past any
+// reasonable send time (a hard kill mid-job that skipped the watchdog), so a
+// single wedged job can't quietly freeze the queue between restarts.
+setInterval(() => queueSvc.resetStuckJobs(3 * 60 * 1000), 5 * 60 * 1000);
 // Prune old completed jobs every 6 hours
 setInterval(() => queueSvc.pruneOld(), 6 * 60 * 60 * 1000);
 // Safety-net sweep for role-JD edits uploaded but never sent (closed tab,

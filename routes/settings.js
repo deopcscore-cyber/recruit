@@ -150,8 +150,17 @@ router.put('/', async (req, res) => {
         maxSpacingMin: clampInt(ap.maxSpacingMin, 1, 480, prev.maxSpacingMin || 60),
         warmup:        ap.warmup !== undefined ? !!ap.warmup : (prev.warmup !== false)
       };
-      // Stamp the warm-up start the first time it's switched on
-      if (enabled && !prev.enabled) user.autopilot.startedAt = new Date().toISOString();
+      // Stamp the warm-up start only the FIRST time it's ever enabled — not on
+      // every resume. Otherwise pausing for a break and resuming would reset
+      // the ramp to day 0 and crater the daily cap back to ~10.
+      if (enabled && !user.autopilot.startedAt) user.autopilot.startedAt = new Date().toISOString();
+      // Re-enabling after a pause must clear today's once-per-day marker.
+      // Without this, planDailyRun sees lastRunDate === today and refuses to
+      // run for the rest of the day, so a pause+resume silently kills the whole
+      // day's auto-sending (the same thing "Send batch now" already does at
+      // /autopilot/run-now). planDailyRun subtracts whatever already sent today,
+      // so re-planning can't exceed the daily cap.
+      if (enabled && !prev.enabled) user.autopilot.lastRunDate = null;
       // Ensure min ≤ max
       if (user.autopilot.minSpacingMin > user.autopilot.maxSpacingMin) {
         user.autopilot.maxSpacingMin = user.autopilot.minSpacingMin;
@@ -183,6 +192,17 @@ router.put('/', async (req, res) => {
       return user;
     });
     if (!user) return res.status(404).json({ error: 'User not found' });
+
+    // Pausing autopilot only ever stopped it from scheduling anything NEW —
+    // outreach jobs it had already queued before the pause kept firing on
+    // their original schedule, since the queue processor never re-checks
+    // user.autopilot.enabled at send time. Cancel them here instead, the
+    // moment the pause is actually saved. Scoped to source:'autopilot' so a
+    // recruiter's own manual bulk-send batch isn't swept up in the same call.
+    if (req.body.autopilot !== undefined && user.autopilot && !user.autopilot.enabled) {
+      try { require('../services/queue').cancelPendingForUser(user.id, 'outreach', 'autopilot'); }
+      catch (e) { console.error('Autopilot pause cleanup error:', e.message); }
+    }
 
     // If autopilot is on, plan today's batch immediately so jobs queue right
     // away instead of waiting up to 15 min for the background loop.

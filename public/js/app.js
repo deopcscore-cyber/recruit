@@ -1595,12 +1595,40 @@ async function sendFollowUpEmail(candidateId) {
 }
 
 // ---- Analytics Page ----
-async function loadAnalyticsPage() {
+const ANALYTICS_PERIODS = [
+  { key: '1',   label: 'Today',      days: 1 },
+  { key: '7',   label: '7 days',     days: 7 },
+  { key: '30',  label: '30 days',    days: 30 },
+  { key: '90',  label: '90 days',    days: 90 },
+  { key: 'all', label: 'All time',   days: null }
+];
+
+async function loadAnalyticsPage(periodKey) {
   const el = document.getElementById('analytics-content');
   if (!el) return;
-  el.innerHTML = `<div style="padding:40px;text-align:center;color:var(--text-muted)">Loading…</div>`;
+
+  // Remember the selected period across visits, default to All time
+  if (periodKey) {
+    try { localStorage.setItem('analytics-period', periodKey); } catch (_) {}
+  } else {
+    periodKey = (() => { try { return localStorage.getItem('analytics-period'); } catch (_) { return null; } })() || 'all';
+  }
+  const period = ANALYTICS_PERIODS.find(p => p.key === periodKey) || ANALYTICS_PERIODS[ANALYTICS_PERIODS.length - 1];
+
+  const periodBarHtml = `
+    <div style="display:flex;gap:6px;margin-bottom:18px" id="analytics-period-bar">
+      ${ANALYTICS_PERIODS.map(p => `
+        <button class="btn ${p.key === period.key ? 'btn-primary' : 'btn-secondary'} btn-sm analytics-period-btn" data-period="${p.key}" style="font-size:0.8rem">${p.label}</button>
+      `).join('')}
+    </div>`;
+
+  el.innerHTML = `${periodBarHtml}<div style="padding:40px;text-align:center;color:var(--text-muted)">Loading…</div>`;
+  el.querySelectorAll('.analytics-period-btn').forEach(btn => {
+    btn.addEventListener('click', () => loadAnalyticsPage(btn.dataset.period));
+  });
+
   try {
-    const d = await API.analytics.get();
+    const d = await API.analytics.get(period.days);
     const STAGE_COLORS_LOCAL = {
       'Imported':'#64748b','Outreach Sent':'#2563eb','Replied':'#7c3aed',
       'Resume Requested':'#d97706','Resume Received':'#0891b2','Interviewing':'#16a34a','Closed':'#374151'
@@ -1648,17 +1676,36 @@ async function loadAnalyticsPage() {
           </div>`;
         }).join('');
 
+    const periodLabel = period.days ? period.label.toLowerCase() : 'all time';
+
     el.innerHTML = `
-      <!-- KPI strip -->
-      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:16px;margin-bottom:24px">
+      ${periodBarHtml}
+
+      <!-- KPI strip — period-scoped: changes with the selector above -->
+      <div style="font-size:0.72rem;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.04em;margin-bottom:8px">This period (${escapeHtml(periodLabel)})</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:16px;margin-bottom:20px">
         ${[
-          { label:'Total Candidates', value: d.total, color:'#2563eb' },
+          { label: period.days ? 'Contacted' : 'Total Candidates', value: d.total, color:'#2563eb' },
           { label:'Response Rate',    value: d.responseRate+'%', color:'#7c3aed' },
           { label:'Email Open Rate',  value: d.openRate+'%', color:'#0891b2' },
-          { label:'Avg Days Active',  value: d.avgDays+'d', color:'#d97706' },
+          { label:'Avg Days Active',  value: d.avgDays+'d', color:'#d97706' }
+        ].map(k => `
+          <div class="settings-card" style="margin:0">
+            <div class="settings-card-body" style="text-align:center;padding:16px 12px">
+              <div style="font-size:1.8rem;font-weight:700;color:${k.color}">${k.value}</div>
+              <div style="font-size:0.75rem;color:var(--text-muted);margin-top:4px">${k.label}</div>
+            </div>
+          </div>`).join('')}
+      </div>
+
+      <!-- Right now — always current, doesn't change with the period selector -->
+      <div style="font-size:0.72rem;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.04em;margin-bottom:8px">Right now</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:16px;margin-bottom:24px">
+        ${[
           { label:'Unread Replies',   value: d.unreadCount, color: d.unreadCount>0?'#ef4444':'#16a34a' },
           { label:'Follow-Ups Due',   value: d.followUpsDue, color: d.followUpsDue>0?'#f97316':'#16a34a' },
-          { label:'Auto Follow-Ups Queued', value: d.pendingFollowUps||0, color:'#6366f1' }
+          { label:'Auto Follow-Ups Queued', value: d.pendingFollowUps||0, color:'#6366f1' },
+          { label:'Total (all time)', value: d.totalAllTime ?? d.total, color:'#64748b' }
         ].map(k => `
           <div class="settings-card" style="margin:0">
             <div class="settings-card-body" style="text-align:center;padding:16px 12px">
@@ -1670,14 +1717,14 @@ async function loadAnalyticsPage() {
 
       <!-- Stage breakdown -->
       <div class="settings-card">
-        <div class="settings-card-header"><h3>Pipeline Breakdown</h3></div>
+        <div class="settings-card-header"><h3>Pipeline Breakdown</h3><span class="settings-card-hint">Current stage — not period-scoped</span></div>
         <div class="settings-card-body">${stageRows}</div>
       </div>
 
       <!-- Reply sentiment + subject performance -->
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
         <div class="settings-card" style="margin:0">
-          <div class="settings-card-header"><h3>Reply Sentiment</h3><span class="settings-card-hint">Auto-classified inbound replies</span></div>
+          <div class="settings-card-header"><h3>Reply Sentiment</h3><span class="settings-card-hint">Classified ${escapeHtml(periodLabel)}</span></div>
           <div class="settings-card-body">${sentimentHtml}</div>
         </div>
         <div class="settings-card" style="margin:0">
@@ -1689,7 +1736,7 @@ async function loadAnalyticsPage() {
       <!-- Follow-ups sent per day -->
       <div class="settings-card">
         <div class="settings-card-header">
-          <h3>📤 Follow-Ups Sent <span style="font-size:0.8rem;font-weight:400;color:var(--text-muted)">last 14 days</span></h3>
+          <h3>📤 Follow-Ups Sent <span style="font-size:0.8rem;font-weight:400;color:var(--text-muted)" id="followups-chart-range"></span></h3>
         </div>
         <div class="settings-card-body" id="followups-sent-chart"><p style="color:var(--text-muted);font-size:0.85rem">Loading…</p></div>
       </div>
@@ -1697,14 +1744,20 @@ async function loadAnalyticsPage() {
       <!-- Follow-ups due -->
       <div class="settings-card">
         <div class="settings-card-header">
-          <h3>⏰ Follow-Ups Due <span style="font-size:0.8rem;font-weight:400;color:var(--text-muted)">(${d.followUpsDue})</span></h3>
+          <h3>⏰ Follow-Ups Due <span style="font-size:0.8rem;font-weight:400;color:var(--text-muted)">(${d.followUpsDue}) — right now, not period-scoped</span></h3>
         </div>
         <div class="settings-card-body">${followUpHtml}</div>
       </div>
     `;
 
+    // Re-wire the period selector — the innerHTML replacement above wiped
+    // out the temporary bar (and its listeners) rendered during the loading state.
+    el.querySelectorAll('.analytics-period-btn').forEach(btn => {
+      btn.addEventListener('click', () => loadAnalyticsPage(btn.dataset.period));
+    });
+
     // Subject leaderboard (separate call — works retroactively on existing sends)
-    API.analytics.subjects().then(({ subjects }) => {
+    API.analytics.subjects(period.days).then(({ subjects }) => {
       const lb = document.getElementById('subject-leaderboard');
       if (!lb) return;
       if (!subjects || !subjects.length) { lb.innerHTML = `<p style="color:var(--text-muted);font-size:0.85rem">No outreach sent yet.</p>`; return; }
@@ -1721,12 +1774,17 @@ async function loadAnalyticsPage() {
     // Follow-ups sent per day — counts both the automated 3/7-day sequence
     // and manually-drafted follow-ups sent via the Thread tab. Only successful
     // sends land here (a message only exists in the thread once it's actually
-    // delivered), so this can't be inflated by queued/failed attempts.
-    API.get('/api/analytics/followups?days=14').then(({ series, total }) => {
+    // delivered), so this can't be inflated by queued/failed attempts. The
+    // endpoint caps at 90 days regardless of period, so "All time" still
+    // shows the most recent 90-day window rather than failing.
+    const chartDays = Math.min(period.days || 90, 90);
+    const rangeLabel = document.getElementById('followups-chart-range');
+    if (rangeLabel) rangeLabel.textContent = `last ${chartDays} day${chartDays === 1 ? '' : 's'}`;
+    API.analytics.followups(chartDays).then(({ series, total }) => {
       const chart = document.getElementById('followups-sent-chart');
       if (!chart) return;
       if (!series || !series.length || total === 0) {
-        chart.innerHTML = `<p style="color:var(--text-muted);font-size:0.85rem">No follow-ups sent in the last 14 days.</p>`;
+        chart.innerHTML = `<p style="color:var(--text-muted);font-size:0.85rem">No follow-ups sent in the last ${chartDays} days.</p>`;
         return;
       }
       const max = Math.max(1, ...series.map(s => s.count));
@@ -1740,7 +1798,7 @@ async function loadAnalyticsPage() {
         </div>`;
       }).join('');
       chart.innerHTML = `
-        <div style="font-size:0.78rem;color:var(--text-muted);margin-bottom:10px">${total} sent over the last 14 days</div>
+        <div style="font-size:0.78rem;color:var(--text-muted);margin-bottom:10px">${total} sent over the last ${chartDays} days</div>
         ${rows}`;
     }).catch(() => {
       const chart = document.getElementById('followups-sent-chart');

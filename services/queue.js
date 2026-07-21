@@ -40,12 +40,16 @@ function getJobsForUser(userId) {
 }
 
 // Cancel all pending jobs for a user.
-// Optionally restrict to a single type ('outreach' | 'followup').
-function cancelPendingForUser(userId, type = null) {
+// Optionally restrict to a single type ('outreach' | 'followup') and/or a
+// single source ('autopilot' vs. a manually-queued bulk batch) — so pausing
+// autopilot doesn't also wipe out a recruiter's own manual bulk-send queue.
+function cancelPendingForUser(userId, type = null, source = null) {
   const queue = read();
   let changed = false;
   queue.forEach(j => {
-    if (j.userId === userId && j.status === 'pending' && (!type || (j.type || 'outreach') === type)) {
+    if (j.userId === userId && j.status === 'pending'
+      && (!type || (j.type || 'outreach') === type)
+      && (!source || j.source === source)) {
       j.status = 'cancelled';
       changed = true;
     }
@@ -118,12 +122,23 @@ function advancePendingNow(userId, minSpacingMin = 10, maxSpacingMin = 60, windo
   return queue.filter(j => j.userId === userId && j.status === 'pending' && (j.type || 'outreach') === 'outreach').length;
 }
 
-// On server start, reset any jobs that got stuck in 'sending' (server crashed mid-job)
-function resetStuckJobs() {
+// Reset jobs stuck in 'sending' back to pending. With no argument (boot), it
+// resets every 'sending' job — nothing is legitimately in-flight right after a
+// restart. With maxAgeMs (periodic sweep), it only resets jobs that entered
+// 'sending' longer ago than that, so a job that's legitimately mid-send right
+// now (a normal send is seconds) is never flipped back and re-sent.
+function resetStuckJobs(maxAgeMs = null) {
   const queue = read();
+  const now = Date.now();
   let changed = false;
   queue.forEach(j => {
-    if (j.status === 'sending') { j.status = 'pending'; changed = true; }
+    if (j.status !== 'sending') return;
+    if (maxAgeMs != null) {
+      const age = now - new Date(j.sendingAt || 0).getTime();
+      if (age < maxAgeMs) return; // still plausibly in-flight — leave it
+    }
+    j.status = 'pending';
+    changed = true;
   });
   if (changed) { write(queue); console.log('[Queue] Reset stuck "sending" jobs back to pending'); }
 }
