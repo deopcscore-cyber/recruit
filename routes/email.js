@@ -338,7 +338,10 @@ router.post('/fetch', requireAuth, async (req, res) => {
     // threadId -> candidateId map so gmail service can match by thread directly
     const candidateThreadIds = {};
     for (const c of candidates) {
-      if (c.gmailThreadId) candidateThreadIds[c.gmailThreadId] = c.id;
+      // Skip closed/bounced — no point re-scanning their threads on the shared quota
+      if (c.gmailThreadId && !c.bounced && (c.stage || '') !== 'Closed') {
+        candidateThreadIds[c.gmailThreadId] = c.id;
+      }
     }
     const emailSvc = getEmailService(user);
     const replies = await emailSvc.fetchUnreadReplies(req.session.userId, candidateEmails, candidateThreadIds);

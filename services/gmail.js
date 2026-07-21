@@ -2,6 +2,19 @@ const { google } = require('googleapis');
 const storage = require('./storage');
 const { BASE_URL } = require('../config');
 
+const _sleep = ms => new Promise(r => setTimeout(r, ms));
+
+// Gmail signals its per-user rate limit as "User-rate limit exceeded. Retry
+// after ..." (HTTP 429 / reason userRateLimitExceeded). Reply-fetching must
+// stop the moment it sees this rather than keep hammering — the whole per-user
+// quota is shared with actual outreach sends, so a runaway fetch loop blocks
+// sending entirely.
+function _isGmailRateLimit(e) {
+  const msg = (e && e.message) || '';
+  return /rate limit exceeded|userRateLimitExceeded|rateLimitExceeded/i.test(msg)
+    || e?.code === 429 || e?.response?.status === 429;
+}
+
 // ─── Markdown → HTML converter (used for JD emails) ──────────────────────────
 function inlineFormat(text) {
   return text
@@ -386,11 +399,20 @@ async function fetchUnreadReplies(userId, candidateEmails = [], candidateThreadI
   }
   const gmail = google.gmail({ version: 'v1', auth });
 
-  const threadIds = Object.keys(candidateThreadIds);
+  // Bound the work and pace it: the whole per-user Gmail quota is shared with
+  // outreach sends, so an unthrottled loop over a big pipeline's threads blew
+  // the limit and starved sending. ~8 fetches/sec stays well under Gmail's
+  // per-user/second quota; the cap bounds a single cycle (the rest are picked
+  // up next cycle).
+  const MAX_THREADS_PER_CYCLE = 200;
+  const PACE_MS = 120;
+  const threadIds = Object.keys(candidateThreadIds).slice(0, MAX_THREADS_PER_CYCLE);
   const messageMap = new Map(); // gmailMessageId -> { msg data, matchedCandidateId }
+  let rateLimited = false;
 
-  // ── Primary: fetch every known candidate thread and look for new messages ──
-  for (const threadId of threadIds) {
+  // ── Primary: fetch known candidate threads and look for new messages ──
+  for (let i = 0; i < threadIds.length; i++) {
+    const threadId = threadIds[i];
     try {
       const threadRes = await gmail.users.threads.get({
         userId: 'me',
@@ -407,13 +429,22 @@ async function fetchUnreadReplies(userId, candidateEmails = [], candidateThreadI
         }
       }
     } catch (e) {
+      // Stop immediately on a rate limit — continuing would only burn more of
+      // the shared quota and delay sends further. Retry next cycle.
+      if (_isGmailRateLimit(e)) {
+        rateLimited = true;
+        console.warn(`Gmail rate limit during reply fetch — stopped after ${i}/${threadIds.length} threads; retrying next cycle`);
+        break;
+      }
       console.error('Thread fetch error:', e.message);
     }
+    if (i < threadIds.length - 1) await _sleep(PACE_MS);
   }
 
   // ── Fallback: also search by candidate email addresses for replies
   //    sent from a different address than stored (the common edge case) ────────
-  if (candidateEmails.length > 0) {
+  //    Skipped once rate-limited — no sense burning more of the shared quota.
+  if (!rateLimited && candidateEmails.length > 0) {
     const BATCH = 20;
     for (let i = 0; i < candidateEmails.length; i += BATCH) {
       const batch = candidateEmails.slice(i, i + BATCH);
@@ -423,7 +454,11 @@ async function fetchUnreadReplies(userId, candidateEmails = [], candidateThreadI
         for (const m of res.data.messages || []) {
           if (!messageMap.has(m.id)) messageMap.set(m.id, { msgId: m.id, matchedCandidateId: null });
         }
-      } catch (e) { /* skip */ }
+      } catch (e) {
+        if (_isGmailRateLimit(e)) { rateLimited = true; break; }
+        /* otherwise skip this batch */
+      }
+      if (i + BATCH < candidateEmails.length) await _sleep(PACE_MS);
     }
   }
 
@@ -471,6 +506,11 @@ async function fetchUnreadReplies(userId, candidateEmails = [], candidateThreadI
         requestBody: { removeLabelIds: ['UNREAD'] }
       }).catch(() => {});
     } catch (err) {
+      // Same shared-quota concern: stop enriching messages once rate-limited.
+      if (_isGmailRateLimit(err)) {
+        console.warn('Gmail rate limit while reading messages — returning what was gathered so far');
+        break;
+      }
       console.error(`Error fetching message:`, err.message);
     }
   }

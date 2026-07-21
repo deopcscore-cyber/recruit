@@ -765,8 +765,14 @@ async function runAutoFetch() {
         // the right threads and email addresses (without these it returns nothing)
         const candidates = await storageService.getUserCandidates(user.id);
         const candidateEmails    = candidates.map(c => c.email).filter(Boolean);
+        // Skip closed/bounced candidates — no reason to keep re-scanning their
+        // threads every cycle, and it needlessly spends the shared Gmail quota.
         const candidateThreadIds = {};
-        candidates.forEach(c => { if (c.gmailThreadId) candidateThreadIds[c.gmailThreadId] = c.id; });
+        candidates.forEach(c => {
+          if (c.gmailThreadId && !c.bounced && (c.stage || '') !== 'Closed') {
+            candidateThreadIds[c.gmailThreadId] = c.id;
+          }
+        });
 
         // Zoho ignores the extra args; Gmail requires them
         const replies = await svc.fetchUnreadReplies(user.id, candidateEmails, candidateThreadIds);
