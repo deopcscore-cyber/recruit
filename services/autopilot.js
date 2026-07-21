@@ -113,7 +113,17 @@ function planDailyRun(user, candidates, now = new Date()) {
     return { ran: true, jobs: [], count: 0, reason: 'no_eligible', lastRunDate: today };
   }
 
-  const cap = effectiveCap(cfg, now);
+  // Subtract whatever autopilot already sent today from today's cap. Re-planning
+  // can now happen mid-day (a pause+resume clears lastRunDate), so without this a
+  // resume could push total sends past the daily limit — bad for reputation.
+  const sentToday = queueSvc.getJobsForUser(user.id).filter(j =>
+    j.source === 'autopilot' && j.status === 'sent'
+    && localDateStr(new Date(j.sentAt || 0), offset) === today).length;
+  const cap = Math.max(0, effectiveCap(cfg, now) - sentToday);
+  if (cap === 0) {
+    cfg.lastRunDate = today;
+    return { ran: true, jobs: [], count: 0, reason: 'cap_reached_today', lastRunDate: today };
+  }
   const batch = eligible.slice(0, cap);
 
   // Drip the batch across the remaining window. We aim to fit the whole cap by
