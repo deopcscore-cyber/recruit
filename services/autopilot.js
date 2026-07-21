@@ -49,6 +49,25 @@ function parseHM(hm) {
   return { h: h || 0, m: m || 0 };
 }
 
+// The next window-START instant strictly in the future, as real UTC millis.
+// Used to reschedule a job the queue reached outside its send window: the old
+// code pushed such jobs to *today's* start, which is in the past once the
+// window has ended — so the job stayed perpetually "due", got re-checked,
+// re-pushed to the same past time, and livelocked (0 sent, next-send time
+// stuck in the past). Advancing to the next real future opening (skipping
+// weekends when weekdaysOnly is set) lets the job actually fire when the
+// window next opens instead of churning every tick.
+function nextWindowStart(user, now, offsetHours) {
+  const cfg = getConfig(user);
+  for (let addDays = 0; addDays <= 7; addDays++) {
+    const probe = new Date(now.getTime() + addDays * 86400000);
+    const { startMs, dow } = windowBounds(cfg, probe, offsetHours);
+    if (cfg.weekdaysOnly && (dow === 0 || dow === 6)) continue;
+    if (startMs > now.getTime()) return startMs;
+  }
+  return now.getTime() + 60 * 60 * 1000; // safety fallback: one hour out
+}
+
 // Build today's [start,end] window as real UTC millis, given the sender's offset.
 function windowBounds(cfg, now, offsetHours) {
   const local = new Date(now.getTime() + offsetHours * 3600 * 1000);
@@ -184,4 +203,4 @@ function diagnose(user, { emailConnected, credits, eligible, now = new Date() } 
   return { ok: true, blocker: null, message: 'Active and sending.' };
 }
 
-module.exports = { DEFAULTS, getConfig, effectiveCap, daysSinceStart, planDailyRun, diagnose, windowBounds };
+module.exports = { DEFAULTS, getConfig, effectiveCap, daysSinceStart, planDailyRun, diagnose, windowBounds, nextWindowStart };

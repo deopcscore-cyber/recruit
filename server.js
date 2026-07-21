@@ -445,14 +445,24 @@ async function _processOutreachJob(job) {
 
   // For autopilot jobs, enforce the send window — reschedule if we're outside it
   if (job.source === 'autopilot' && user.autopilot) {
-    const { windowBounds } = require('./services/autopilot');
+    const autopilotSvc  = require('./services/autopilot');
     const schedulingSvc = require('./services/scheduling');
     const offset = schedulingSvc.userOffset(user);
-    const { startMs, endMs } = windowBounds(user.autopilot, new Date(), offset);
+    // getConfig (not raw user.autopilot) so window bounds match the planner and
+    // the status endpoint exactly — a partial autopilot object missing
+    // windowStart/windowEnd otherwise computes a different window here.
+    const cfg = autopilotSvc.getConfig(user);
+    const { startMs, endMs, dow } = autopilotSvc.windowBounds(cfg, new Date(), offset);
     const now = Date.now();
-    if (now < startMs || now > endMs) {
-      // Outside window — push to next window start instead of sending now
-      queueSvc.updateJob(job.id, { status: 'pending', scheduledAt: new Date(startMs).toISOString() });
+    const weekendBlocked = cfg.weekdaysOnly && (dow === 0 || dow === 6);
+    if (now < startMs || now > endMs || weekendBlocked) {
+      // Outside window (or a blocked weekend) — push to the next *future*
+      // window opening. Using nextWindowStart (not today's startMs, which is
+      // in the past once the window has ended) avoids a livelock where the
+      // job stays perpetually due and never sends.
+      const nextStart = autopilotSvc.nextWindowStart(user, new Date(), offset);
+      queueSvc.updateJob(job.id, { status: 'pending', scheduledAt: new Date(nextStart).toISOString() });
+      console.log(`Autopilot job ${job.id} reached outside send window — rescheduled to ${new Date(nextStart).toISOString()}`);
       return;
     }
   }
