@@ -567,24 +567,79 @@ Write the outreach email now:`;
 // Builds the JSON schema instructions for one role variant, reused for both
 // the "current level" and "step up" variants so their structure stays
 // identical (only the seniority/scope differs).
-function _roleVariantSchemaBlock(label, angle) {
-  return `{
-  "variantLabel": "${label}",
-  "title": "role title matching this angle: ${angle} — formatted like a real corporate posting title, e.g. \\"VP, Construction & Development\\"",
-  "employmentType": "Full-Time (or what fits)",
-  "workMode": "On-site, Hybrid, or Remote — whichever fits the role and the candidate's location",
-  "companyIntro": {
-    "headline": "an all-caps company banner headline, e.g. \\"ACME — REIMAGINE SENIOR CARE WITH US\\"",
-    "body": "2 substantial paragraphs (separated by \\\\n\\\\n), each 3-5 full sentences, selling the company's mission, culture, and ambition in a confident careers-page voice, drawn from the company pitch. Include a short mantra-style line if it fits naturally (e.g. a phrase that captures the company's operating philosophy). End with a sentence about the kind of person the company wants."
-  },
-  "summary": "2 dense paragraphs (separated by \\\\n\\\\n), each 4-6 full sentences, describing the role's mandate, scope, where it sits in the organization, who it partners with, and why it matters right now — written so this candidate's real background is obviously the profile it calls for, but phrased like a genuine posting (never name the candidate)",
-  "responsibilityGroups": [
-    { "heading": "thematic subheading, e.g. \\"Strategic Leadership\\"", "bullets": ["3-6 responsibility bullets for this theme, each a complete, detailed sentence (20-35 words) — not a short fragment"] },
-    { "heading": "…6 to 8 groups total, covering the full scope of the role end-to-end (e.g. strategic leadership, a domain-specific execution group, cross-functional/partner coordination, team leadership & management, quality/compliance, process improvement & innovation) — themes chosen to fit this role and showcase this candidate's strengths in depth, not just breadth", "bullets": ["…"] }
-  ],
-  "requirements": ["8-10 bullets, each a complete, detailed sentence (not a short fragment): education, years of experience, domain expertise, specific tools/software, track record on deals or projects of a certain size, certifications — written so THIS candidate clearly meets every one (mirror their actual years, domains, scope, and transitions) but phrased as a genuine public posting: never name the candidate or their employers"],
-  "whatWeOffer": ["6-8 bullets. FIRST bullet is compensation for this role's level (base range + bonus/equity, positioned above what their current seat would typically pay); then benefits and perks in the company's voice — PTO, stock purchase or equity program, retirement matching, tuition/professional development, health benefits, and any other perks that fit"]
-}`;
+// Parse the plain-text, section-marker role-JD format into the normalized
+// object the DOCX builder consumes. This format is used instead of JSON on
+// purpose: the JD is 1,500-2,500 words of dense prose full of apostrophes and
+// quotes, and forcing that through strict JSON escaping broke constantly (one
+// stray unescaped " anywhere lost the whole response). Markers need no
+// escaping, and a truncated response is still partially usable.
+//
+// Section headers look like:  ===TAG===  or  ===GROUP: Heading Text===
+// Bullets are lines beginning with -, *, or •.
+function parseRoleJDMarkers(raw) {
+  const headerRe = /^\s*={2,}\s*([A-Z_]+)\s*(?::\s*(.*?))?\s*={2,}\s*$/;
+  const bulletRe = /^\s*[-*•]\s+(.*\S)\s*$/;
+
+  const sections = []; // { tag, label, lines: [] }
+  let current = null;
+  for (const line of String(raw || '').replace(/\r\n/g, '\n').split('\n')) {
+    const h = line.match(headerRe);
+    if (h) {
+      current = { tag: h[1].toUpperCase(), label: (h[2] || '').trim(), lines: [] };
+      sections.push(current);
+    } else if (current) {
+      current.lines.push(line);
+    }
+  }
+
+  const prose = lines => lines.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+  const bullets = lines => {
+    const marked = lines.map(l => (l.match(bulletRe) || [])[1]).filter(Boolean);
+    if (marked.length) return marked;
+    // Fallback: the model wrote plain lines without bullet markers — treat each
+    // non-empty line as a bullet so the content isn't silently dropped.
+    return lines.map(l => l.trim()).filter(Boolean);
+  };
+  const firstLine = lines => (lines.map(l => l.trim()).find(Boolean) || '');
+
+  const variant = {
+    variantLabel: 'Your Next Step',
+    title: '', employmentType: '', workMode: '',
+    companyIntro: { headline: '', body: '' },
+    summary: '',
+    responsibilityGroups: [],
+    requirements: [],
+    whatWeOffer: []
+  };
+  let emailSubject = '', emailBody = '';
+
+  for (const s of sections) {
+    switch (s.tag) {
+      case 'EMAIL_SUBJECT': emailSubject = firstLine(s.lines); break;
+      case 'EMAIL_BODY':    emailBody = prose(s.lines); break;
+      case 'JD_TITLE':      variant.title = firstLine(s.lines); break;
+      case 'JD_TYPE':       variant.employmentType = firstLine(s.lines); break;
+      case 'JD_MODE':       variant.workMode = firstLine(s.lines); break;
+      case 'COMPANY_HEADLINE': variant.companyIntro.headline = firstLine(s.lines); break;
+      case 'COMPANY_BODY':  variant.companyIntro.body = prose(s.lines); break;
+      case 'SUMMARY':       variant.summary = prose(s.lines); break;
+      case 'GROUP': {
+        const heading = s.label || firstLine(s.lines);
+        // If the heading came from the first content line (no inline label),
+        // don't also count it as a bullet.
+        const bulletLines = s.label ? s.lines : s.lines.slice(s.lines.findIndex(l => l.trim()) + 1);
+        const b = bullets(bulletLines);
+        if (heading && b.length) variant.responsibilityGroups.push({ heading, bullets: b });
+        break;
+      }
+      case 'REQUIREMENTS':  variant.requirements = bullets(s.lines); break;
+      case 'OFFER':
+      case 'WHAT_WE_OFFER': variant.whatWeOffer = bullets(s.lines); break;
+      default: break; // END, or anything unrecognized — ignore
+    }
+  }
+
+  return { emailSubject, emailBody, variant };
 }
 
 async function generateRoleJD(candidate, user, instructions) {
@@ -599,7 +654,7 @@ async function generateRoleJD(candidate, user, instructions) {
 
   const convoContext = formatConversationContext(candidate);
 
-  const prompt = `You are ${user.name}, writing to an executive candidate at ${company.name}. You are producing TWO things at once: (1) a short personal email, and (2) ONE tailored role description — a clear step up from the candidate's current level — that will be attached as a PDF (referenced from the email, not pasted into it).
+  const prompt = `You are ${user.name}, writing to an executive candidate at ${company.name}. You are producing TWO things at once: (1) a short personal email, and (2) ONE tailored role description — a clear step up from the candidate's current level — that will be attached as a Word document (referenced from the email, not pasted into it).
 
 RECRUITER STYLE:
 ${styleInfo}
@@ -607,9 +662,9 @@ ${styleInfo}
 CANDIDATE INFORMATION:
 ${candidateInfo}
 ${convoContext ? '\n' + convoContext + '\n' : ''}
-═══════════════════════════════════════════
+─────────────────────────
 PART 1 — THE EMAIL BODY
-═══════════════════════════════════════════
+─────────────────────────
 GOLD STANDARD EXAMPLE (follow this exact structure and tone — adapt to this specific candidate, don't copy wording verbatim):
 ---
 Dear ${firstName},
@@ -634,80 +689,71 @@ RULES FOR THE EMAIL BODY:
 6. Do NOT add a signature, sign-off name, title, or company at the end — the sender's email signature is appended automatically. End right after "Looking forward to hearing your thoughts!" or equivalent.
 7. ${styleInfo ? 'Follow the style guidance above.' : 'Warm, professional, not salesy.'}
 
-═══════════════════════════════════════════
-PART 2 — THE ROLE DESCRIPTION (for the attached PDF)
-═══════════════════════════════════════════
+─────────────────────────
+PART 2 — THE ROLE DESCRIPTION (for the attachment)
+─────────────────────────
 "Your Next Step": a role one clear level above their current title/scope — same functional area, meaningfully more scope/seniority/ownership — so it reads as an aspirational but credible next move, not a fantasy leap.
 Write it in the style of an official corporate careers-site posting (like a Fortune-500 job page): confident, polished, impersonal in voice. The tailoring is invisible: the summary, responsibility themes, and requirements are engineered from this candidate's REAL background (their years, domains, scope, transitions) so they will recognise themselves in every line and clearly qualify — but the document itself never names the candidate or their employers. Never generic boilerplate.
-LENGTH AND DEPTH — this must read as a genuine, thorough corporate job posting, not a summary of one. Real postings at this level run 700-1200+ words across many responsibility groups with detailed, full-sentence bullets, a dense multi-paragraph summary, and a long requirements list. Err toward MORE detail and MORE groups/bullets rather than less — a thin, sparse-feeling document is a failure here. Follow the bullet/group counts in the schema below as a floor, not a ceiling.
+LENGTH AND DEPTH — this must read as a genuine, thorough corporate job posting. Aim for 6-8 responsibility groups, each with 3-5 detailed full-sentence bullets; a dense 2-paragraph summary; 8-10 requirement bullets; 6-8 offer bullets. Err toward more detail rather than less.
 ${company.salaryRange ? `Company's general salary range for context (use as a loose anchor, positioned for the step-up level): ${company.salaryRange}.` : ''}
 
-═══════════════════════════════════════════
-OUTPUT FORMAT — valid JSON only, no markdown fences, no commentary:
-═══════════════════════════════════════════
-JSON SAFETY (this is machine-parsed — a single violation breaks the whole response):
-- Every double-quote character (") inside any text value MUST be escaped as \\". Simpler: avoid literal " inside text entirely — use single quotes ' instead if you want to quote something.
-- Never use smart/curly quotes ("  "  '  ') anywhere — straight quotes only, and only where JSON syntax requires them.
-- Paragraph breaks inside a string are the two-character escape sequence \\n\\n, never a literal newline.
-- No trailing commas after the last item in an array or object.
+═════════════════════════
+OUTPUT FORMAT — plain text with section markers. NO JSON, NO markdown fences, NO commentary before or after.
+═════════════════════════
+Write each section header on its own line exactly as shown (===TAG===), then the content on the following lines. Write naturally — apostrophes, quotes, dashes, and line breaks are all completely fine and need NO escaping. Repeat ===GROUP: ...=== once per responsibility theme. Finish with ===END===.
 
-{
-  "emailSubject": "a short, specific, non-generic subject line",
-  "emailBody": "the full email body as described in PART 1",
-  "variants": [
-    ${_roleVariantSchemaBlock('Your Next Step', 'one clear level above their current title/scope')}
-  ]
-}
+===EMAIL_SUBJECT===
+a short, specific, non-generic subject line
+===EMAIL_BODY===
+the full email body from PART 1 (multiple paragraphs, plain text)
+===JD_TITLE===
+the role title, formatted like a real corporate posting (e.g. VP, Construction & Development)
+===JD_TYPE===
+Full-Time (or whatever fits)
+===JD_MODE===
+On-site, Hybrid, or Remote — whichever fits the role and the candidate's location
+===COMPANY_HEADLINE===
+an all-caps company banner line (e.g. REIMAGINE SENIOR CARE WITH US)
+===COMPANY_BODY===
+2 substantial paragraphs selling the company's mission, culture, and ambition in a confident careers-page voice, drawn from the company pitch; end with the kind of person the company wants
+===SUMMARY===
+2 dense paragraphs describing the role's mandate, scope, where it sits, who it partners with, and why it matters now — written so this candidate's real background is obviously the profile it calls for (never name the candidate)
+===GROUP: Strategic Leadership===
+- a detailed responsibility bullet, a complete sentence
+- another detailed bullet
+===GROUP: (next theme heading)===
+- ...
+(6-8 GROUP sections total: e.g. strategic leadership, a domain-specific execution group, cross-functional/partner coordination, team leadership & management, quality/compliance, process improvement & innovation)
+===REQUIREMENTS===
+- 8-10 requirement bullets (education, years, domain expertise, tools, track record, certifications) written so THIS candidate clearly meets every one, phrased as a genuine public posting
+===OFFER===
+- FIRST bullet is compensation for this level (base range + bonus/equity, positioned above their current seat); then benefits and perks in the company's voice
+===END===`;
 
-Return ONLY the JSON object.`;
-
-  // 700-1200+ words of role content plus a full email, as strict escaped
-  // JSON, routinely ran past 8000 tokens and got cut off mid-response —
-  // jsonrepair can patch the truncated JSON into something parseable, but
-  // the actual content inside is incomplete, which surfaced downstream as
-  // "came back incomplete." Raised comfortably below both providers' output
-  // caps (GPT-4o-mini: 16,384) — and below, a single automatic retry catches
-  // the cases where even that isn't enough, rather than making the recruiter
-  // manually click regenerate every time the model runs long.
+  // Plain-text markers instead of JSON: the JD is 1,500-2,500 words of dense
+  // prose, and forcing that through strict JSON escaping failed constantly (a
+  // single unescaped quote lost the whole response). Markers need no escaping,
+  // and a truncated response still parses whatever sections completed.
   const MAX_TOKENS = 15000;
   const TRUNCATED_REASON = { openai: 'length', claude: 'max_tokens' };
-
-  function extractVariants(parsed) {
-    // The prompt always asks for exactly one variant. When the raw JSON was
-    // corrupted deep inside the variant's own content (a broken string a few
-    // fields into "Your Next Step"), jsonrepair can recover a structurally
-    // valid array that's semantically wrong — the one real variant plus
-    // several near-empty stub objects where it guessed a boundary. A variant
-    // with no title and no actual role content isn't a second option, it's
-    // repair debris, so filter those out rather than attaching blank pages.
-    const rawVariants = Array.isArray(parsed.variants) ? parsed.variants : [];
-    return rawVariants
-      .filter(v => v && typeof v.title === 'string' && v.title.trim() && (
-        (Array.isArray(v.responsibilityGroups) && v.responsibilityGroups.some(g => g && Array.isArray(g.bullets) && g.bullets.length)) ||
-        (Array.isArray(v.responsibilities) && v.responsibilities.length) // legacy shape
-      ))
-      .slice(0, 1);
-  }
-
-  // Railway (and most log viewers) split on real newlines, so a raw AI
-  // response that contains literal line breaks — which is most of them,
-  // despite the prompt asking for \n\n escapes instead — shows up as many
-  // separate log rows with only the first ("{") visible in a quick look.
-  // Escaping newlines before logging keeps the whole thing on one line so
-  // it's actually usable for diagnosis.
   const oneLine = s => (s || '').replace(/\r?\n/g, '\\n');
+
+  function variantUsable(v) {
+    return v && typeof v.title === 'string' && v.title.trim()
+      && Array.isArray(v.responsibilityGroups)
+      && v.responsibilityGroups.some(g => g && Array.isArray(g.bullets) && g.bullets.length);
+  }
 
   async function attempt(fullPrompt) {
     const response = await callAI(fullPrompt, MAX_TOKENS, pickProvider(user, instructions));
     const raw = response.content[0].text.trim();
     const truncated = response.finishReason === TRUNCATED_REASON[response.provider];
-    let parsed = null, variants = [];
-    try {
-      parsed = parseAIJson(raw);
-      variants = extractVariants(parsed);
-    } catch (err) { /* parsed stays null — caller checks for that */ }
+    let parsed = null;
+    try { parsed = parseRoleJDMarkers(raw); } catch (err) { /* parsed stays null */ }
     return {
-      raw, parsed, variants, truncated,
+      raw, parsed,
+      usable: !!(parsed && variantUsable(parsed.variant)),
+      truncated,
       provider: response.provider,
       finishReason: response.finishReason,
       costCents: calcCostCents(response.usage, response.provider)
@@ -715,41 +761,30 @@ Return ONLY the JSON object.`;
   }
 
   let result = await attempt(appendInstructions(prompt, instructions));
-  console.log(`Role JD attempt 1: provider=${result.provider} finishReason=${result.finishReason} truncated=${result.truncated} parsed=${!!result.parsed} variants=${result.variants.length} rawLength=${result.raw.length}`);
+  console.log(`Role JD attempt 1: provider=${result.provider} finishReason=${result.finishReason} truncated=${result.truncated} usable=${result.usable} groups=${result.parsed?.variant?.responsibilityGroups?.length || 0} rawLength=${result.raw.length}`);
 
-  // Retry once on ANY validation failure, not just detected truncation.
-  // Production logs showed complete, non-truncated (finishReason "stop")
-  // responses that still parsed to zero valid variants — the model's JSON
-  // was broken somewhere inside responsibilityGroups (almost certainly an
-  // unescaped quote/apostrophe in a bullet, despite the prompt's explicit
-  // warning about it), and jsonrepair recovered a syntactically valid
-  // object by dropping the corrupted section rather than the whole
-  // response failing outright. A truncation-only retry never caught this
-  // because it was never truncated to begin with.
-  if (!result.parsed || !result.variants.length) {
-    console.warn(`Role JD generation failed validation (truncated=${result.truncated}) — retrying once.`);
+  // One retry if the model ignored the format or got cut off before enough
+  // sections completed. Far rarer than the JSON-escaping failures were, since
+  // markers can't be broken by prose content.
+  if (!result.usable) {
     const retryNote = result.truncated
-      ? `\n\nIMPORTANT: your previous attempt at this was cut off before the JSON finished, which made the whole response unusable. This time, prioritize returning complete, fully-closed JSON over exhaustive detail — use the SHORTER end of every "X-Y" range in the schema (bullet counts, sentence counts), and keep bullets closer to 15-20 words instead of 20-35. A complete, slightly shorter document beats an incomplete long one.`
-      : `\n\nIMPORTANT: your previous attempt at this produced JSON that could not be used — most likely an unescaped " or ' character inside one of the text values broke the structure. This time, re-read the JSON SAFETY rules above and apply them strictly: escape every literal double-quote as \\", never use curly/smart quotes, and use \\n\\n (not a real line break) for paragraph breaks. Re-check every bullet and paragraph for stray quote characters before finishing.`;
+      ? `\n\nIMPORTANT: your previous attempt was cut off before ===END===. This time keep bullets to ~15-20 words and aim for the lower end of each range so the whole document finishes — a complete, slightly shorter document is required, an incomplete long one is useless.`
+      : `\n\nIMPORTANT: your previous attempt did not follow the required output format. Output ONLY the section markers exactly as specified (===EMAIL_SUBJECT===, ===EMAIL_BODY===, ===JD_TITLE===, ===GROUP: ...===, ===REQUIREMENTS===, ===OFFER===, ===END===), each on its own line, with content on the lines beneath. No JSON, no commentary.`;
     const retryResult = await attempt(appendInstructions(prompt, instructions) + retryNote);
-    console.log(`Role JD attempt 2 (retry): provider=${retryResult.provider} finishReason=${retryResult.finishReason} truncated=${retryResult.truncated} parsed=${!!retryResult.parsed} variants=${retryResult.variants.length} rawLength=${retryResult.raw.length}`);
-    retryResult.costCents += result.costCents; // both attempts actually ran, both cost real tokens
+    console.log(`Role JD attempt 2 (retry): provider=${retryResult.provider} finishReason=${retryResult.finishReason} truncated=${retryResult.truncated} usable=${retryResult.usable} groups=${retryResult.parsed?.variant?.responsibilityGroups?.length || 0} rawLength=${retryResult.raw.length}`);
+    retryResult.costCents += result.costCents; // both attempts ran, both cost tokens
     result = retryResult;
   }
 
-  if (!result.parsed) {
-    console.error(`Role JD JSON parse failed after all repair attempts. provider=${result.provider} finishReason=${result.finishReason} raw (newlines escaped, capped at 20k chars): ${oneLine(result.raw.slice(0, 20000))}`);
-    throw new Error('Could not parse role JD response as JSON — please try regenerating.');
-  }
-  if (!result.variants.length) {
-    console.error(`Role JD parsed but no substantive variant survived validation. provider=${result.provider} finishReason=${result.finishReason} raw (newlines escaped, capped at 20k chars): ${oneLine(result.raw.slice(0, 20000))}`);
+  if (!result.usable) {
+    console.error(`Role JD generation unusable after retry. provider=${result.provider} finishReason=${result.finishReason} raw (newlines escaped, capped 20k): ${oneLine(result.raw.slice(0, 20000))}`);
     throw new Error('The AI response came back incomplete — please try regenerating.');
   }
 
   return {
     subject: result.parsed.emailSubject || '',
     text: result.parsed.emailBody || '',
-    variants: result.variants,
+    variants: [result.parsed.variant],
     jdLocation,
     costCents: result.costCents
   };
