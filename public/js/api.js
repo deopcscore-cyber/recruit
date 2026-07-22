@@ -107,17 +107,24 @@ const API = {
     dismissUnknownLead(id) { return API.delete(`/api/email/unknown-leads/${id}`); }
   },
 
-  // AI
+  // AI — the trailing attachmentContext (text extracted from an attached file)
+  // is optional; omit it and these behave exactly as before.
   ai: {
-    outreach(candidateId, instructions) { return API.post('/api/ai/outreach', { candidateId, instructions }); },
-    roleJD(candidateId, instructions) { return API.post('/api/ai/role-jd', { candidateId, instructions }); },
-    resumeReview(candidateId, instructions) { return API.post('/api/ai/resume-review', { candidateId, instructions }); },
-    victory(candidateId, instructions) { return API.post('/api/ai/victory', { candidateId, instructions }); },
-    reply(candidateId, lastMessage, instructions) { return API.post('/api/ai/reply', { candidateId, lastMessage, instructions }); },
-    followup(candidateId, instructions) { return API.post('/api/ai/followup', { candidateId, instructions }); },
+    outreach(candidateId, instructions, attachmentContext) { return API.post('/api/ai/outreach', { candidateId, instructions, attachmentContext }); },
+    roleJD(candidateId, instructions, attachmentContext) { return API.post('/api/ai/role-jd', { candidateId, instructions, attachmentContext }); },
+    resumeReview(candidateId, instructions, attachmentContext) { return API.post('/api/ai/resume-review', { candidateId, instructions, attachmentContext }); },
+    victory(candidateId, instructions, attachmentContext) { return API.post('/api/ai/victory', { candidateId, instructions, attachmentContext }); },
+    reply(candidateId, lastMessage, instructions, attachmentContext) { return API.post('/api/ai/reply', { candidateId, lastMessage, instructions, attachmentContext }); },
+    followup(candidateId, instructions, attachmentContext) { return API.post('/api/ai/followup', { candidateId, instructions, attachmentContext }); },
     score(candidateId)    { return API.post('/api/ai/score',    { candidateId }); },
-    proposal(candidateId, instructions) { return API.post('/api/ai/proposal', { candidateId, instructions }); },
-    rewriteResume(candidateId, instructions) { return API.post('/api/ai/rewrite-resume', { candidateId, instructions }); }
+    proposal(candidateId, instructions, attachmentContext) { return API.post('/api/ai/proposal', { candidateId, instructions, attachmentContext }); },
+    rewriteResume(candidateId, instructions) { return API.post('/api/ai/rewrite-resume', { candidateId, instructions }); },
+    // Upload a reference file (image/PDF/Word/text) → returns { text, filename, chars }
+    uploadAttachment(file) {
+      const fd = new FormData();
+      fd.append('file', file);
+      return API.postForm('/api/ai/attachment', fd);
+    }
   },
 
   // Bulk outreach queue (server-side)

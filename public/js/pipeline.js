@@ -1082,7 +1082,7 @@ function renderOutreachTab(body) {
     stepKey: 'outreach',
     stageTo: 'Outreach Sent',
     instructionsId: 'outreach-instructions',
-    generate: (instructions) => API.ai.outreach(c.id, instructions)
+    generate: (instructions, attachmentContext) => API.ai.outreach(c.id, instructions, attachmentContext)
   });
 }
 
@@ -1192,7 +1192,7 @@ function renderRoleJDTab(body) {
     stepKey: 'roleJD',
     stageTo: null,
     instructionsId: 'jd-instructions',
-    generate: (instructions) => API.ai.roleJD(c.id, instructions),
+    generate: (instructions, attachmentContext) => API.ai.roleJD(c.id, instructions, attachmentContext),
     onGenerated: (result) => {
       jdVariants = result.variants || null;
       jdLocationVal = result.jdLocation || '';
@@ -1355,8 +1355,8 @@ function renderResumeTab(body) {
       stepKey: 'resumeRequested',
       stageTo: 'Resume Requested',
       instructionsId: 'resume-req-instructions',
-      generate: async (instructions) => {
-        const draft = await API.ai.reply(c.id, null, instructions);
+      generate: async (instructions, attachmentContext) => {
+        const draft = await API.ai.reply(c.id, null, instructions, attachmentContext);
         return { draft: draft.draft };
       }
     });
@@ -1540,12 +1540,14 @@ function renderReviewTab(body) {
     </div>
   `;
 
+  mountAttachControl(body, 'review-instructions');
   body.querySelector('#gen-review-btn').addEventListener('click', async () => {
     const btn = body.querySelector('#gen-review-btn');
     btn.disabled = true; btn.textContent = '✦ Analyzing…';
     try {
-      const reviewInstructions = (body.querySelector('#review-instructions')?.value || '').trim() || undefined;
-      const result = await API.ai.resumeReview(c.id, reviewInstructions);
+      const reviewEl = body.querySelector('#review-instructions');
+      const reviewInstructions = (reviewEl?.value || '').trim() || undefined;
+      const result = await API.ai.resumeReview(c.id, reviewInstructions, reviewEl?._attachmentContext || undefined);
       // Show gaps
       const gapsDiv = body.querySelector('#gaps-display');
       const gapsText = body.querySelector('#gaps-text');
@@ -1651,7 +1653,7 @@ function renderVictoryTab(body) {
       stepKey: 'victorySent',
       stageTo: null,
       instructionsId: 'victory-instructions',
-      generate: (instructions) => API.ai.proposal(c.id, instructions)
+      generate: (instructions, attachmentContext) => API.ai.proposal(c.id, instructions, attachmentContext)
     });
     return;
   }
@@ -1713,7 +1715,7 @@ function renderVictoryTab(body) {
     stageTo: null,
     cc: partnerEmail || null,
     instructionsId: 'victory-instructions',
-    generate: (instructions) => API.ai.victory(c.id, instructions)
+    generate: (instructions, attachmentContext) => API.ai.victory(c.id, instructions, attachmentContext)
   });
 }
 
@@ -1862,18 +1864,20 @@ function renderThreadTab(body) {
     const btn = body.querySelector(`#th-gen-${type}`);
     const origText = btn.textContent;
     btn.disabled = true; btn.textContent = '…';
-    const instructions = (body.querySelector('#th-instructions')?.value || '').trim();
+    const thInstrEl = body.querySelector('#th-instructions');
+    const instructions = (thInstrEl?.value || '').trim();
+    const attach = thInstrEl?._attachmentContext || undefined;
     try {
       let result;
       if (type === 'reply') {
         const lastInbound = [...thread].reverse().find(m => m.direction === 'inbound');
-        result = await API.ai.reply(c.id, lastInbound ? stripQuotedText(lastInbound.body) : null, instructions);
+        result = await API.ai.reply(c.id, lastInbound ? stripQuotedText(lastInbound.body) : null, instructions, attach);
       } else if (type === 'outreach') {
-        result = await API.ai.outreach(c.id, instructions);
+        result = await API.ai.outreach(c.id, instructions, attach);
       } else if (type === 'jd') {
-        result = await API.ai.roleJD(c.id);
+        result = await API.ai.roleJD(c.id, instructions, attach);
       } else if (type === 'followup') {
-        result = await API.ai.followup(c.id, instructions);
+        result = await API.ai.followup(c.id, instructions, attach);
       }
       if (result && result.draft) {
         body.querySelector('#th-body').value = result.draft;
@@ -1890,6 +1894,7 @@ function renderThreadTab(body) {
     finally { btn.disabled = false; btn.textContent = origText; }
   }
 
+  mountAttachControl(body, 'th-instructions');
   body.querySelector('#th-gen-reply').addEventListener('click', () => aiGenerate('reply'));
   body.querySelector('#th-gen-outreach').addEventListener('click', () => aiGenerate('outreach'));
   body.querySelector('#th-gen-followup').addEventListener('click', () => aiGenerate('followup'));
@@ -2108,12 +2113,56 @@ function renderThreadTab(body) {
 // SHARED: AI Draft Wire-up
 // ================================================================
 
+// Attach-a-file control for an instructions textarea. Injects a "📎 Attach"
+// picker + status chip below the textarea, uploads the file (image → vision
+// transcription, document → text extraction, both server-side), and stashes
+// the returned text on the textarea element as `_attachmentContext` for the
+// generate/send handlers to read and pass along. Idempotent per textarea.
+function mountAttachControl(body, textareaId) {
+  const textarea = body.querySelector('#' + textareaId);
+  if (!textarea || textarea._attachMounted) return;
+  textarea._attachMounted = true;
+
+  const bar = document.createElement('div');
+  bar.style.cssText = 'display:flex;align-items:center;gap:8px;margin-top:6px;flex-wrap:wrap';
+  bar.innerHTML = `
+    <label style="display:inline-flex;align-items:center;gap:5px;font-size:0.75rem;color:var(--text-muted);cursor:pointer">
+      <input type="file" accept="image/*,.pdf,.docx,.txt,.md,.csv" style="display:none">
+      📎 Show the AI a file
+    </label>
+    <span class="attach-chip" style="display:none;align-items:center;gap:6px;font-size:0.75rem;background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:2px 8px;color:var(--text-mid)"></span>`;
+  (textarea.parentElement || body).appendChild(bar);
+
+  const fileInput = bar.querySelector('input[type=file]');
+  const chip = bar.querySelector('.attach-chip');
+  const clear = () => { textarea._attachmentContext = ''; chip.style.display = 'none'; chip.innerHTML = ''; fileInput.value = ''; };
+
+  fileInput.addEventListener('change', async () => {
+    const file = fileInput.files && fileInput.files[0];
+    if (!file) return;
+    chip.style.display = 'inline-flex';
+    chip.textContent = `⏳ Reading ${file.name}…`;
+    try {
+      const res = await API.ai.uploadAttachment(file);
+      textarea._attachmentContext = res.text || '';
+      chip.innerHTML = `📎 ${escapeHtml(res.filename)} <span class="attach-remove" title="Remove" style="cursor:pointer;color:var(--text-muted);font-weight:700">✕</span>`;
+      chip.querySelector('.attach-remove').addEventListener('click', clear);
+      if (typeof Toast !== 'undefined') Toast.success('Attached — the AI will use this file');
+    } catch (err) {
+      clear();
+      if (typeof Toast !== 'undefined') Toast.error(err.message || 'Could not read that file');
+    }
+  });
+}
+
 function wireAIDraft(body, { genBtnId, draftAreaId, subjectId, bodyId, regenBtnId, sendBtnId, defaultSubject, stepKey, stageTo, cc, instructionsId, generate, onGenerated, extraSendParams }) {
   const c = _modalCandidate;
 
   const genBtn = body.querySelector('#' + genBtnId);
   const draftArea = body.querySelector('#' + draftAreaId);
   if (!genBtn || !draftArea) return;
+
+  if (instructionsId) mountAttachControl(body, instructionsId);
 
   // Wire up subject input for draft persistence (not covered by initDraftTextareas)
   if (subjectId) {
@@ -2132,7 +2181,8 @@ function wireAIDraft(body, { genBtnId, draftAreaId, subjectId, bodyId, regenBtnI
     try {
       const instructionsEl = instructionsId ? body.querySelector('#' + instructionsId) : null;
       const instructions = (instructionsEl?.value || '').trim() || undefined;
-      const result = await generate(instructions);
+      const attachmentContext = instructionsEl?._attachmentContext || undefined;
+      const result = await generate(instructions, attachmentContext);
       const draft = result.draft || result.text || result;
       const subjectEl = body.querySelector('#' + subjectId);
       const bodyEl = body.querySelector('#' + bodyId);
