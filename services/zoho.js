@@ -332,7 +332,21 @@ async function sendEmail(userId, { to, cc, subject, body, inReplyTo, references,
     }
   }
 
-  const msgId = (resp.data.data && resp.data.data.messageId) || uuidv4();
+  // Zoho returns HTTP 200 even for some send failures, with the real outcome
+  // in the body's status.code (e.g. an invalid/unverified fromAddress). axios
+  // only throws on non-2xx, so without checking the body a rejected send looks
+  // like success — the job gets marked sent, but nothing actually goes out and
+  // nothing lands in the Sent folder. Treat a non-200 body (or a success body
+  // with no messageId) as a real failure so it surfaces instead of silently
+  // "sending" nothing.
+  const bodyStatus = resp.data && resp.data.status ? resp.data.status.code : undefined;
+  const sentMessageId = resp.data && resp.data.data ? resp.data.data.messageId : undefined;
+  if ((bodyStatus !== undefined && bodyStatus !== 200) || (bodyStatus === 200 && !sentMessageId)) {
+    const detail = JSON.stringify(resp.data);
+    console.error('Zoho send returned a non-success body (email NOT sent):', detail);
+    throw new Error(`Zoho send failed — Zoho responded: ${detail}`);
+  }
+  const msgId = sentMessageId || uuidv4();
   return { gmailMessageId: null, gmailThreadId: null, smtpMessageId: String(msgId) };
 }
 
