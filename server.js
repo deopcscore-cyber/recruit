@@ -798,13 +798,25 @@ async function runAutoFetch() {
           if (!candidate && reply.body) {
             candidate = candidates.find(c => c.trackingId && reply.body.includes(`/track/${c.trackingId}`));
           }
-          if (!candidate) continue;
 
           // Bounce detection — sender is MAILER-DAEMON/postmaster, or subject signals NDR
           const fromAddrLower = (reply.from || '').toLowerCase();
           const subjLower     = (reply.subject || '').toLowerCase();
           const isBounce = /mailer-daemon|postmaster@|mail delivery subsystem|delivery subsystem/i.test(fromAddrLower)
             || /undeliverable|delivery (has )?fail|delivery status notification|returned mail|address not found|user unknown|no such user/i.test(subjLower);
+
+          // A bounce comes from mailer-daemon (not the candidate) and isn't
+          // always threaded back to the original send — Zoho returns no thread
+          // ID, so the thread/from-email matchers above miss it entirely and
+          // the bounce never gets flagged. Attribute it by the failed-recipient
+          // address that NDRs name in their subject/body. Provider-agnostic.
+          if (!candidate && isBounce) {
+            const haystack = `${subjLower} ${(reply.body || '').toLowerCase()}`;
+            candidate = candidates.find(c => c.email && haystack.includes(c.email.toLowerCase()));
+          }
+
+          if (!candidate) continue;
+
           if (isBounce) {
             candidate.bounced   = true;
             candidate.bouncedAt = new Date().toISOString();

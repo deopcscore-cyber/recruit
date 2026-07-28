@@ -364,6 +364,23 @@ router.post('/fetch', requireAuth, async (req, res) => {
       if (!candidate && reply.body) {
         candidate = candidates.find(c => c.trackingId && reply.body.includes(`/track/${c.trackingId}`));
       }
+
+      // Bounce detection — compute early so an unmatched bounce can still be
+      // attributed below (see next block).
+      const fromAddr = (reply.from || '').toLowerCase();
+      const subj     = (reply.subject || '').toLowerCase();
+      const isBounce = /mailer-daemon|postmaster@|mail delivery subsystem|delivery subsystem/i.test(fromAddr)
+        || /undeliverable|delivery (has )?fail|delivery status notification|returned mail|address not found|user unknown|no such user/i.test(subj);
+
+      // A bounce comes from mailer-daemon (not the candidate) and isn't always
+      // threaded back to the original send — Zoho returns no thread ID, so the
+      // matchers above miss it. Attribute it by the failed-recipient address
+      // that NDRs name in their subject/body. Provider-agnostic.
+      if (!candidate && isBounce) {
+        const haystack = `${subj} ${(reply.body || '').toLowerCase()}`;
+        candidate = candidates.find(c => c.email && haystack.includes(c.email.toLowerCase()));
+      }
+
       if (!candidate) {
         // Only collect unknown leads for career consultants — recruiters don't receive inbound cold email
         if (reply.matched === false && user.userType === 'career_consultant') {
@@ -384,11 +401,8 @@ router.post('/fetch', requireAuth, async (req, res) => {
         continue;
       }
 
-      // Bounce detection — sender is MAILER-DAEMON/postmaster, or subject signals NDR
-      const fromAddr = (reply.from || '').toLowerCase();
-      const subj     = (reply.subject || '').toLowerCase();
-      const isBounce = /mailer-daemon|postmaster@|mail delivery subsystem|delivery subsystem/i.test(fromAddr)
-        || /undeliverable|delivery (has )?fail|delivery status notification|returned mail|address not found|user unknown|no such user/i.test(subj);
+      // Flag the bounce (isBounce computed above so unmatched NDRs could be
+      // attributed by failed-recipient address).
       if (isBounce) {
         candidate.bounced   = true;
         candidate.bouncedAt = new Date().toISOString();
