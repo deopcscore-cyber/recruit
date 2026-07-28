@@ -1,10 +1,25 @@
 const express    = require('express');
 const router     = express.Router();
+const multer     = require('multer');
 const claude     = require('../services/claude');
 const storage    = require('../services/storage');
 const requireAuth = require('../middleware/auth');
 
 router.use(requireAuth);
+
+const attachmentUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 12 * 1024 * 1024 } });
+
+// Merge the sender's typed instructions with any attached-file context the
+// client extracted. Returns the combined string (or undefined if empty) that
+// every generate function already accepts as its `instructions` param — so the
+// whole attach-a-file feature needs zero changes to claude.js generators.
+function withAttachment(req) {
+  const instr  = (req.body.instructions || '').trim();
+  const attach = (req.body.attachmentContext || '').trim();
+  if (!attach) return instr || undefined;
+  const block = `REFERENCE MATERIAL the sender attached for you to use (a file — image or document — they wanted you to see). Treat its contents as important context for this email; reference specifics from it where relevant:\n"""\n${attach}\n"""`;
+  return instr ? `${instr}\n\n${block}` : block;
+}
 
 // ── Credit helpers ────────────────────────────────────────────────────────────
 
@@ -68,6 +83,38 @@ async function getContext(req, res) {
 
 // ── Routes ────────────────────────────────────────────────────────────────────
 
+// POST /api/ai/attachment — read an attached file (image or document) into text
+// context the AI can use. Images are transcribed via vision (costs credits);
+// PDF/Word/text are extracted for free. Returns the text for the client to hold
+// and pass back as attachmentContext on the next generate call.
+router.post('/attachment', attachmentUpload.single('file'), async (req, res) => {
+  try {
+    const user = await storage.getUserById(req.session.userId);
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+    if (!await checkCredits(user, res)) return;
+
+    // Mirror claude's own provider preference (prefersClaude isn't exported)
+    const preferClaude = user.aiProvider === 'claude'
+      || (user.aiProvider !== 'openai' && user.userType === 'career_consultant');
+
+    const { text, costCents } = await claude.extractAttachmentText({
+      buffer:   req.file.buffer,
+      mimeType: req.file.mimetype,
+      filename: req.file.originalname,
+      preferClaude
+    });
+    if (!text) return res.status(422).json({ error: "Couldn't read any text or content from that file." });
+
+    await deductCredits(user, costCents, 'Attachment read', req.file.originalname);
+    return res.json({ text, filename: req.file.originalname, chars: text.length, creditsRemaining: user.credits });
+  } catch (err) {
+    console.error('AI attachment error:', err);
+    const msg = /file too large/i.test(err.message) ? 'File is too large (max 12 MB).' : err.message;
+    return res.status(500).json({ error: 'Failed to read attachment: ' + msg });
+  }
+});
+
 // POST /api/ai/outreach
 router.post('/outreach', async (req, res) => {
   try {
@@ -75,7 +122,7 @@ router.post('/outreach', async (req, res) => {
     if (!ctx) return;
     if (!await checkCredits(ctx.user, res)) return;
 
-    const result = await claude.generateOutreach(ctx.candidate, ctx.user, req.body.instructions);
+    const result = await claude.generateOutreach(ctx.candidate, ctx.user, withAttachment(req));
     await deductCredits(ctx.user, result.costCents, 'Outreach email', ctx.candidate.name);
     return res.json({ draft: result.text, creditsRemaining: ctx.user.credits });
   } catch (err) {
@@ -91,7 +138,7 @@ router.post('/role-jd', async (req, res) => {
     if (!ctx) return;
     if (!await checkCredits(ctx.user, res)) return;
 
-    const result = await claude.generateRoleJD(ctx.candidate, ctx.user, req.body.instructions);
+    const result = await claude.generateRoleJD(ctx.candidate, ctx.user, withAttachment(req));
     await deductCredits(ctx.user, result.costCents, 'Role & JD', ctx.candidate.name);
     return res.json({
       draft: result.text,
@@ -117,7 +164,7 @@ router.post('/resume-review', async (req, res) => {
       return res.status(400).json({ error: 'No resume on file for this candidate' });
     }
 
-    const result = await claude.generateResumeFeedback(ctx.candidate, ctx.user, req.body.instructions);
+    const result = await claude.generateResumeFeedback(ctx.candidate, ctx.user, withAttachment(req));
     await deductCredits(ctx.user, result.costCents, 'Resume review', ctx.candidate.name);
     return res.json({ gaps: result.gaps, draft: result.email, creditsRemaining: ctx.user.credits });
   } catch (err) {
@@ -133,7 +180,7 @@ router.post('/victory', async (req, res) => {
     if (!ctx) return;
     if (!await checkCredits(ctx.user, res)) return;
 
-    const result = await claude.generateVictoryEmail(ctx.candidate, ctx.user, req.body.instructions);
+    const result = await claude.generateVictoryEmail(ctx.candidate, ctx.user, withAttachment(req));
     await deductCredits(ctx.user, result.costCents, 'Intro email', ctx.candidate.name);
     return res.json({ draft: result.text, creditsRemaining: ctx.user.credits });
   } catch (err) {
@@ -171,7 +218,7 @@ router.post('/followup', async (req, res) => {
     if (!ctx) return;
     if (!await checkCredits(ctx.user, res)) return;
 
-    const result = await claude.generateFollowUp(ctx.candidate, ctx.user, req.body.instructions);
+    const result = await claude.generateFollowUp(ctx.candidate, ctx.user, withAttachment(req));
     await deductCredits(ctx.user, result.costCents, 'Follow-up email', ctx.candidate.name);
     return res.json({ draft: result.text, creditsRemaining: ctx.user.credits });
   } catch (err) {
@@ -187,7 +234,7 @@ router.post('/proposal', async (req, res) => {
     if (!ctx) return;
     if (!await checkCredits(ctx.user, res)) return;
 
-    const result = await claude.generateProposal(ctx.candidate, ctx.user, req.body.instructions);
+    const result = await claude.generateProposal(ctx.candidate, ctx.user, withAttachment(req));
     await deductCredits(ctx.user, result.costCents, 'Proposal', ctx.candidate.name);
     return res.json({ draft: result.text, creditsRemaining: ctx.user.credits });
   } catch (err) {
@@ -203,8 +250,8 @@ router.post('/reply', async (req, res) => {
     if (!ctx) return;
     if (!await checkCredits(ctx.user, res)) return;
 
-    const { lastMessage, instructions } = req.body;
-    const result = await claude.generateReply(ctx.candidate, ctx.user, lastMessage || null, instructions);
+    const { lastMessage } = req.body;
+    const result = await claude.generateReply(ctx.candidate, ctx.user, lastMessage || null, withAttachment(req));
     await deductCredits(ctx.user, result.costCents, 'Reply draft', ctx.candidate.name);
     return res.json({ draft: result.text, creditsRemaining: ctx.user.credits });
   } catch (err) {

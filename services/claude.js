@@ -188,6 +188,72 @@ async function callAI(prompt, maxTokens, preferClaude = false) {
   return { content: res.content, usage: res.usage, provider: 'claude', finishReason: res.stop_reason };
 }
 
+// ─── Attachment → text (for the "show the AI a file" instruction feature) ──────
+// Images are transcribed/described once via the model's vision here (at attach
+// time), then flow through the normal text-only generation path as context —
+// so no generate function or the main callAI message shape has to change, and
+// the vision cost is paid once, not on every regenerate.
+const _VISION_IMAGE_MIME = { 'image/jpeg': 1, 'image/png': 1, 'image/gif': 1, 'image/webp': 1 };
+
+async function _describeImage(buffer, mimeType, preferClaude) {
+  const b64 = buffer.toString('base64');
+  const instruction = 'A recruiter attached this image as reference for writing an email. Transcribe EVERYTHING visible verbatim — every line of text exactly as written, including names, numbers, dates, and the full wording of any messages or documents shown. Then add one short line describing any non-text visual context. Do not summarize away detail; the exact wording matters.';
+
+  const openaiCall = async () => {
+    const res = await getOpenAI().chat.completions.create({
+      model: OPENAI_MODEL, max_tokens: 1500,
+      messages: [{ role: 'user', content: [
+        { type: 'text', text: instruction },
+        { type: 'image_url', image_url: { url: `data:${mimeType};base64,${b64}` } }
+      ] }]
+    });
+    return { text: res.choices[0].message.content, usage: { input_tokens: res.usage.prompt_tokens, output_tokens: res.usage.completion_tokens }, provider: 'openai' };
+  };
+  const claudeCall = async () => {
+    const res = await anthropic.messages.create({
+      model: CLAUDE_MODEL, max_tokens: 1500,
+      messages: [{ role: 'user', content: [
+        { type: 'text', text: instruction },
+        { type: 'image', source: { type: 'base64', media_type: mimeType, data: b64 } }
+      ] }]
+    });
+    return { text: res.content[0].text, usage: res.usage, provider: 'claude' };
+  };
+
+  const order = preferClaude ? [claudeCall, openaiCall] : [openaiCall, claudeCall];
+  let lastErr;
+  for (const fn of order) {
+    try { return await fn(); }
+    catch (e) { lastErr = e; console.warn('[Vision] provider failed:', e.message); }
+  }
+  throw lastErr || new Error('Vision extraction failed');
+}
+
+async function extractAttachmentText({ buffer, mimeType, filename, preferClaude = false }) {
+  const mt = (mimeType || '').toLowerCase();
+  const name = (filename || '').toLowerCase();
+  const cap = t => (t || '').trim().slice(0, 12000);
+
+  if (_VISION_IMAGE_MIME[mt] || /\.(jpe?g|png|gif|webp)$/.test(name)) {
+    const r = await _describeImage(buffer, _VISION_IMAGE_MIME[mt] ? mt : 'image/png', preferClaude);
+    return { text: cap(r.text), costCents: calcCostCents(r.usage, r.provider) };
+  }
+  if (mt.includes('pdf') || name.endsWith('.pdf')) {
+    const pdfParse = require('pdf-parse');
+    const parsed = await pdfParse(buffer);
+    return { text: cap(parsed.text), costCents: 0 };
+  }
+  if (mt.includes('word') || mt.includes('officedocument') || name.endsWith('.docx')) {
+    const mammoth = require('mammoth');
+    const res = await mammoth.extractRawText({ buffer });
+    return { text: cap(res.value), costCents: 0 };
+  }
+  if (mt.startsWith('text/') || /\.(txt|md|csv)$/.test(name)) {
+    return { text: cap(buffer.toString('utf8')), costCents: 0 };
+  }
+  throw new Error('Unsupported file type — attach an image (JPG/PNG), PDF, Word doc, or text file.');
+}
+
 // ─── Company context helper ───────────────────────────────────────────────────
 // Each user sets their own company name & pitch in Settings → Account.
 // These replace every hardcoded "Welltower Inc." reference in the AI prompts,
@@ -1634,5 +1700,6 @@ module.exports = {
   generateProposal,
   scoreCandidate,
   classifyReply,
-  rewriteResume
+  rewriteResume,
+  extractAttachmentText
 };
