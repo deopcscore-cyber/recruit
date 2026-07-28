@@ -75,10 +75,21 @@ function nextSendTime({ locationText = '', fallbackOffset = DEFAULT_OFFSET, from
 /**
  * Add N business-ish days to a base date for follow-up spacing, landing on a
  * Tue–Thu 9am window in the recipient's timezone.
+ *
+ * nextSendTime snaps to exactly 9:00 AM, so every follow-up scheduled the same
+ * day would otherwise fire at the identical instant — a whole day's worth
+ * (e.g. all the follow-ups for one big outreach batch) becoming due at once and
+ * going out as a back-to-back burst. Spreading each across the following ~4
+ * hours (9 AM–1 PM local, all still business hours) de-clusters them into a
+ * natural drip instead of a bulk blast.
  */
+const FOLLOWUP_SPREAD_MS = 4 * 60 * 60 * 1000; // 4 hours
+
 function followUpTime({ locationText = '', fallbackOffset = DEFAULT_OFFSET, days = 3, from = new Date() } = {}) {
   const base = new Date(from.getTime() + days * 24 * 3600 * 1000);
-  return nextSendTime({ locationText, fallbackOffset, from: base });
+  const nineAm = nextSendTime({ locationText, fallbackOffset, from: base });
+  const jittered = new Date(nineAm).getTime() + Math.floor(Math.random() * FOLLOWUP_SPREAD_MS);
+  return new Date(jittered).toISOString();
 }
 
 // The user's own UTC offset (hours). Prefer the real timezone captured from
