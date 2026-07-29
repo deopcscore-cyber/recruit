@@ -2229,6 +2229,24 @@ function initSettingsPage() {
     });
   }
 
+  // Additional documents list — one per line, "Name — description"
+  document.getElementById('save-docs-btn')?.addEventListener('click', async e => {
+    const btn = e.currentTarget;
+    btn.disabled = true; btn.textContent = 'Saving…';
+    try {
+      const lines = (document.getElementById('additional-docs').value || '').split('\n')
+        .map(l => l.trim()).filter(Boolean);
+      const additionalDocs = lines.map(l => {
+        const m = l.split(/\s+[—-]\s+/); // split on em-dash or hyphen separator
+        return { name: (m[0] || '').trim(), description: (m.slice(1).join(' - ') || '').trim() };
+      }).filter(d => d.name);
+      await API.settings.update({ additionalDocs });
+      if (currentUser) currentUser.additionalDocs = additionalDocs;
+      Toast.success('Documents saved');
+    } catch (err) { Toast.error(err.message); }
+    finally { btn.disabled = false; btn.textContent = 'Save Documents'; }
+  });
+
   document.getElementById('style-form').addEventListener('submit', async e => {
     e.preventDefault();
     const btn = e.target.querySelector('[type=submit]');
@@ -2928,6 +2946,12 @@ async function loadSettingsPage() {
         const pEmail = document.getElementById('partner-email');
         if (pName)  pName.value  = style.resumeConsultantName  || '';
         if (pEmail) pEmail.value = style.resumeConsultantEmail || '';
+        const docsEl = document.getElementById('additional-docs');
+        if (docsEl && Array.isArray(style.additionalDocs)) {
+          docsEl.value = style.additionalDocs
+            .map(d => d.description ? `${d.name} — ${d.description}` : d.name)
+            .join('\n');
+        }
       }
     }
 

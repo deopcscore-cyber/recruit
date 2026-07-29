@@ -43,6 +43,7 @@ const STAGES = [
   'Replied',
   'Resume Requested',
   'Resume Received',
+  'Qualified',
   'Interviewing',
   'Closed'
 ];
@@ -53,6 +54,7 @@ const STAGE_COLORS = {
   'Replied': '#7c3aed',
   'Resume Requested': '#d97706',
   'Resume Received': '#0891b2',
+  'Qualified': '#0d9488',
   'Interviewing': '#16a34a',
   'Closed': '#374151'
 };
@@ -629,7 +631,11 @@ function refreshModal() {
     const tab = overlay.querySelector(`.cmodal-tab[data-tab="${t.key}"]`);
     if (!tab) return;
     const done = t.step ? steps[t.step] : false;
-    const locked = t.key === 'victory' && !steps.interestChecked;
+    // Intro/Proposal unlocks once the Review/Feedback email is sent — either
+    // path (strong → request docs, or needs-work → recommend consultant) sets
+    // reviewSent, so the consultant hand-off is always reachable as the
+    // fallback. (Matches the guard in switchModalTab.)
+    const locked = t.key === 'victory' && !steps.reviewSent;
     tab.disabled = locked;
     tab.classList.toggle('locked', locked);
     let check = tab.querySelector('.tab-check');
@@ -1473,6 +1479,166 @@ function renderResumeTab(body) {
 // TAB 5: REVIEW
 // ================================================================
 
+// Recruiter Review tab — honest verdict, then branch:
+//   strong    → request additional documents (TSQ, Exec Bio, …); later Mark Qualified
+//   needs_work → recommend the resume consultant (unlocks the Intro tab)
+// Either path also unlocks the Intro tab, so the consultant is always reachable
+// as the fallback if the strong-path documents don't pan out.
+function renderRecruiterReviewTab(body) {
+  const c = _modalCandidate;
+  const steps = c.stepsCompleted || {};
+  const done = !!steps.reviewSent;
+  const docsRequested = !!steps.docsRequested;
+  const firstName = c.name ? c.name.split(' ')[0] : '';
+  let currentVerdict = c.resumeVerdict || '';
+
+  const subjFor = (verdict) => verdict === 'strong'
+    ? `Great news about your resume${firstName ? ', ' + firstName : ''}`
+    : 'Quick thought on your background';
+
+  body.innerHTML = `
+    <div class="tab-scroll">
+      ${done ? `<div class="step-done-banner">✓ ${c.resumeVerdict === 'strong' ? 'Additional-documents request sent' : 'Review sent — Intro tab now available'}</div>` : ''}
+      <div class="tab-section">
+        <h4>Honest Resume Assessment</h4>
+        <p class="tab-desc">AI gives an honest verdict — is ${escapeHtml(firstName || 'the candidate')}'s resume <strong>already strong</strong>, or does it <strong>need strengthening</strong>? If strong, you'll ask for additional documents (TSQ, Executive Bio…). If not, you'll introduce your resume consultant. You can override the verdict either way.</p>
+        <button class="btn btn-secondary btn-sm" id="assess-btn">✦ ${done ? 'Re-assess' : 'Assess Resume'}</button>
+        <div style="margin-top:8px">
+          <button type="button" onclick="(function(){var w=document.getElementById('review-instructions-wrap');w.style.display=w.style.display==='none'?'':'none'})()" class="btn btn-ghost btn-sm" style="font-size:0.75rem;padding:2px 8px;color:var(--text-muted)">✎ Add instructions</button>
+          <div id="review-instructions-wrap" style="display:none;margin-top:6px">
+            <textarea id="review-instructions" placeholder="e.g. focus on their operations background, keep it concise…" style="width:100%;height:56px;font-size:0.82rem;resize:vertical;border:1px solid var(--border);border-radius:6px;padding:8px"></textarea>
+          </div>
+        </div>
+      </div>
+
+      <div id="verdict-box" style="display:none" class="tab-section"></div>
+
+      <div class="draft-area" id="review-draft-area" style="display:none">
+        <div class="tab-section">
+          <div class="draft-label"><h4 id="draft-heading">Draft</h4><span class="text-xs text-muted" id="draft-hint">Edit before sending</span></div>
+          <div class="form-group"><label>Subject Line</label><input type="text" id="review-subject" /></div>
+          <div class="form-group"><label>Message</label><textarea id="review-body" class="draft-textarea" style="min-height:240px"></textarea></div>
+          <div class="draft-actions">
+            <button class="btn btn-ghost btn-sm" id="review-regen">↺ Regenerate</button>
+            <button class="btn btn-primary" id="review-send">Approve &amp; Send</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="tab-section" id="docs-followup" style="display:${docsRequested ? '' : 'none'};border:1px solid #99f6e4;background:#f0fdfa;border-radius:10px;padding:14px">
+        <h4 style="margin-top:0">Additional Documents</h4>
+        <p class="tab-desc">You've asked ${escapeHtml(firstName || 'them')} for additional documents. Once they reply:</p>
+        <div style="display:flex;flex-wrap:wrap;gap:8px">
+          <button class="btn btn-primary btn-sm" id="mark-qualified-btn">✓ Documents look good — Mark Qualified</button>
+          <button class="btn btn-secondary btn-sm" id="fallback-consultant-btn">Not provided / not strong — Introduce consultant →</button>
+        </div>
+      </div>
+    </div>
+  `;
+
+  mountAttachControl(body, 'review-instructions');
+
+  const verdictBox   = body.querySelector('#verdict-box');
+  const draftArea    = body.querySelector('#review-draft-area');
+  const draftHeading = body.querySelector('#draft-heading');
+  const draftHint    = body.querySelector('#draft-hint');
+  const subjectInput = body.querySelector('#review-subject');
+  const bodyInput    = body.querySelector('#review-body');
+
+  function paintVerdict(verdict) {
+    const strong = verdict === 'strong';
+    verdictBox.style.display = '';
+    verdictBox.innerHTML = `
+      <div style="border-radius:10px;padding:12px 14px;background:${strong ? '#f0fdf4' : '#fffbeb'};border:1px solid ${strong ? '#bbf7d0' : '#fde68a'}">
+        <div style="font-weight:700;color:${strong ? '#15803d' : '#b45309'};font-size:0.9rem">${strong ? '✅ Strong resume — request additional documents' : '⚠️ Needs strengthening — recommend the consultant'}</div>
+        <div id="verdict-reasoning" style="font-size:0.82rem;color:var(--text-mid);margin-top:6px;line-height:1.5"></div>
+        <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
+          <button class="btn ${strong ? 'btn-primary' : 'btn-secondary'} btn-sm" data-path="request_docs" ${strong ? 'disabled' : ''}>${strong ? '● Requesting documents' : 'Actually — mark strong, request documents'}</button>
+          <button class="btn ${!strong ? 'btn-primary' : 'btn-secondary'} btn-sm" data-path="recommend_consultant" ${!strong ? 'disabled' : ''}>${!strong ? '● Recommending consultant' : 'Actually — needs work, recommend consultant'}</button>
+        </div>
+      </div>`;
+    verdictBox.querySelectorAll('button[data-path]').forEach(btn => {
+      btn.addEventListener('click', () => runAssess(btn.dataset.path === 'request_docs' ? 'request_docs' : 'recommend_consultant'));
+    });
+  }
+
+  async function runAssess(mode) {
+    const btn = body.querySelector('#assess-btn');
+    btn.disabled = true; btn.textContent = '✦ Analyzing…';
+    try {
+      const el = body.querySelector('#review-instructions');
+      const instr = (el?.value || '').trim() || undefined;
+      const result = await API.ai.resumeReview(c.id, instr, el?._attachmentContext || undefined, mode || 'auto');
+      currentVerdict = result.verdict || 'needs_work';
+      paintVerdict(currentVerdict);
+      const reasoningEl = body.querySelector('#verdict-reasoning');
+      if (reasoningEl && result.gaps) reasoningEl.textContent = result.gaps;
+      if (result.draft) {
+        bodyInput.value = result.draft;
+        subjectInput.value = subjFor(currentVerdict);
+        draftHeading.textContent = currentVerdict === 'strong' ? 'Draft — Request Additional Documents' : 'Draft — Consultant Recommendation';
+        draftHint.textContent = currentVerdict === 'strong' ? 'Praises the resume and asks for TSQ / Exec Bio / etc.' : 'Recommends your resume consultant';
+        draftArea.style.display = '';
+      }
+    } catch (err) { Toast.error(err.message); }
+    finally { btn.disabled = false; btn.textContent = '✦ ' + (done ? 'Re-assess' : 'Assess Resume'); }
+  }
+
+  body.querySelector('#assess-btn').addEventListener('click', () => runAssess('auto'));
+  body.querySelector('#review-regen').addEventListener('click', () =>
+    runAssess(currentVerdict === 'strong' ? 'request_docs' : currentVerdict === 'needs_work' ? 'recommend_consultant' : 'auto'));
+
+  body.querySelector('#review-send').addEventListener('click', async () => {
+    const subject = subjectInput.value.trim() || subjFor(currentVerdict);
+    const msgBody = bodyInput.value.trim();
+    if (!msgBody) { Toast.warning('Draft is empty'); return; }
+    const btn = body.querySelector('#review-send');
+    btn.disabled = true; btn.textContent = 'Sending…';
+    try {
+      const result = await API.email.send({ candidateId: c.id, subject, body: msgBody, isReply: (c.thread||[]).length > 0 });
+      const strong = currentVerdict === 'strong';
+      const stepsUpdate = {
+        resumeVerdict: currentVerdict || 'needs_work',
+        stepsCompleted: {
+          ...(c.stepsCompleted||{}),
+          reviewSent: true,
+          ...(strong ? { docsRequested: true } : { interestChecked: true })
+        }
+      };
+      const updated = await API.candidates.update(c.id, stepsUpdate);
+      Object.assign(_modalCandidate, result.candidate || {}, updated);
+      _modalOnUpdate(_modalCandidate);
+      refreshModal();
+      const queuedMsg = queuedSendMessage(result);
+      if (queuedMsg) Toast.info(queuedMsg);
+      else Toast.success(strong ? 'Document request sent — mark Qualified once they reply' : 'Sent — Intro tab is now unlocked');
+      renderRecruiterReviewTab(body);
+    } catch (err) { Toast.error(err.message); }
+    finally { btn.disabled = false; btn.textContent = 'Approve & Send'; }
+  });
+
+  body.querySelector('#mark-qualified-btn')?.addEventListener('click', async () => {
+    const btn = body.querySelector('#mark-qualified-btn');
+    btn.disabled = true; btn.textContent = 'Saving…';
+    try {
+      const updated = await API.candidates.update(c.id, {
+        stage: 'Qualified',
+        stepsCompleted: { ...(c.stepsCompleted||{}), docsReceived: true }
+      });
+      Object.assign(_modalCandidate, updated);
+      _modalOnUpdate(_modalCandidate);
+      refreshModal();
+      Toast.success(`${firstName || 'Candidate'} marked Qualified`);
+      renderRecruiterReviewTab(body);
+    } catch (err) { Toast.error(err.message); btn.disabled = false; btn.textContent = '✓ Documents look good — Mark Qualified'; }
+  });
+
+  body.querySelector('#fallback-consultant-btn')?.addEventListener('click', () => switchModalTab('victory'));
+
+  // If a verdict was already recorded, restore the banner on re-open.
+  if (currentVerdict) paintVerdict(currentVerdict);
+}
+
 function renderReviewTab(body) {
   const c = _modalCandidate;
   const isConsultant = _modalUser && _modalUser.userType === 'career_consultant';
@@ -1492,6 +1658,10 @@ function renderReviewTab(body) {
     `;
     return;
   }
+
+  // Recruiters get the honest-verdict branch (strong → request documents;
+  // needs-work → recommend consultant). Consultants keep their feedback flow.
+  if (!isConsultant) { renderRecruiterReviewTab(body); return; }
 
   const tabTitle    = isConsultant ? 'Your Honest Assessment' : 'AI Resume Review';
   const tabDesc     = isConsultant

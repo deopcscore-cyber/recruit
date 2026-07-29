@@ -62,9 +62,12 @@ function makeDefaultCandidate(userId) {
       resumeRequested: false,
       resumeReceived: false,
       reviewSent: false,
+      docsRequested: false,   // strong-resume path: asked for TSQ / Exec Bio / etc.
+      docsReceived: false,    // additional documents received & accepted
       victorySent: false,
       interestChecked: false
     },
+    resumeVerdict: '',        // '' | 'strong' | 'needs_work' — last resume assessment
     resume: { text: '', filename: '', uploadedAt: null },
     notes: '',
     tags: [],
@@ -178,7 +181,8 @@ router.put('/:id', async (req, res) => {
       'career', 'education', 'summary', 'stage', 'notes', 'tags',
       'stepsCompleted', 'followUpDate', 'gmailThreadId', 'lastGmailMessageId',
       'lastSmtpMessageId', 'lastSubject', 'unread', 'opened', 'openedAt', 'thread', 'resume',
-      'originalSubject', 'gmailReferences', 'score', 'scoreDetails', 'pendingFollowUpDraft'
+      'originalSubject', 'gmailReferences', 'score', 'scoreDetails', 'pendingFollowUpDraft',
+      'resumeVerdict'
     ];
 
     // A previous deliverability check no longer means anything once the

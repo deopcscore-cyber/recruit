@@ -63,6 +63,7 @@ router.get('/', async (req, res) => {
       aiProvider:               user.aiProvider               || 'auto',
       resumeConsultantName:     user.resumeConsultantName     || '',
       resumeConsultantEmail:    user.resumeConsultantEmail    || '',
+      additionalDocs:           (Array.isArray(user.additionalDocs) && user.additionalDocs.length) ? user.additionalDocs : [{ name: 'Technical Statement of Qualifications (TSQ)', description: '' }, { name: 'Executive Bio', description: '' }],
       outreachSample:           user.outreachSample           || '',
       subjectSample:            user.subjectSample            || '',
       followUpConfig:           user.followUpConfig           || { enabled: true, steps: [{ days: 3 }, { days: 7 }] },
@@ -123,6 +124,15 @@ router.put('/', async (req, res) => {
     // Resume consultant partner (for recruiter Victory emails)
     if (resumeConsultantName  !== undefined) user.resumeConsultantName  = resumeConsultantName.trim();
     if (resumeConsultantEmail !== undefined) user.resumeConsultantEmail = resumeConsultantEmail.trim();
+
+    // Additional documents requested when a resume is assessed "strong"
+    // (TSQ, Executive Bio, …). Stored as [{name, description}], capped for sanity.
+    if (Array.isArray(req.body.additionalDocs)) {
+      user.additionalDocs = req.body.additionalDocs
+        .map(d => ({ name: String(d.name || '').trim().slice(0, 120), description: String(d.description || '').trim().slice(0, 300) }))
+        .filter(d => d.name)
+        .slice(0, 15);
+    }
 
     // Outreach style sample — AI mirrors this when generating outreach
     if (req.body.outreachSample !== undefined) user.outreachSample = String(req.body.outreachSample).slice(0, 4000);
@@ -247,6 +257,7 @@ router.put('/', async (req, res) => {
       userType:                 user.userType                 || 'recruiter_company',
       resumeConsultantName:     user.resumeConsultantName     || '',
       resumeConsultantEmail:    user.resumeConsultantEmail    || '',
+      additionalDocs:           (Array.isArray(user.additionalDocs) && user.additionalDocs.length) ? user.additionalDocs : [{ name: 'Technical Statement of Qualifications (TSQ)', description: '' }, { name: 'Executive Bio', description: '' }],
       outreachSample:           user.outreachSample           || '',
       followUpConfig:           user.followUpConfig           || { enabled: true, steps: [{ days: 3 }, { days: 7 }] },
       autopilot:                Object.assign({ enabled:false, dailyCap:30, windowStart:'09:00', windowEnd:'17:00', weekdaysOnly:true, minSpacingMin:20, maxSpacingMin:60, warmup:true }, user.autopilot || {})

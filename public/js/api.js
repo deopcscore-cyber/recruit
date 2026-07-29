@@ -112,7 +112,7 @@ const API = {
   ai: {
     outreach(candidateId, instructions, attachmentContext) { return API.post('/api/ai/outreach', { candidateId, instructions, attachmentContext }); },
     roleJD(candidateId, instructions, attachmentContext) { return API.post('/api/ai/role-jd', { candidateId, instructions, attachmentContext }); },
-    resumeReview(candidateId, instructions, attachmentContext) { return API.post('/api/ai/resume-review', { candidateId, instructions, attachmentContext }); },
+    resumeReview(candidateId, instructions, attachmentContext, mode) { return API.post('/api/ai/resume-review', { candidateId, instructions, attachmentContext, mode }); },
     victory(candidateId, instructions, attachmentContext) { return API.post('/api/ai/victory', { candidateId, instructions, attachmentContext }); },
     reply(candidateId, lastMessage, instructions, attachmentContext) { return API.post('/api/ai/reply', { candidateId, lastMessage, instructions, attachmentContext }); },
     followup(candidateId, instructions, attachmentContext) { return API.post('/api/ai/followup', { candidateId, instructions, attachmentContext }); },

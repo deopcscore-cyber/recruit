@@ -856,7 +856,24 @@ an all-caps company banner line (e.g. REIMAGINE SENIOR CARE WITH US)
   };
 }
 
-async function _generateRecruiterResumeFeedback(candidate, user, instructions) {
+// The recruiter's standard "additional documents" wishlist for candidates whose
+// resume is already strong. Configurable in Settings; seeded with the two the
+// business asked for so the feature works before anything is customised.
+function additionalDocsList(user) {
+  const docs = Array.isArray(user.additionalDocs) && user.additionalDocs.length
+    ? user.additionalDocs
+    : [
+        { name: 'Technical Statement of Qualifications (TSQ)', description: 'a focused statement mapping their expertise to the role’s technical requirements' },
+        { name: 'Executive Bio', description: 'a short executive biography suitable for leadership consideration' }
+      ];
+  return docs.filter(d => d && (d.name || '').trim());
+}
+
+// mode: 'auto' (AI decides strong vs needs_work), 'request_docs' (force the
+// strong/request-documents path), or 'recommend_consultant' (force the
+// needs-work/consultant path) — the last two let the recruiter override the
+// AI's verdict. Returns { verdict, gaps, email, costCents }.
+async function _generateRecruiterResumeFeedback(candidate, user, instructions, mode = 'auto') {
   const candidateInfo = formatCandidateContext(candidate);
   const styleInfo = formatUserStyle(user);
   const company = getCompanyContext(user);
@@ -868,9 +885,20 @@ async function _generateRecruiterResumeFeedback(candidate, user, instructions) {
 
   const convoContext = formatConversationContext(candidate);
 
-  const prompt = `You are ${user.name}, ${recruiterTitle} at ${company.name}. The candidate sent you their resume and you have now reviewed it. You need to write a detailed, warm, honest email that: responds to what they said when they sent it, praises what IS genuinely strong, identifies specific gaps, explains why it matters, and recommends they work with a professional resume consultant — then asks if they'd like an introduction.
+  const docs = additionalDocsList(user);
+  const docListText = docs.map(d => `- ${d.name}${d.description ? ' — ' + d.description : ''}`).join('\n');
+  const forcedPath = mode === 'request_docs' ? 'strong'
+                   : mode === 'recommend_consultant' ? 'needs_work'
+                   : null;
+
+  const prompt = `You are ${user.name}, ${recruiterTitle} at ${company.name}. The candidate sent you their resume and you have now reviewed it.
+
+FIRST, make an honest verdict: is this resume ALREADY STRONG enough to represent this person well in a competitive executive-level screening, or does it NEED WORK (understated scope, weak positioning, generic framing) before it would land? Be genuinely honest — not every resume needs help, and not every one is ready. ${forcedPath === 'strong' ? 'The recruiter has decided to treat this resume as STRONG — write the STRONG-path email regardless of your own read, but still report your honest verdict.' : forcedPath === 'needs_work' ? 'The recruiter has decided to treat this resume as NEEDS WORK — write the NEEDS-WORK-path email regardless, but still report your honest verdict.' : 'Choose the path that matches your verdict.'}
+
+THEN write ONE warm, honest email for the chosen path (respond to what they actually said in any conversation above; never fabricate an admission they did not make).
 ${convoContext ? '\n' + convoContext : ''}
-GOLD STANDARD EXAMPLE (follow this structure and tone — but the opening paragraph below assumes the candidate voiced concerns about their own resume; only mirror that premise if the conversation above shows they actually did):
+════════ PATH A — NEEDS WORK (recommend a resume consultant) ════════
+GOLD STANDARD EXAMPLE for the NEEDS-WORK path (follow this structure and tone — but the opening paragraph below assumes the candidate voiced concerns about their own resume; only mirror that premise if the conversation above shows they actually did):
 ---
 Dear Tomeka,
 
@@ -908,7 +936,7 @@ ${candidateInfo}
 RESUME TEXT:
 ${candidate.resume.text.substring(0, 3000)}
 
-INSTRUCTIONS — follow the gold standard structure, with a responsive opening:
+INSTRUCTIONS for the NEEDS-WORK path — follow the gold standard structure, with a responsive opening:
 1. "Dear [First Name],"
 2. OPENING — respond to what the candidate actually said in their latest message above. Thank them for sending the resume, and address anything specific in their message first: answer questions, acknowledge enthusiasm, timing constraints, or caveats in their own terms. If (and only if) they expressed doubts about their resume, appreciate that honesty and note it confirms what you were already sensing. Never fabricate an admission they didn't make. If there is no conversation context, simply thank them for sending the resume and their interest.
 3. Transition into your candid assessment — e.g. "And to be candid with you, how this reads on paper matters at this level."
@@ -925,10 +953,21 @@ INSTRUCTIONS — follow the gold standard structure, with a responsive opening:
 14. "Let me know if you would like me to make that introduction."
 15. Signature
 
-Also return a brief internal gaps analysis. Output as valid JSON:
+════════ PATH B — STRONG (resume is genuinely good; request additional documents) ════════
+Write this email ONLY if the verdict is "strong". Be honest and specific — do NOT invent gaps or steer toward a consultant. Structure:
+1. "Dear [First Name],"
+2. OPENING — respond to what they actually said in their latest message above; thank them for sending the resume.
+3. Tell them genuinely and specifically that their resume is strong — name 2-3 real strengths from their actual background (real companies/roles/scope). This should read as sincere, earned praise, not flattery.
+4. Explain that because their background is strong, the next step is simply to gather a couple of additional documents so you can present them properly at this level. Then list exactly these, in your own words:
+${docListText || '- Any supporting materials that strengthen their executive candidacy'}
+5. Ask them to send whatever they already have, and reassure them warmly that it is completely fine if they do not have all of these yet — you can talk through the best way to put them together if needed. (Do NOT mention a resume consultant here — that is a separate, later step only if it turns out they need help producing these.)
+6. Warm, forward-looking close. Signature.
+
+Also return a brief internal analysis. Output as valid JSON:
 {
-  "gaps": "A 2-3 sentence internal summary of the specific resume gaps you identified (for recruiter reference only)",
-  "email": "The full email body following the gold standard structure above"
+  "verdict": "strong" OR "needs_work" — your honest assessment of the resume,
+  "gaps": "A 2-3 sentence internal summary — for NEEDS-WORK, the specific resume gaps; for STRONG, what makes it strong (recruiter reference only)",
+  "email": "The full email body for the path matching the verdict above"
 }
 
 Return ONLY the JSON object, no markdown, no extra text.`;
@@ -938,9 +977,14 @@ Return ONLY the JSON object, no markdown, no extra text.`;
   const text = response.content[0].text.trim();
   const costCents = calcCostCents(response.usage, response.provider);
   try {
-    return { ...parseAIJson(text), costCents };
+    const parsed = parseAIJson(text);
+    // Normalise the verdict; honour a forced override so the returned verdict
+    // matches the path the recruiter actually chose.
+    let verdict = (parsed.verdict || '').toLowerCase().includes('strong') ? 'strong' : 'needs_work';
+    if (forcedPath) verdict = forcedPath;
+    return { ...parsed, verdict, costCents };
   } catch {
-    return { gaps: text, email: '', costCents };
+    return { verdict: forcedPath || 'needs_work', gaps: text, email: '', costCents };
   }
 }
 
@@ -1023,10 +1067,10 @@ async function generateReply(candidate, user, lastMessage, instructions) {
   return _generateRecruiterReply(candidate, user, lastMessage, instructions);
 }
 
-async function generateResumeFeedback(candidate, user, instructions) {
+async function generateResumeFeedback(candidate, user, instructions, mode = 'auto') {
   const type = user.userType || 'recruiter_company';
   if (type === 'career_consultant') return _generateCareerConsultantResumeFeedback(candidate, user, instructions);
-  return _generateRecruiterResumeFeedback(candidate, user, instructions);
+  return _generateRecruiterResumeFeedback(candidate, user, instructions, mode);
 }
 
 async function generateProposal(candidate, user, instructions) {

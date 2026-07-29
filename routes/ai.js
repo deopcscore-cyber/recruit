@@ -164,9 +164,12 @@ router.post('/resume-review', async (req, res) => {
       return res.status(400).json({ error: 'No resume on file for this candidate' });
     }
 
-    const result = await claude.generateResumeFeedback(ctx.candidate, ctx.user, withAttachment(req));
+    // mode: 'auto' | 'request_docs' | 'recommend_consultant' — lets the recruiter
+    // override the AI's strong/needs-work verdict from the Review tab.
+    const mode = ['request_docs', 'recommend_consultant'].includes(req.body.mode) ? req.body.mode : 'auto';
+    const result = await claude.generateResumeFeedback(ctx.candidate, ctx.user, withAttachment(req), mode);
     await deductCredits(ctx.user, result.costCents, 'Resume review', ctx.candidate.name);
-    return res.json({ gaps: result.gaps, draft: result.email, creditsRemaining: ctx.user.credits });
+    return res.json({ verdict: result.verdict, gaps: result.gaps, draft: result.email, creditsRemaining: ctx.user.credits });
   } catch (err) {
     console.error('AI resume review error:', err);
     return res.status(500).json({ error: 'Failed to generate resume review: ' + err.message });
