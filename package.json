@@ -4,7 +4,7 @@
   "description": "Recruit Pro — Recruiting & Career Consultant Automation Platform",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js",
+    "start": "node --max-old-space-size=768 server.js",
     "dev": "nodemon server.js"
   },
   "dependencies": {
