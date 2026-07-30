@@ -1577,7 +1577,7 @@ function renderRecruiterReviewTab(body) {
         bodyInput.value = result.draft;
         subjectInput.value = subjFor(currentVerdict);
         draftHeading.textContent = currentVerdict === 'strong' ? 'Draft — Request Additional Documents' : 'Draft — Consultant Recommendation';
-        draftHint.textContent = currentVerdict === 'strong' ? 'Praises the resume and asks for TSQ / Exec Bio / etc.' : 'Recommends your resume consultant';
+        draftHint.textContent = currentVerdict === 'strong' ? 'Praises the resume, asks for the documents, and recommends consultant help to format them' : 'Recommends your resume consultant';
         draftArea.style.display = '';
       }
     } catch (err) { Toast.error(err.message); }

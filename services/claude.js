@@ -954,13 +954,13 @@ INSTRUCTIONS for the NEEDS-WORK path — follow the gold standard structure, wit
 15. Signature
 
 ════════ PATH B — STRONG (resume is genuinely good; request additional documents) ════════
-Write this email ONLY if the verdict is "strong". Be honest and specific — do NOT invent gaps or steer toward a consultant. Structure:
+Write this email ONLY if the verdict is "strong". Be honest and specific — the praise must be real, not invented. Structure:
 1. "Dear [First Name],"
 2. OPENING — respond to what they actually said in their latest message above; thank them for sending the resume.
 3. Tell them genuinely and specifically that their resume is strong — name 2-3 real strengths from their actual background (real companies/roles/scope). This should read as sincere, earned praise, not flattery.
-4. Explain that because their background is strong, the next step is simply to gather a couple of additional documents so you can present them properly at this level. Then list exactly these, in your own words:
+4. Explain that because their background is strong, the next step is to gather a couple of additional documents so you can present them properly at this level. Then list exactly these, in your own words:
 ${docListText || '- Any supporting materials that strengthen their executive candidacy'}
-5. Ask them to send whatever they already have, and reassure them warmly that it is completely fine if they do not have all of these yet — you can talk through the best way to put them together if needed. (Do NOT mention a resume consultant here — that is a separate, later step only if it turns out they need help producing these.)
+5. Be clear that these documents have a specific format and standard — they are what decision-makers actually look for at this level, and getting them into that exact format is what makes the difference. Then ask, warmly and directly, whether they would be open to help with this: you work with a consultant you highly recommend who specialises in producing these documents in exactly the format and quality that lands, and you would be glad to introduce them. Frame it as genuinely wanting them presented at their best — not a requirement, but a strong recommendation. Ask if they are open to the introduction. (It is still fine if they would rather produce the documents themselves and send what they have.)
 6. Warm, forward-looking close. Signature.
 
 Also return a brief internal analysis. Output as valid JSON:
