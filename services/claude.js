@@ -1000,6 +1000,15 @@ async function generateVictoryEmail(candidate, user, instructions) {
   const partnerEmail = (user.resumeConsultantEmail || '').trim();
   const ccLine       = partnerEmail ? ` (CC: ${partnerEmail})` : '';
 
+  // Tell the consultant exactly what the candidate needs — this depends on how
+  // they got here. A "strong" resume came via the request-documents path, so
+  // the help required is producing those specific documents to standard; a
+  // "needs_work" resume needs repositioning.
+  const docNames = additionalDocsList(user).map(d => d.name).join(', ');
+  const neededSummary = candidate.resumeVerdict === 'strong'
+    ? `This candidate's resume is already strong — do NOT frame this as fixing a weak resume. What they need help with is producing their additional executive materials to the standard and format that lands at this level${docNames ? `, specifically: ${docNames}` : ''}. Make it explicit to ${partnerName} that this is the deliverable: help the candidate create/polish these documents in the right format, not rewrite the resume.`
+    : `This candidate's resume needs stronger positioning. Make it explicit to ${partnerName} that the help required is repositioning the resume — the strategic positioning, leadership narrative, operational scope, and portfolio-level impact need stronger framing so it lands in executive review.`;
+
   // Recent conversation so the intro responds to what the candidate actually
   // said (their exact words when agreeing, questions, timing constraints)
   // instead of opening with a canned acknowledgement.
@@ -1044,7 +1053,8 @@ INSTRUCTIONS — follow the gold standard structure, but make the opening genuin
 3. "I've CC'd ${partnerName} on this email. ${partnerName} is a trusted resume consultant I work with who has helped a number of candidates strengthen their positioning for high-level opportunities similar to this one."
 4. "${partnerName}, I wanted to introduce you to [candidate full name]."
 5. Paragraph to ${partnerName} about the candidate: summarize their background genuinely — name their actual companies, roles, and career arc. What makes their profile unique and compelling. If the conversation revealed anything relevant beyond the resume (goals, motivations, context they shared), weave it in.
-6. Paragraph about resume gap: "After reviewing her/his resume and background, I believe there is substantially more executive-level operational value present than is currently being communicated on paper. In particular, I believe the strategic positioning, leadership narrative, operational scope, and portfolio-level impact need stronger framing..."
+6. THE KEY PARAGRAPH — tell ${partnerName} plainly WHAT THIS CANDIDATE NEEDS, so the consultant knows exactly what to deliver. Use this guidance (write it naturally in your own words, addressed so ${partnerName} understands the specific deliverable):
+${neededSummary}
 7. Sentence about the candidate's character: "[First Name] is very [specific quality actually shown in the conversation above — how they write, what they asked about, what they care about], and I believe with the right presentation strategy their background could become significantly more competitive in executive review environments."
 8. "[First Name], I'll let you and ${partnerName} take it from here regarding timing, process, and next steps." — but if the candidate raised timing or scheduling in their message, adapt this line to reflect what they said.
 9. URGENCY: "I do encourage both of you to prioritize this conversation sooner rather than later, as the early stages of review on these opportunities can move quickly once candidate materials begin entering formal consideration." — soften or adapt if it would clash with a constraint the candidate stated (e.g. they said they're away until a date).
