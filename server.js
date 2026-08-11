@@ -691,6 +691,42 @@ async function _processFollowUpJob(job) {
   if (!_isEmailConnected(user)) throw new Error('No email provider connected');
   if ((user.credits || 0) <= 0) throw new Error('Insufficient credits');
 
+  // Respect the recruiter's send window and pace the sends so a day's worth of
+  // follow-ups don't go out in a bulk burst. Both checks run BEFORE generating
+  // content so a deferred job costs no credits. Uses the same window config as
+  // autopilot (getConfig applies sensible defaults if autopilot was never set).
+  {
+    const autopilotSvc  = require('./services/autopilot');
+    const schedulingSvc = require('./services/scheduling');
+    const offset = schedulingSvc.userOffset(user);
+    const cfg = autopilotSvc.getConfig(user);
+    const { startMs, endMs, dow } = autopilotSvc.windowBounds(cfg, new Date(), offset);
+    const nowMs = Date.now();
+    const weekendBlocked = cfg.weekdaysOnly && (dow === 0 || dow === 6);
+
+    // (1) Outside the send window (or a blocked weekend) → next window opening.
+    if (nowMs < startMs || nowMs > endMs || weekendBlocked) {
+      const nextStart = autopilotSvc.nextWindowStart(user, new Date(), offset);
+      queueSvc.updateJob(job.id, { status: 'pending', scheduledAt: new Date(nextStart).toISOString() });
+      console.log(`Follow-up ${job.id} outside send window — rescheduled to ${new Date(nextStart).toISOString()}`);
+      return;
+    }
+
+    // (2) Pace: keep at least minSpacing between consecutive follow-up SENDS for
+    // this user, so clustered day-N follow-ups drip out instead of blasting.
+    const minGapMs = Math.max(1, cfg.minSpacingMin || 20) * 60 * 1000;
+    const lastFollowupSentAt = queueSvc.getJobsForUser(user.id)
+      .filter(j => (j.type === 'followup') && j.status === 'sent' && j.sentAt)
+      .reduce((max, j) => Math.max(max, new Date(j.sentAt).getTime() || 0), 0);
+    if (lastFollowupSentAt && (nowMs - lastFollowupSentAt) < minGapMs) {
+      const jitter = Math.floor(Math.random() * 5 * 60 * 1000); // up to 5 min so they don't align
+      const nextAt = lastFollowupSentAt + minGapMs + jitter;
+      queueSvc.updateJob(job.id, { status: 'pending', scheduledAt: new Date(nextAt).toISOString() });
+      console.log(`Follow-up ${job.id} paced — rescheduled to ${new Date(nextAt).toISOString()} (min gap ${cfg.minSpacingMin || 20}m)`);
+      return;
+    }
+  }
+
   const result = await _generateFollowUpContent(job, candidate, user);
   const draft = result.text;
   if (result.costCents) {
