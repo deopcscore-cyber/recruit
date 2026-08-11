@@ -80,10 +80,17 @@ function pendingFollowUpCount(userId) {
   return read().filter(j => j.userId === userId && j.status === 'pending' && (j.type || 'outreach') === 'followup').length;
 }
 
-// Next job that is pending AND whose scheduled time has passed
+// Next job that is pending AND whose scheduled time has passed.
+// New sends (outreach, scheduled_send) are picked BEFORE follow-ups: follow-ups
+// pace themselves by rescheduling (staying pending), so a large follow-up
+// backlog otherwise keeps a due follow-up permanently at the front of the queue
+// and starves cold outreach — it never gets a turn. Outreach jobs send and
+// drain, so prioritising them can't starve follow-ups in return.
 function getNextDueJob() {
   const now = new Date();
-  return read().find(j => j.status === 'pending' && new Date(j.scheduledAt) <= now) || null;
+  const due = read().filter(j => j.status === 'pending' && new Date(j.scheduledAt) <= now);
+  if (!due.length) return null;
+  return due.find(j => (j.type || 'outreach') !== 'followup') || due[0];
 }
 
 // Patch a job by id
