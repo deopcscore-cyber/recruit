@@ -52,7 +52,7 @@ router.post('/bulk-outreach', async (req, res) => {
       if (mode === 'now') {
         scheduledAt = new Date(Date.now() + i * spacingMinutes * 60 * 1000).toISOString();
       } else {
-        const locationText = `${c.location || ''} ${c.summary || ''}`;
+        const locationText = c.location || '';  // location only — summary text false-matches the tz table
         const base = new Date(Date.now() + i * spacingMinutes * 60 * 1000);
         scheduledAt = scheduling.nextSendTime({ locationText, fallbackOffset, from: base });
       }

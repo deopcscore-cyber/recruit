@@ -63,7 +63,11 @@ function scheduleSequence(user, candidate, kind = 'outreach') {
   queueSvc.cancelPendingForCandidate(candidate.id, 'followup');
 
   const fallbackOffset = scheduling.userOffset(user);
-  const locationText = `${candidate.location || ''} ${candidate.summary || ''}`;
+  // Timezone is inferred from the candidate's LOCATION only — never the summary.
+  // Free-text summaries contain common words that collide with the offset table
+  // (e.g. "operations or strategy" false-matched "or" → Oregon/Pacific), which
+  // shifted the send hours the wrong way.
+  const locationText = candidate.location || '';
   const now = new Date();
   const sinceTimestamp = now.toISOString();
 

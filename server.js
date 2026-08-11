@@ -111,13 +111,36 @@ app.post('/api/admin/bootstrap', require('./middleware/auth'), async (req, res) 
 const rateLimit = require('./middleware/rateLimit');
 const BLANK_GIF = Buffer.from('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7', 'base64');
 const pushSvc = require('./services/push');
+// Mail scanners, image proxies, and link-safety services fetch the tracking
+// pixel automatically — that's not a human open. This is the #1 source of fake
+// "instant opens": the sender's provider (e.g. Zoho) and recipient-side
+// security gateways load the image the moment the message is sent/scanned.
+const OPEN_BOT_UA = /googleimageproxy|ggpht|feedfetcher|google-|yahoo|yandex|bingpreview|bing-|outlook|microsoft|office365|exchange|barracuda|mimecast|proofpoint|symantec|cloudmark|messagelabs|fireeye|forcepoint|trendmicro|sophos|zoho|zohomail|superhuman|scan|filter|crawler|spider|\bbot\b|preview|monitor|prefetch|curl|wget|python-requests|go-http|axios|node-fetch|okhttp|java\//i;
+// A load within this window of the send is the provider/scanner prefetch, not a
+// read — the email has barely been delivered, no human could have opened it.
+const OPEN_GRACE_MS = 60 * 1000;
+
 app.get('/track/:trackingId', rateLimit({ windowMs: 60 * 1000, max: 120 }), async (req, res) => {
   res.set({ 'Content-Type': 'image/gif', 'Cache-Control': 'no-store' });
   try {
+    const ua = (req.get('user-agent') || '').toLowerCase();
     const storage = require('./services/storage');
     const candidates = await storage.getAllCandidates();
     const candidate = candidates.find(c => c.trackingId === req.params.trackingId);
     if (candidate && !candidate.opened) {
+      // How long since we actually sent this email (latest outbound message)?
+      const lastOutbound = (candidate.thread || [])
+        .filter(m => m.direction === 'outbound')
+        .reduce((max, m) => Math.max(max, new Date(m.timestamp).getTime() || 0), 0);
+      const sinceSendMs = lastOutbound ? Date.now() - lastOutbound : Infinity;
+
+      const isBot   = OPEN_BOT_UA.test(ua);
+      const tooSoon = sinceSendMs < OPEN_GRACE_MS;
+      if (isBot || tooSoon) {
+        console.log(`Tracking: ignored ${isBot ? 'scanner/proxy' : 'instant'} open → ${candidate.name} (ua="${ua.slice(0, 48)}", ${Number.isFinite(sinceSendMs) ? Math.round(sinceSendMs / 1000) + 's after send' : 'no send time'})`);
+        return res.send(BLANK_GIF);
+      }
+
       candidate.opened = true;
       candidate.openedAt = new Date().toISOString();
       await storage.saveAllCandidates(candidates);
