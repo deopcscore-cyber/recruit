@@ -1315,7 +1315,10 @@ async function handleBulkOutreach() {
     try {
       const ids = checked.map(cb => cb.dataset.id);
       const result = await API.queue.bulkOutreach(ids, 'optimal');
-      Toast.success(`${result.queued} email${result.queued !== 1 ? 's' : ''} queued at smart send-times${result.skipped ? ` (${result.skipped} skipped)` : ''}`);
+      const skipBits = [];
+      if (result.skipped) skipBits.push(`${result.skipped} skipped`);
+      if (result.undeliverableSkipped) skipBits.push(`${result.undeliverableSkipped} undeliverable`);
+      Toast.success(`${result.queued} email${result.queued !== 1 ? 's' : ''} queued at smart send-times${skipBits.length ? ` (${skipBits.join(', ')})` : ''}`);
       startBtn.textContent = 'Queued ✓';
       progressEl.textContent = `${result.queued} emails scheduled for each recipient's timezone`;
       startQueuePolling();

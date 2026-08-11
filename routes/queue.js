@@ -41,10 +41,12 @@ router.post('/bulk-outreach', async (req, res) => {
 
     const jobs = [];
     let skipped = 0;
+    let undeliverableSkipped = 0;
     candidateIds.forEach((cid, i) => {
       const c = byId.get(cid);
       if (!c || !c.email) { skipped++; return; }
       if ((c.stepsCompleted || {}).outreach) { skipped++; return; }  // already contacted
+      if (c.emailStatus === 'undeliverable') { undeliverableSkipped++; return; }  // known-dead address
 
       let scheduledAt;
       if (mode === 'now') {
@@ -69,10 +71,10 @@ router.post('/bulk-outreach', async (req, res) => {
     });
 
     if (!jobs.length) {
-      return res.status(400).json({ error: 'No eligible candidates (all already contacted or missing email).', skipped });
+      return res.status(400).json({ error: 'No eligible candidates (all already contacted, missing email, or flagged undeliverable).', skipped, undeliverableSkipped });
     }
     queueSvc.addJobs(jobs);
-    return res.json({ queued: jobs.length, skipped, mode });
+    return res.json({ queued: jobs.length, skipped, undeliverableSkipped, mode });
   } catch (err) {
     console.error('Bulk queue error:', err);
     return res.status(500).json({ error: err.message });

@@ -535,6 +535,8 @@ router.get('/autopilot-status', async (req, res) => {
     const cfg = autopilot.getConfig(user);
     const candidates = await storage.getUserCandidates(req.session.userId);
     const eligible = candidates.filter(c => c.email
+      && !c.bounced
+      && c.emailStatus !== 'undeliverable'   // matches the autopilot planner's filter
       && (c.stage || 'Imported') === 'Imported'
       && !(c.stepsCompleted || {}).outreach
       && !(c.thread || []).some(m => m.direction === 'outbound')).length;

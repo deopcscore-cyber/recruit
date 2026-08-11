@@ -121,6 +121,7 @@ function planDailyRun(user, candidates, now = new Date()) {
   const eligible = candidates
     .filter(c => c.email
       && !c.bounced
+      && c.emailStatus !== 'undeliverable'   // never auto-send to a known-dead address
       && (c.stage || 'Imported') === 'Imported'
       && !(c.stepsCompleted || {}).outreach
       && !(c.thread || []).some(m => m.direction === 'outbound')
