@@ -449,11 +449,11 @@ async function _processOutreachJob(job) {
   if (!_isEmailConnected(user)) throw new Error('No email provider connected');
   if ((user.credits || 0) <= 0) throw new Error('Insufficient credits');
 
-  // Never send to an address email-verification already flagged as
-  // undeliverable — it would just bounce and hurt sender reputation. Cancel
-  // the job rather than fail it (this isn't an error to retry). 'risky'
-  // (catch-all domains) is still allowed — those often deliver fine.
-  if (candidate.emailStatus === 'undeliverable') {
+  // Opt-in only: when the recruiter has enabled it, don't send to an address
+  // verification flagged undeliverable. Off by default because the check
+  // over-flags (many "undeliverable" addresses actually deliver). Cancel the
+  // job rather than fail it — this isn't an error to retry.
+  if (user.skipUndeliverable && candidate.emailStatus === 'undeliverable') {
     queueSvc.updateJob(job.id, { status: 'cancelled', reason: 'undeliverable' });
     console.log(`Queue: outreach skipped (undeliverable email) → ${candidate.name} <${candidate.email}>`);
     return;
@@ -611,7 +611,7 @@ async function _processFollowUpJob(job) {
     console.log(`Queue: follow-up skipped (bounced) → ${candidate.name}`);
     return;
   }
-  if (candidate.emailStatus === 'undeliverable') {
+  if (user.skipUndeliverable && candidate.emailStatus === 'undeliverable') {
     queueSvc.updateJob(job.id, { status: 'cancelled', reason: 'undeliverable' });
     console.log(`Queue: follow-up skipped (undeliverable email) → ${candidate.name}`);
     return;

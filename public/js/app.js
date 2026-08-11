@@ -1899,6 +1899,14 @@ function initSettingsPage() {
   });
 
   // ── Email verification (Apify) key save button ────────────────────────────
+  // Skip-undeliverable toggle saves on its own (the key button needs a key value)
+  document.getElementById('skip-undeliverable')?.addEventListener('change', async e => {
+    try {
+      await API.settings.update({ skipUndeliverable: e.target.checked });
+      Toast.success(e.target.checked ? 'Undeliverable-flagged emails will be skipped on send' : 'Undeliverable emails will send normally');
+    } catch (err) { Toast.error(err.message); e.target.checked = !e.target.checked; }
+  });
+
   document.getElementById('apify-save-btn')?.addEventListener('click', async () => {
     const btn = document.getElementById('apify-save-btn');
     const val = document.getElementById('apify-key')?.value.trim() || '';
@@ -2947,6 +2955,7 @@ async function loadSettingsPage() {
     if (document.getElementById('enrichment-contactout-key')) document.getElementById('enrichment-contactout-key').value = style.contactOutApiKey === '••••••••' ? '' : (style.contactOutApiKey || '');
     if (document.getElementById('enrichment-apollo-key'))     document.getElementById('enrichment-apollo-key').value     = style.apolloApiKey     === '••••••••' ? '' : (style.apolloApiKey     || '');
     if (document.getElementById('apify-key'))                 document.getElementById('apify-key').value                 = style.apifyApiKey      === '••••••••' ? '' : (style.apifyApiKey      || '');
+    if (document.getElementById('skip-undeliverable'))        document.getElementById('skip-undeliverable').checked      = !!style.skipUndeliverable;
     document.getElementById('style-tone').value = style.tone || 'warm';
     document.getElementById('style-notes').value = style.notes || '';
     document.getElementById('style-use').value = (style.use || []).join(', ');

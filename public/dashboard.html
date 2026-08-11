@@ -413,6 +413,15 @@
                 </div>
                 <div style="font-size:0.74rem;color:var(--text-muted)">Free tier: $5/mo usage credit, no card required · <a href="https://apify.com/pricing" target="_blank" style="color:var(--blue)">See pricing</a></div>
               </div>
+
+              <div style="border-top:1px solid var(--border);margin-top:16px;padding-top:14px">
+                <label style="display:flex;align-items:flex-start;gap:8px;font-size:0.85rem;color:var(--text-mid);cursor:pointer">
+                  <input type="checkbox" id="skip-undeliverable" style="width:auto;margin-top:3px" />
+                  <span><strong>Don't send to emails flagged "undeliverable"</strong><br>
+                  <span style="font-size:0.78rem;color:var(--text-muted)">Off by default. The deliverability check can over-flag — many "undeliverable" addresses actually deliver — so leave this off unless you trust the results for your lists. Risky/catch-all and unverified emails always send regardless.</span></span>
+                </label>
+              </div>
+
               <div style="margin-top:18px;display:flex;justify-content:flex-end">
                 <button class="btn btn-primary btn-sm" id="apify-save-btn">Save API Key</button>
               </div>

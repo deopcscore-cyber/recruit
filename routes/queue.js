@@ -46,7 +46,7 @@ router.post('/bulk-outreach', async (req, res) => {
       const c = byId.get(cid);
       if (!c || !c.email) { skipped++; return; }
       if ((c.stepsCompleted || {}).outreach) { skipped++; return; }  // already contacted
-      if (c.emailStatus === 'undeliverable') { undeliverableSkipped++; return; }  // known-dead address
+      if (user.skipUndeliverable && c.emailStatus === 'undeliverable') { undeliverableSkipped++; return; }  // opt-in skip
 
       let scheduledAt;
       if (mode === 'now') {
