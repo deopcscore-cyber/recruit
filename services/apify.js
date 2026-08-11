@@ -39,6 +39,17 @@ async function verifyEmailsBatch(emails, apiKey) {
       if (!res.ok) continue;
       const items = await res.json();
       if (!Array.isArray(items)) continue;
+
+      // Diagnostic: log the actual distribution of result values and a full
+      // sample item. SMTP verifiers commonly report a blocked/greylisted/
+      // timed-out probe as "undeliverable" — this makes it visible whether
+      // the actor is over-flagging (and whether it returns a richer schema,
+      // e.g. a reason/sub-status, we should be using instead of the bare
+      // result string).
+      const dist = {};
+      items.forEach(it => { const r = (it && it.result) || 'MISSING'; dist[r] = (dist[r] || 0) + 1; });
+      console.log(`[Apify verify] chunk of ${chunk.length}: results ${JSON.stringify(dist)} | sample: ${JSON.stringify(items[0] || null)}`);
+
       items.forEach(item => {
         if (item && item.email && item.result) {
           results.set(item.email.toLowerCase(), item.result);
