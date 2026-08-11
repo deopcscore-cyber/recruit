@@ -175,10 +175,13 @@
             <option>Replied</option>
             <option>Resume Requested</option>
             <option>Resume Received</option>
+            <option>Qualified</option>
             <option>Interviewing</option>
             <option>Closed</option>
           </select>
           <button class="btn btn-secondary btn-sm" id="bulk-stage-btn">Apply</button>
+          <button class="btn btn-secondary btn-sm" id="bulk-verify-btn" title="Re-check email deliverability for the selected candidates">✓ Verify Emails</button>
+          <button class="btn btn-secondary btn-sm" id="bulk-delete-btn" style="color:#b91c1c">Delete</button>
           <button class="btn btn-secondary btn-sm" id="export-csv-btn">Export CSV</button>
         </div>
       </div>
@@ -1084,6 +1087,10 @@ I came across your work leading...&#10;&#10;[Paste a full example email here —
         <label style="display:flex;align-items:center;gap:8px;font-size:0.85rem;color:var(--text-mid);cursor:pointer;margin-top:4px">
           <input type="checkbox" id="import-prefer-personal" checked style="width:auto" />
           Prefer personal email over work email when a row has both
+        </label>
+        <label style="display:flex;align-items:center;gap:8px;font-size:0.85rem;color:var(--text-mid);cursor:pointer;margin-top:8px">
+          <input type="checkbox" id="import-skip-team" style="width:auto" />
+          Skip anyone another recruiter has already contacted
         </label>
       </form>
       <p style="font-size:0.78rem;color:var(--text-muted);margin:12px 0 0;line-height:1.5">

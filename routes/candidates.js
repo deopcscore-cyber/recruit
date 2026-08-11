@@ -330,6 +330,40 @@ router.post('/:id/verify-email', async (req, res) => {
   }
 });
 
+// POST /api/candidates/bulk-verify — re-verify email deliverability for many
+// candidates at once (including ones imported before an Apify key was set).
+// Body: { ids: [...] }. Verifies only the caller's own candidates that have an
+// email, in one batched Apify call.
+router.post('/bulk-verify', async (req, res) => {
+  try {
+    const { ids } = req.body;
+    if (!Array.isArray(ids) || ids.length === 0) return res.status(400).json({ error: 'Provide an ids array' });
+
+    const user = await storage.getUserById(req.session.userId);
+    if (!user?.apifyApiKey) return res.status(400).json({ error: 'Add an Apify API key in Settings to verify emails.' });
+
+    const idSet = new Set(ids);
+    const all = await storage.getAllCandidates();
+    const mine = all.filter(c => idSet.has(c.id) && c.userId === req.session.userId && c.email);
+    if (!mine.length) return res.json({ verified: 0, counts: {} });
+
+    const results = await verifyEmailsBatch(mine.map(c => c.email), user.apifyApiKey);
+    const counts = { deliverable: 0, risky: 0, undeliverable: 0, unknown: 0 };
+    const now = new Date().toISOString();
+    for (const c of mine) {
+      c.emailStatus = results.get(c.email.toLowerCase()) || 'unknown';
+      c.emailVerifiedAt = now;
+      c.updatedAt = now;
+      counts[c.emailStatus] = (counts[c.emailStatus] || 0) + 1;
+    }
+    await storage.saveAllCandidates(all);
+    return res.json({ verified: mine.length, counts });
+  } catch (err) {
+    console.error('Bulk verify error:', err);
+    return res.status(500).json({ error: 'Bulk verification failed: ' + err.message });
+  }
+});
+
 // POST /api/candidates/import
 router.post('/import', csvUpload.single('csv'), async (req, res) => {
   try {
@@ -375,6 +409,28 @@ router.post('/import', csvUpload.single('csv'), async (req, res) => {
     const importingUser = await storage.getUserById(req.session.userId);
     const apifyApiKey = importingUser?.apifyApiKey || '';
     const verifyCounts = { deliverable: 0, risky: 0, undeliverable: 0, unknown: 0 };
+
+    // Optional cross-team dedup: when the recruiter has opted in, skip anyone
+    // another user has already CONTACTED (an outbound email went out, or they
+    // were moved past the Imported stage) so two recruiters never cold-approach
+    // the same person. Merely importing a lead elsewhere doesn't block it —
+    // only actual contact does.
+    // The import modal's checkbox (a multipart text field) is authoritative for
+    // this import; otherwise fall back to the persisted user preference.
+    const skipTeam = req.body?.skipTeamContacted !== undefined
+      ? ['true', 'on', '1', true].includes(req.body.skipTeamContacted)
+      : !!importingUser?.skipTeamContacted;
+    const teamContactedEmails = new Set();
+    let teamSkipped = 0;
+    if (skipTeam) {
+      const all = await storage.getAllCandidates();
+      for (const c of all) {
+        if (c.userId === req.session.userId || !c.email) continue;
+        const contacted = (c.thread || []).some(m => m.direction === 'outbound')
+          || (c.stage && c.stage !== 'Imported');
+        if (contacted) teamContactedEmails.add(c.email.toLowerCase().trim());
+      }
+    }
 
     // Build a normalized header map once (strips BOM, lowercases, and reduces
     // to alphanumeric-only so "Job Title", "job_title", and "job-title" all
@@ -466,6 +522,12 @@ router.post('/import', csvUpload.single('csv'), async (req, res) => {
       // Skip duplicates (same email already in this user's pipeline)
       const isDuplicate = existingCandidates.some(ec => ec.email && email && ec.email.toLowerCase() === email.toLowerCase());
       if (isDuplicate) { duplicates++; continue; }
+
+      // Opted-in cross-team skip — another user has already contacted this person
+      if (teamContactedEmails.size && teamContactedEmails.has(email.toLowerCase().trim())) {
+        teamSkipped++;
+        continue;
+      }
 
       // Core fields — ContactOut column names and common alternatives
       const title = getFromRow(row,
@@ -587,6 +649,7 @@ router.post('/import', csvUpload.single('csv'), async (req, res) => {
       skipped,
       verified: apifyApiKey ? verifyCounts : null,
       duplicates,
+      teamSkipped,
       candidates: pendingCandidates
     });
   } catch (err) {
@@ -709,7 +772,7 @@ router.post('/bulk-update', requireAuth, async (req, res) => {
     if (!ids || !Array.isArray(ids) || !stage) {
       return res.status(400).json({ error: 'ids (array) and stage are required' });
     }
-    const validStages = ['Imported','Outreach Sent','Replied','Resume Requested','Resume Received','Interviewing','Closed'];
+    const validStages = ['Imported','Outreach Sent','Replied','Resume Requested','Resume Received','Qualified','Interviewing','Closed'];
     if (!validStages.includes(stage)) {
       return res.status(400).json({ error: 'Invalid stage' });
     }

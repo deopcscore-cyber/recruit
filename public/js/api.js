@@ -64,6 +64,8 @@ const API = {
     downloadResume(id) { window.open(`/api/candidates/${id}/resume/download`, '_blank'); },
     addThread(id, data) { return API.post(`/api/candidates/${id}/thread`, data); },
     bulkStage(ids, stage)           { return API.post('/api/candidates/bulk-update', { ids, stage }); },
+    bulkDelete(ids)                 { return API.request('DELETE', '/api/candidates/bulk', { ids }); },
+    bulkVerify(ids)                 { return API.post('/api/candidates/bulk-verify', { ids }); },
     getAccounts()                    { return API.get('/api/candidates/accounts'); },
     transfer(candidateIds, toUserId, toEmail) { return API.post('/api/candidates/transfer', { candidateIds, ...(toEmail ? { toEmail } : { toUserId }) }); }
   },

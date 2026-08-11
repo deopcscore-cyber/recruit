@@ -138,7 +138,11 @@ document.addEventListener('DOMContentLoaded', async () => {
   });
 
   // Import CSV
-  document.getElementById('import-btn').addEventListener('click', () => new Modal('import-modal').open());
+  document.getElementById('import-btn').addEventListener('click', () => {
+    const skipCb = document.getElementById('import-skip-team');
+    if (skipCb) skipCb.checked = !!(currentUser && currentUser.skipTeamContacted);
+    new Modal('import-modal').open();
+  });
   document.getElementById('import-cancel-btn').addEventListener('click', () => new Modal('import-modal').close());
   document.getElementById('import-submit-btn').addEventListener('click', handleImport);
   document.getElementById('import-modal').querySelector('.modal-close').addEventListener('click', () => new Modal('import-modal').close());
@@ -154,6 +158,8 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // Bulk stage
   document.getElementById('bulk-stage-btn').addEventListener('click', handleBulkStage);
+  document.getElementById('bulk-verify-btn')?.addEventListener('click', handleBulkVerify);
+  document.getElementById('bulk-delete-btn')?.addEventListener('click', handleBulkDelete);
 
   // Export CSV
   document.getElementById('export-csv-btn').addEventListener('click', exportCSV);
@@ -870,13 +876,19 @@ async function handleImport() {
   btn.disabled = true; btn.textContent = 'Importing…';
   try {
     const preferPersonal = document.getElementById('import-prefer-personal')?.checked !== false;
+    const skipTeam = document.getElementById('import-skip-team')?.checked === true;
     const fd = new FormData();
     fd.append('csv', file);
     fd.append('preferPersonalEmail', preferPersonal ? 'true' : 'false');
+    fd.append('skipTeamContacted', skipTeam ? 'true' : 'false');
+    // Remember the choice for next time
+    API.settings.update({ skipTeamContacted: skipTeam }).catch(() => {});
+    if (currentUser) currentUser.skipTeamContacted = skipTeam;
     const result = await API.candidates.import(fd);
     const skippedMsg = [];
     if (result.skipped > 0) skippedMsg.push(`${result.skipped} skipped (no email)`);
     if (result.duplicates > 0) skippedMsg.push(`${result.duplicates} duplicates`);
+    if (result.teamSkipped > 0) skippedMsg.push(`${result.teamSkipped} already contacted by a teammate`);
     Toast.success(`Imported ${result.imported} candidates${skippedMsg.length ? ` (${skippedMsg.join(', ')})` : ''}`);
     if (result.verified) {
       const risky = (result.verified.risky || 0) + (result.verified.undeliverable || 0);
@@ -966,6 +978,41 @@ async function handleBulkStage() {
   } catch (err) {
     Toast.error(err.message);
   }
+}
+
+// ---- Bulk delete ----
+function selectedIds() {
+  return Array.from(document.querySelectorAll('.row-cb:checked')).map(cb => cb.dataset.id);
+}
+
+async function handleBulkDelete() {
+  const ids = selectedIds();
+  if (ids.length === 0) { Toast.warning('No candidates selected'); return; }
+  if (!confirm(`Delete ${ids.length} candidate${ids.length !== 1 ? 's' : ''}? This can't be undone.`)) return;
+  const btn = document.getElementById('bulk-delete-btn');
+  btn.disabled = true; btn.textContent = 'Deleting…';
+  try {
+    const res = await API.candidates.bulkDelete(ids);
+    Toast.success(`Deleted ${res.deleted} candidate${res.deleted !== 1 ? 's' : ''}`);
+    await loadCandidates();
+  } catch (err) { Toast.error(err.message); }
+  finally { btn.disabled = false; btn.textContent = 'Delete'; }
+}
+
+// ---- Bulk verify emails ----
+async function handleBulkVerify() {
+  const ids = selectedIds();
+  if (ids.length === 0) { Toast.warning('No candidates selected'); return; }
+  const btn = document.getElementById('bulk-verify-btn');
+  btn.disabled = true; btn.textContent = 'Verifying…';
+  try {
+    const res = await API.candidates.bulkVerify(ids);
+    const c = res.counts || {};
+    const risky = (c.risky || 0) + (c.undeliverable || 0);
+    Toast.success(`Verified ${res.verified} email${res.verified !== 1 ? 's' : ''}${risky > 0 ? ` — ${risky} flagged risky/undeliverable` : ''}`);
+    await loadCandidates();
+  } catch (err) { Toast.error(err.message); }
+  finally { btn.disabled = false; btn.textContent = '✓ Verify Emails'; }
 }
 
 // ---- Export CSV ----
@@ -2876,6 +2923,7 @@ function urlBase64ToUint8Array(base64String) {
 async function loadSettingsPage() {
   try {
     const style = await API.settings.get();
+    if (currentUser) currentUser.skipTeamContacted = !!style.skipTeamContacted;
     document.getElementById('profile-name').value = style.name || (currentUser && currentUser.name) || '';
     document.getElementById('profile-title').value = style.title || (currentUser && currentUser.title) || '';
     if (document.getElementById('profile-company-name'))  document.getElementById('profile-company-name').value  = style.companyName  || '';

@@ -64,6 +64,7 @@ router.get('/', async (req, res) => {
       resumeConsultantName:     user.resumeConsultantName     || '',
       resumeConsultantEmail:    user.resumeConsultantEmail    || '',
       additionalDocs:           (Array.isArray(user.additionalDocs) && user.additionalDocs.length) ? user.additionalDocs : [{ name: 'Technical Statement of Qualifications (TSQ)', description: '' }, { name: 'Executive Bio', description: '' }],
+      skipTeamContacted:        !!user.skipTeamContacted,
       outreachSample:           user.outreachSample           || '',
       subjectSample:            user.subjectSample            || '',
       followUpConfig:           user.followUpConfig           || { enabled: true, steps: [{ days: 3 }, { days: 7 }] },
@@ -124,6 +125,9 @@ router.put('/', async (req, res) => {
     // Resume consultant partner (for recruiter Victory emails)
     if (resumeConsultantName  !== undefined) user.resumeConsultantName  = resumeConsultantName.trim();
     if (resumeConsultantEmail !== undefined) user.resumeConsultantEmail = resumeConsultantEmail.trim();
+
+    // Skip candidates other recruiters have already contacted, on import
+    if (req.body.skipTeamContacted !== undefined) user.skipTeamContacted = !!req.body.skipTeamContacted;
 
     // Additional documents requested when a resume is assessed "strong"
     // (TSQ, Executive Bio, …). Stored as [{name, description}], capped for sanity.
@@ -258,6 +262,7 @@ router.put('/', async (req, res) => {
       resumeConsultantName:     user.resumeConsultantName     || '',
       resumeConsultantEmail:    user.resumeConsultantEmail    || '',
       additionalDocs:           (Array.isArray(user.additionalDocs) && user.additionalDocs.length) ? user.additionalDocs : [{ name: 'Technical Statement of Qualifications (TSQ)', description: '' }, { name: 'Executive Bio', description: '' }],
+      skipTeamContacted:        !!user.skipTeamContacted,
       outreachSample:           user.outreachSample           || '',
       followUpConfig:           user.followUpConfig           || { enabled: true, steps: [{ days: 3 }, { days: 7 }] },
       autopilot:                Object.assign({ enabled:false, dailyCap:30, windowStart:'09:00', windowEnd:'17:00', weekdaysOnly:true, minSpacingMin:20, maxSpacingMin:60, warmup:true }, user.autopilot || {})
