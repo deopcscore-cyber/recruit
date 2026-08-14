@@ -890,7 +890,9 @@ async function handleImport() {
     if (result.duplicates > 0) skippedMsg.push(`${result.duplicates} duplicates`);
     if (result.teamSkipped > 0) skippedMsg.push(`${result.teamSkipped} already contacted by a teammate`);
     Toast.success(`Imported ${result.imported} candidates${skippedMsg.length ? ` (${skippedMsg.join(', ')})` : ''}`);
-    if (result.verified) {
+    if (result.verifySkipped) {
+      Toast.info('Large import — emails were not auto-verified. Select them and use "Verify Emails" to check deliverability.');
+    } else if (result.verified) {
       const risky = (result.verified.risky || 0) + (result.verified.undeliverable || 0);
       if (risky > 0) {
         Toast.warning(`${risky} imported email${risky !== 1 ? 's' : ''} may bounce — look for the risk badge before reaching out.`);

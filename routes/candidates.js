@@ -16,7 +16,7 @@ const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, '..', 'data');
 const RESUMES_DIR = path.join(DATA_DIR, 'resumes');
 
 // Multer setup for CSV uploads (memory)
-const csvUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
+const csvUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024 } });
 
 // Multer setup for resume uploads (disk)
 const resumeStorage = multer.diskStorage({
@@ -397,6 +397,10 @@ router.post('/import', csvUpload.single('csv'), async (req, res) => {
     console.log('CSV import — detected headers:', detectedHeaders);
 
     const existingCandidates = await storage.getUserCandidates(req.session.userId);
+    // O(1) dedup lookup instead of scanning the whole pipeline per row — an
+    // existingCandidates.some() inside the row loop is O(rows × pipeline),
+    // which is what made large imports crawl. Also dedups within the CSV itself.
+    const seenEmails = new Set(existingCandidates.map(c => (c.email || '').toLowerCase().trim()).filter(Boolean));
     const pendingCandidates = [];
     let skipped = 0;
     let duplicates = 0;
@@ -520,8 +524,7 @@ router.post('/import', csvUpload.single('csv'), async (req, res) => {
       }
 
       // Skip duplicates (same email already in this user's pipeline)
-      const isDuplicate = existingCandidates.some(ec => ec.email && email && ec.email.toLowerCase() === email.toLowerCase());
-      if (isDuplicate) { duplicates++; continue; }
+      if (seenEmails.has(email.toLowerCase().trim())) { duplicates++; continue; }
 
       // Opted-in cross-team skip — another user has already contacted this person
       if (teamContactedEmails.size && teamContactedEmails.has(email.toLowerCase().trim())) {
@@ -626,9 +629,17 @@ router.post('/import', csvUpload.single('csv'), async (req, res) => {
       };
 
       pendingCandidates.push(candidate);
+      seenEmails.add(email.toLowerCase().trim());
     }
 
-    if (apifyApiKey) {
+    // Inline deliverability verification blocks the whole request (each Apify
+    // batch is a live SMTP run), so it's only run for reasonably-sized imports.
+    // Large imports skip it and complete fast; the recruiter can run the bulk
+    // "Verify Emails" action afterward. Prevents the request from timing out
+    // (the 500 seen on huge uploads).
+    const VERIFY_ON_IMPORT_CAP = 500;
+    let verifySkipped = false;
+    if (apifyApiKey && pendingCandidates.length && pendingCandidates.length <= VERIFY_ON_IMPORT_CAP) {
       const verifiedAt = new Date().toISOString();
       const results = await verifyEmailsBatch(pendingCandidates.map(c => c.email), apifyApiKey);
       pendingCandidates.forEach(candidate => {
@@ -636,18 +647,28 @@ router.post('/import', csvUpload.single('csv'), async (req, res) => {
         candidate.emailVerifiedAt = verifiedAt;
         verifyCounts[candidate.emailStatus] = (verifyCounts[candidate.emailStatus] || 0) + 1;
       });
+    } else if (apifyApiKey && pendingCandidates.length > VERIFY_ON_IMPORT_CAP) {
+      verifySkipped = true;
     }
 
-    for (const candidate of pendingCandidates) {
-      await storage.saveCandidate(candidate);
+    // Single bulk write instead of saveCandidate() per row. saveCandidate reads
+    // AND rewrites the entire candidates file each call, so importing N rows was
+    // O(N²) file I/O — the real cause of huge imports timing out with a 500.
+    if (pendingCandidates.length) {
+      const allCandidates = await storage.getAllCandidates();
+      const now = new Date().toISOString();
+      pendingCandidates.forEach(c => { c.updatedAt = now; });
+      allCandidates.push(...pendingCandidates);
+      await storage.saveAllCandidates(allCandidates);
     }
 
-    console.log(`CSV import complete: ${pendingCandidates.length} imported, ${skipped} skipped`);
+    console.log(`CSV import complete: ${pendingCandidates.length} imported, ${skipped} skipped, ${duplicates} dupes${verifySkipped ? ' (verification skipped — large import)' : ''}`);
 
     return res.json({
       imported: pendingCandidates.length,
       skipped,
-      verified: apifyApiKey ? verifyCounts : null,
+      verified: (apifyApiKey && !verifySkipped) ? verifyCounts : null,
+      verifySkipped,
       duplicates,
       teamSkipped,
       candidates: pendingCandidates
