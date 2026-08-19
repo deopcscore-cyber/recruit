@@ -115,6 +115,38 @@ router.post('/attachment', attachmentUpload.single('file'), async (req, res) => 
   }
 });
 
+// POST /api/ai/chat — recruiting assistant. Body: { messages:[{role,content}], candidateId? }
+// Stateless: the client sends the running conversation each turn. Optional
+// candidateId grounds the answer in a specific person (own candidates only).
+router.post('/chat', async (req, res) => {
+  try {
+    const user = await storage.getUserById(req.session.userId);
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    if (!await checkCredits(user, res)) return;
+
+    const messages = (Array.isArray(req.body.messages) ? req.body.messages : [])
+      .filter(m => m && (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string' && m.content.trim())
+      .map(m => ({ role: m.role, content: m.content.slice(0, 6000) }))
+      .slice(-20); // cap history so token cost stays bounded
+    if (!messages.length || messages[messages.length - 1].role !== 'user') {
+      return res.status(400).json({ error: 'A user message is required' });
+    }
+
+    let candidate = null;
+    if (req.body.candidateId) {
+      const c = await storage.getCandidateById(req.body.candidateId);
+      if (c && c.userId === req.session.userId) candidate = c; // ignore missing / others' candidates
+    }
+
+    const result = await claude.generateChatReply(user, messages, candidate);
+    await deductCredits(user, result.costCents, 'Assistant chat', candidate ? candidate.name : null);
+    return res.json({ reply: result.text, creditsRemaining: user.credits });
+  } catch (err) {
+    console.error('AI chat error:', err);
+    return res.status(500).json({ error: 'Chat failed: ' + err.message });
+  }
+});
+
 // POST /api/ai/outreach
 router.post('/outreach', async (req, res) => {
   try {

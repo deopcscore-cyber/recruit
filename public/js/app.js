@@ -298,6 +298,7 @@ function _showPage(page) {
   if (page === 'hotleads')  loadHotLeadsPage();
   if (page === 'templates') loadTemplatesPage();
   if (page === 'analytics') loadAnalyticsPage();
+  if (page === 'assistant') loadAssistantPage();
 }
 
 window.addEventListener('hashchange', () => {
@@ -2492,6 +2493,131 @@ function initSettingsPage() {
 // ================================================================
 // TEMPLATES PAGE
 // ================================================================
+
+// ==================== AI ASSISTANT (CHAT) ====================
+let _assistantMessages = [];      // { role:'user'|'assistant', content }
+let _assistantCandidateId = null; // optional candidate context
+let _assistantCandidateName = '';
+let _assistantWired = false;
+let _assistantBusy = false;
+
+const ASSISTANT_SUGGESTIONS = [
+  'How should I improve my reply rate on cold outreach?',
+  'What follow-up cadence works best for executive candidates?',
+  'Draft a warm re-engagement message for someone who went quiet.',
+  'How do I keep my emails out of spam?'
+];
+
+// Minimal, safe markdown → HTML (escape first, then format).
+function assistantFormat(text) {
+  let html = escapeHtml(text || '');
+  html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
+  html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+  const blocks = html.split(/\n\s*\n/).map(b => b.trim()).filter(Boolean);
+  return blocks.map(b => {
+    const lines = b.split('\n');
+    if (lines.every(l => /^\s*[-*]\s+/.test(l))) {
+      return '<ul>' + lines.map(l => `<li>${l.replace(/^\s*[-*]\s+/, '')}</li>`).join('') + '</ul>';
+    }
+    if (lines.every(l => /^\s*\d+\.\s+/.test(l))) {
+      return '<ol>' + lines.map(l => `<li>${l.replace(/^\s*\d+\.\s+/, '')}</li>`).join('') + '</ol>';
+    }
+    return '<p>' + b.replace(/\n/g, '<br>') + '</p>';
+  }).join('');
+}
+
+function renderAssistantMessages() {
+  const box = document.getElementById('assistant-messages');
+  if (!box) return;
+  const ctx = document.getElementById('assistant-context');
+  if (ctx) ctx.textContent = _assistantCandidateId ? `· about ${_assistantCandidateName}` : '';
+
+  if (!_assistantMessages.length) {
+    box.innerHTML = `
+      <div style="max-width:760px;margin:0 auto;padding:0 20px">
+        <div style="text-align:center;padding:32px 0 24px">
+          <div style="font-size:2.4rem">💬</div>
+          <h3 style="margin:10px 0 4px">How can I help?</h3>
+          <p style="color:var(--text-muted);margin:0">Ask about ${_assistantCandidateId ? escapeHtml(_assistantCandidateName) : 'a candidate'}, your outreach, or how to run your pipeline.</p>
+        </div>
+        <div style="display:flex;flex-wrap:wrap;gap:8px;justify-content:center">
+          ${ASSISTANT_SUGGESTIONS.map(s => `<button class="assistant-suggest btn btn-secondary btn-sm" style="font-size:0.82rem" data-q="${escapeHtml(s)}">${escapeHtml(s)}</button>`).join('')}
+        </div>
+      </div>`;
+    box.querySelectorAll('.assistant-suggest').forEach(b =>
+      b.addEventListener('click', () => { document.getElementById('assistant-input').value = b.dataset.q; sendAssistantMessage(); }));
+    return;
+  }
+
+  const bubble = (m) => {
+    if (m.role === 'user') {
+      return `<div style="display:flex;justify-content:flex-end"><div style="background:var(--blue,#2563eb);color:#fff;padding:10px 14px;border-radius:14px 14px 4px 14px;max-width:82%;white-space:pre-wrap;font-size:0.92rem;line-height:1.5">${escapeHtml(m.content)}</div></div>`;
+    }
+    return `<div style="display:flex;justify-content:flex-start"><div class="assistant-reply" style="background:var(--surface);border:1px solid var(--border);padding:12px 16px;border-radius:14px 14px 14px 4px;max-width:88%;font-size:0.92rem;line-height:1.6">${m.pending ? '<span style="color:var(--text-muted)">Thinking…</span>' : assistantFormat(m.content)}</div></div>`;
+  };
+  box.innerHTML = `<div style="max-width:760px;margin:0 auto;padding:0 20px;display:flex;flex-direction:column;gap:14px">${_assistantMessages.map(bubble).join('')}</div>`;
+  box.scrollTop = box.scrollHeight;
+}
+
+async function sendAssistantMessage() {
+  const input = document.getElementById('assistant-input');
+  const text = (input.value || '').trim();
+  if (!text || _assistantBusy) return;
+  input.value = ''; input.style.height = 'auto';
+  _assistantMessages.push({ role: 'user', content: text });
+  _assistantMessages.push({ role: 'assistant', content: '', pending: true });
+  renderAssistantMessages();
+  _assistantBusy = true;
+  document.getElementById('assistant-send-btn').disabled = true;
+  try {
+    const history = _assistantMessages.filter(m => !m.pending).map(m => ({ role: m.role, content: m.content }));
+    const res = await API.ai.chat(history, _assistantCandidateId || undefined);
+    _assistantMessages = _assistantMessages.filter(m => !m.pending);
+    _assistantMessages.push({ role: 'assistant', content: res.reply || '(no response)' });
+  } catch (err) {
+    _assistantMessages = _assistantMessages.filter(m => !m.pending);
+    _assistantMessages.push({ role: 'assistant', content: `⚠️ ${err.message}` });
+  } finally {
+    _assistantBusy = false;
+    const btn = document.getElementById('assistant-send-btn');
+    if (btn) btn.disabled = false;
+    renderAssistantMessages();
+    input.focus();
+  }
+}
+
+function newAssistantChat() {
+  _assistantMessages = [];
+  _assistantCandidateId = null;
+  _assistantCandidateName = '';
+  renderAssistantMessages();
+}
+
+// Entry point from the candidate modal — opens the assistant scoped to a person.
+function askAssistantAboutCandidate(candidateId, name) {
+  _assistantMessages = [];
+  _assistantCandidateId = candidateId;
+  _assistantCandidateName = name || 'this candidate';
+  if (typeof closeCandidateModal === 'function') { try { closeCandidateModal(); } catch (_) {} }
+  navigateTo('assistant');
+}
+
+function loadAssistantPage() {
+  renderAssistantMessages();
+  if (_assistantWired) return;
+  _assistantWired = true;
+  const input = document.getElementById('assistant-input');
+  const sendBtn = document.getElementById('assistant-send-btn');
+  const newBtn = document.getElementById('assistant-new-btn');
+  if (sendBtn) sendBtn.addEventListener('click', sendAssistantMessage);
+  if (newBtn) newBtn.addEventListener('click', newAssistantChat);
+  if (input) {
+    input.addEventListener('keydown', e => {
+      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendAssistantMessage(); }
+    });
+    input.addEventListener('input', () => { input.style.height = 'auto'; input.style.height = Math.min(input.scrollHeight, 160) + 'px'; });
+  }
+}
 
 let _templates = [];
 

@@ -188,6 +188,68 @@ async function callAI(prompt, maxTokens, preferClaude = false) {
   return { content: res.content, usage: res.usage, provider: 'claude', finishReason: res.stop_reason };
 }
 
+// Multi-turn chat across both providers: a system prompt plus a running
+// {role:'user'|'assistant', content} history. Mirrors callAI's provider
+// preference/fallback but preserves the conversation instead of flattening it
+// into a single prompt.
+async function callChat(system, messages, maxTokens, preferClaude = false) {
+  const anthropicCall = async () => {
+    const res = await anthropic.messages.create({
+      model: CLAUDE_MODEL, max_tokens: maxTokens, system,
+      messages: messages.map(m => ({ role: m.role, content: m.content }))
+    });
+    return { content: res.content, usage: res.usage, provider: 'claude' };
+  };
+  const openaiCall = async () => {
+    const res = await getOpenAI().chat.completions.create({
+      model: OPENAI_MODEL, max_tokens: maxTokens,
+      messages: [{ role: 'system', content: system }, ...messages]
+    });
+    return {
+      content: [{ text: res.choices[0].message.content }],
+      usage: { input_tokens: res.usage.prompt_tokens, output_tokens: res.usage.completion_tokens },
+      provider: 'openai'
+    };
+  };
+
+  if (preferClaude) {
+    try { return await anthropicCall(); }
+    catch (err) { console.warn('[AI chat] Claude unavailable, switching to OpenAI:', err.message); return await openaiCall(); }
+  }
+  if (process.env.OPENAI_API_KEY) {
+    try { return await openaiCall(); }
+    catch (err) { console.warn('[AI chat] OpenAI unavailable, switching to Claude:', err.message); }
+  }
+  return await anthropicCall();
+}
+
+// Recruiting assistant chat. `messages` is the running conversation; `candidate`
+// (optional) grounds the answer in a specific person. Returns { text, costCents }.
+async function generateChatReply(user, messages, candidate = null) {
+  const company = getCompanyContext(user);
+  const name = (user.name || 'there').trim();
+  const role = (user.title && user.title.trim()) || 'recruiter';
+
+  let system = `You are an expert recruiting assistant embedded in ${name}'s recruiting platform${company.name ? ` (${company.name})` : ''}. ${name} is a ${role}. You help them with:
+- Specific candidates: how to approach someone, assess fit, what to say next, how to handle a reply or objection.
+- Running their pipeline: outreach cadence, follow-up strategy, email deliverability, moving people through stages, improving reply/conversion rates.
+- General recruiting craft and best practices.
+
+Be practical, concise, and specific — favour clear, actionable advice over generic filler. Use short paragraphs and bullet points where they help. When you genuinely need a detail about their setup or a candidate to answer well, ask one short clarifying question instead of guessing. Warm, professional, plain language. Never invent facts about a candidate beyond what you're given.
+
+Company context: ${company.pitch}${company.salaryRange ? `\nGeneral salary range: ${company.salaryRange}.` : ''}`;
+
+  if (candidate) {
+    const convo = formatConversationContext(candidate);
+    system += `\n\n═══ CANDIDATE IN CONTEXT ═══\nThe user is asking about this specific candidate. Ground your answers in these details:\n${formatCandidateContext(candidate)}${convo ? '\n' + convo : ''}`;
+  }
+
+  const response = await callChat(system, messages, 1200, pickProvider(user, null) || prefersClaude(user));
+  const text = (response.content[0].text || '').trim();
+  const costCents = calcCostCents(response.usage, response.provider);
+  return { text, costCents };
+}
+
 // ─── Attachment → text (for the "show the AI a file" instruction feature) ──────
 // Images are transcribed/described once via the model's vision here (at attach
 // time), then flow through the normal text-only generation path as context —
@@ -1746,6 +1808,7 @@ module.exports = {
   generateOutreach,
   generateRoleJD,
   generateResumeFeedback,
+  generateChatReply,
   generateVictoryEmail,
   generateReply,
   generateFollowUp,
