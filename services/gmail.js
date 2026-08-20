@@ -600,6 +600,19 @@ function parseEmailBody(payload) {
 }
 
 // ─── Email Signature Builder ───────────────────────────────────────────────────
+// Photos we host live at <app-domain>/photos/…, but the app domain is baked
+// into the stored URL at upload time. After switching to a custom domain, older
+// signatures still point at the old Railway host — so re-anchor any /photos/
+// URL to the current BASE_URL. This keeps the image served from the current
+// (custom) domain and survives future domain changes automatically.
+function normalizePhotoUrl(url) {
+  if (!url) return '';
+  const idx = url.indexOf('/photos/');
+  if (idx === -1 || !/^https?:\/\//i.test(url)) return url;  // external/data URL — leave as-is
+  const base = (BASE_URL || '').replace(/\/+$/, '');
+  return `${base}${url.slice(idx)}`;
+}
+
 function buildSignatureHtml(user) {
   const sig  = user.signature || {};
   if (!sig.enabled) return '';
@@ -608,7 +621,7 @@ function buildSignatureHtml(user) {
 
   const title      = (user.title || '').trim();
   const company    = (user.companyName || '').trim();
-  const photo      = (sig.photoUrl  || '').trim();
+  const photo      = normalizePhotoUrl((sig.photoUrl || '').trim());
   const website    = (sig.website   || '').trim();
   const location   = (sig.location  || '').trim();
   const linkedin   = (sig.linkedin  || '').trim();
