@@ -7,7 +7,7 @@ const axios   = require('axios');
 const { v4: uuidv4 } = require('uuid');
 const storage = require('./storage');
 const { BASE_URL, MICROSOFT_CLIENT_ID, MICROSOFT_CLIENT_SECRET } = require('../config');
-const { buildSignatureHtml, buildSignaturePlainText, fetchInlinePhoto } = require('./gmail');
+const { buildSignatureHtml, buildSignaturePlainText } = require('./gmail');
 
 const TENANT       = 'consumers'; // personal Microsoft accounts only
 const AUTH_BASE    = `https://login.microsoftonline.com/${TENANT}/oauth2/v2.0`;
@@ -103,10 +103,8 @@ async function sendEmail(userId, { to, subject, body, trackingId, inReplyTo, ref
   const user  = await storage.getUserById(userId);
   const token = await getAccessToken(user);
 
-  // Build HTML with tracking pixel + signature. The signature photo is embedded
-  // inline (CID) so it always renders and needs no external fetch.
-  const inlinePhoto = await fetchInlinePhoto(user);
-  const sigHtml   = buildSignatureHtml(user, inlinePhoto ? { photoCid: inlinePhoto.cid } : {});
+  // Build HTML with tracking pixel + signature
+  const sigHtml   = buildSignatureHtml(user);
   const sigPlain  = buildSignaturePlainText(user);
   const trackPx   = (user.trackOpens === true && trackingId)  // opt-in open tracking (off by default)
     ? `<img src="${BASE_URL}/track/${trackingId}.png" width="1" height="1" style="display:none" />`
@@ -128,24 +126,13 @@ async function sendEmail(userId, { to, subject, body, trackingId, inReplyTo, ref
     ];
   }
 
-  const graphAttachments = [
-    ...(inlinePhoto ? [{
-      '@odata.type': '#microsoft.graph.fileAttachment',
-      name: inlinePhoto.filename,
-      contentType: inlinePhoto.contentType,
-      contentBytes: inlinePhoto.content.toString('base64'),
-      isInline: true,
-      contentId: inlinePhoto.cid
-    }] : []),
-    ...((attachments || []).map(a => ({
+  if (attachments && attachments.length) {
+    message.attachments = attachments.map(a => ({
       '@odata.type': '#microsoft.graph.fileAttachment',
       name: a.filename,
       contentType: a.contentType || 'application/octet-stream',
       contentBytes: a.content.toString('base64')
-    })))
-  ];
-  if (graphAttachments.length) {
-    message.attachments = graphAttachments;
+    }));
   }
 
   await axios.post(`${GRAPH_BASE}/me/sendMail`, { message, saveToSentItems: true }, {

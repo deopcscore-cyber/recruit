@@ -1,99 +1,8 @@
 const { google } = require('googleapis');
-const fs = require('fs');
-const path = require('path');
-const axios = require('axios');
 const storage = require('./storage');
-const { BASE_URL, DATA_DIR } = require('../config');
+const { BASE_URL } = require('../config');
 
 const _sleep = ms => new Promise(r => setTimeout(r, ms));
-
-// ─── Inline signature photo ───────────────────────────────────────────────────
-// The signature photo is embedded inline (CID attachment) rather than referenced
-// by URL. A remote <img src="https://…"> in a cold email is blocked by default
-// in Outlook (and privacy modes of Gmail) — the recipient sees a broken box —
-// and an external image fetch on open is itself a spam signal. An inline image
-// always renders and requires no external fetch. Bytes are read from disk when
-// the photo is one we host (/photos/…), otherwise fetched once and cached.
-const CID_PHOTO = 'sigphoto';               // referenced in HTML as cid:sigphoto
-const _photoCache = new Map();              // photoUrl -> { at, photo|null }
-const PHOTO_CACHE_TTL = 10 * 60 * 1000;     // 10 min
-const PHOTO_MAX_BYTES = 3 * 1024 * 1024;    // 3 MB cap
-
-function _extToType(ext) {
-  switch ((ext || '').toLowerCase()) {
-    case '.png':  return 'image/png';
-    case '.gif':  return 'image/gif';
-    case '.webp': return 'image/webp';
-    case '.jpg':
-    case '.jpeg': return 'image/jpeg';
-    default:      return '';
-  }
-}
-
-// Returns { cid, filename, contentType, content:Buffer } or null. Never throws —
-// on any failure callers fall back to the remote-URL signature, so a broken
-// photo can never block a send.
-async function fetchInlinePhoto(user) {
-  try {
-    const sig = user && user.signature;
-    if (!sig || !sig.enabled) return null;
-    const url = (sig.photoUrl || '').trim();
-    if (!url) return null;
-
-    const cached = _photoCache.get(url);
-    if (cached && Date.now() - cached.at < PHOTO_CACHE_TTL) return cached.photo;
-
-    let content = null;
-    let contentType = '';
-    let filename = 'photo';
-
-    // data: URI — decode directly
-    const dataMatch = /^data:([^;,]+)?(;base64)?,(.*)$/s.exec(url);
-    if (dataMatch) {
-      contentType = dataMatch[1] || 'image/jpeg';
-      content = Buffer.from(dataMatch[3], dataMatch[2] ? 'base64' : 'utf8');
-      filename = 'photo.' + (contentType.split('/')[1] || 'jpg');
-    } else {
-      // Photos we host live on disk under DATA_DIR/photos — read them directly
-      // instead of making an HTTP round-trip back to ourselves.
-      const photosPrefix = `${BASE_URL}/photos/`;
-      if (url.startsWith(photosPrefix)) {
-        const base = url.slice(photosPrefix.length).split(/[?#]/)[0];
-        const diskPath = path.join(DATA_DIR, 'photos', path.basename(base));
-        if (fs.existsSync(diskPath)) {
-          content = fs.readFileSync(diskPath);
-          contentType = _extToType(path.extname(diskPath)) || 'image/jpeg';
-          filename = path.basename(diskPath);
-        }
-      }
-      // Fall back to an HTTP fetch for external photo URLs
-      if (!content && /^https?:\/\//i.test(url)) {
-        const res = await axios.get(url, {
-          responseType: 'arraybuffer',
-          timeout: 8000,
-          maxContentLength: PHOTO_MAX_BYTES,
-          maxBodyLength: PHOTO_MAX_BYTES
-        });
-        content = Buffer.from(res.data);
-        contentType = (res.headers['content-type'] || '').split(';')[0].trim()
-          || _extToType(path.extname(url.split(/[?#]/)[0])) || 'image/jpeg';
-        filename = path.basename(url.split(/[?#]/)[0]) || 'photo.jpg';
-      }
-    }
-
-    if (!content || !content.length || content.length > PHOTO_MAX_BYTES
-        || !/^image\//i.test(contentType)) {
-      _photoCache.set(url, { at: Date.now(), photo: null });
-      return null;
-    }
-
-    const photo = { cid: CID_PHOTO, filename, contentType, content };
-    _photoCache.set(url, { at: Date.now(), photo });
-    return photo;
-  } catch {
-    return null; // fall back to remote-URL signature
-  }
-}
 
 // Gmail signals its per-user rate limit as "User-rate limit exceeded. Retry
 // after ..." (HTTP 429 / reason userRateLimitExceeded). Reply-fetching must
@@ -289,7 +198,7 @@ function stripToPlainText(body) {
     .trim();
 }
 
-function buildRawEmail({ from, to, cc, subject, body, signatureHtml = '', signaturePlain = '', threadId, inReplyTo, references, trackingId, baseUrl, attachments = [], inlineImages = [] }) {
+function buildRawEmail({ from, to, cc, subject, body, signatureHtml = '', signaturePlain = '', threadId, inReplyTo, references, trackingId, baseUrl, attachments = [] }) {
   const boundary = `_wt_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
 
   // ── Plain-text part ───────────────────────────────────────────────────────────
@@ -324,9 +233,7 @@ function buildRawEmail({ from, to, cc, subject, body, signatureHtml = '', signat
     : subject;
 
   const hasAttachments = attachments && attachments.length > 0;
-  const hasInline      = inlineImages && inlineImages.length > 0;
-  const outerBoundary   = hasAttachments ? `_wtx_${Date.now()}_${Math.random().toString(36).slice(2, 10)}` : null;
-  const relatedBoundary = hasInline      ? `_wtr_${Date.now()}_${Math.random().toString(36).slice(2, 10)}` : null;
+  const outerBoundary = hasAttachments ? `_wtx_${Date.now()}_${Math.random().toString(36).slice(2, 10)}` : null;
 
   const headers = [
     `From: ${from}`,
@@ -335,15 +242,11 @@ function buildRawEmail({ from, to, cc, subject, body, signatureHtml = '', signat
     `Date: ${new Date().toUTCString()}`,
     `Subject: ${safeSubject}`,
     'MIME-Version: 1.0',
-    // Envelope: multipart/mixed when there are file attachments; otherwise
-    // multipart/related when there's an inline image; otherwise a plain
-    // text/html alternative pair. The alternative pair is always the innermost
-    // container so clients still get a proper plain-text fallback.
+    // With attachments, the outer envelope is multipart/mixed and the
+    // text/html alternative pair becomes a nested part inside it.
     hasAttachments
       ? `Content-Type: multipart/mixed; boundary="${outerBoundary}"`
-      : hasInline
-        ? `Content-Type: multipart/related; boundary="${relatedBoundary}"`
-        : `Content-Type: multipart/alternative; boundary="${boundary}"`
+      : `Content-Type: multipart/alternative; boundary="${boundary}"`
   ];
 
   if (inReplyTo) {
@@ -373,35 +276,6 @@ function buildRawEmail({ from, to, cc, subject, body, signatureHtml = '', signat
     `--${boundary}--`
   ];
 
-  // Inline image parts (Content-ID + inline disposition), placed inside the
-  // multipart/related container so `cid:` refs in the HTML resolve.
-  const inlineImageParts = (bnd) => inlineImages.flatMap(img => {
-    const b64 = img.content.toString('base64').match(/.{1,76}/g).join('\r\n');
-    return [
-      `--${bnd}`,
-      `Content-Type: ${img.contentType || 'image/jpeg'}; name="${img.filename}"`,
-      'Content-Transfer-Encoding: base64',
-      `Content-ID: <${img.cid}>`,
-      `Content-Disposition: inline; filename="${img.filename}"`,
-      '',
-      b64,
-      ''
-    ];
-  });
-
-  // The "content root" is the alternative pair, optionally wrapped in a
-  // multipart/related when there's an inline image. Reused whether or not
-  // there are also file attachments.
-  const relatedBlock = hasInline ? [
-    `--${relatedBoundary}`,
-    `Content-Type: multipart/alternative; boundary="${boundary}"`,
-    '',
-    ...alternativePart,
-    '',
-    ...inlineImageParts(relatedBoundary),
-    `--${relatedBoundary}--`
-  ] : null;
-
   let bodyLines;
   if (hasAttachments) {
     const attachmentParts = attachments.flatMap(att => {
@@ -420,17 +294,15 @@ function buildRawEmail({ from, to, cc, subject, body, signatureHtml = '', signat
       ];
     });
 
-    const contentRoot = hasInline
-      ? [ `--${outerBoundary}`, `Content-Type: multipart/related; boundary="${relatedBoundary}"`, '', ...relatedBlock, '' ]
-      : [ `--${outerBoundary}`, `Content-Type: multipart/alternative; boundary="${boundary}"`, '', ...alternativePart, '' ];
-
     bodyLines = [
-      ...contentRoot,
+      `--${outerBoundary}`,
+      `Content-Type: multipart/alternative; boundary="${boundary}"`,
+      '',
+      ...alternativePart,
+      '',
       ...attachmentParts,
       `--${outerBoundary}--`
     ];
-  } else if (hasInline) {
-    bodyLines = relatedBlock;
   } else {
     bodyLines = alternativePart;
   }
@@ -466,18 +338,15 @@ async function sendEmail(userId, { to, cc, subject, body, threadId, inReplyTo, r
     || fromEmail.split('@')[0].replace(/[._-]+/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
   const from = `"${fromName}" <${fromEmail}>`;
 
-  // Embed the signature photo inline (CID) so it always renders and needs no
-  // external fetch; falls back to the remote URL if the photo can't be read.
-  const inlinePhoto    = await fetchInlinePhoto(user);
   // Signature is passed separately so buildRawEmail can detect the body format correctly
-  const signatureHtml  = buildSignatureHtml(user, inlinePhoto ? { photoCid: inlinePhoto.cid } : {});
+  const signatureHtml  = buildSignatureHtml(user);
   const signaturePlain = buildSignaturePlainText(user);
 
   // Open-tracking is off unless the user explicitly enabled it. When off, no
   // pixel is embedded — the tracking image loads from the app's domain (not the
   // sender's), which hurts deliverability, so it's opt-in.
   const pixelTrackingId = user.trackOpens === true ? trackingId : null;
-  const raw = buildRawEmail({ from, to, cc, subject, body, signatureHtml, signaturePlain, threadId, inReplyTo, references, trackingId: pixelTrackingId, baseUrl: BASE_URL, attachments, inlineImages: inlinePhoto ? [inlinePhoto] : [] });
+  const raw = buildRawEmail({ from, to, cc, subject, body, signatureHtml, signaturePlain, threadId, inReplyTo, references, trackingId: pixelTrackingId, baseUrl: BASE_URL, attachments });
 
   const requestBody = { raw };
   if (threadId) requestBody.threadId = threadId;
@@ -731,7 +600,7 @@ function parseEmailBody(payload) {
 }
 
 // ─── Email Signature Builder ───────────────────────────────────────────────────
-function buildSignatureHtml(user, opts = {}) {
+function buildSignatureHtml(user) {
   const sig  = user.signature || {};
   if (!sig.enabled) return '';
   const name = (user.name || '').trim();
@@ -747,12 +616,9 @@ function buildSignatureHtml(user, opts = {}) {
   const twitter    = (sig.twitter   || '').trim();
   const disclaimer = (sig.disclaimer|| '').trim();
 
-  // When a CID is supplied (send path) reference the inline attachment instead
-  // of the remote URL, so the image always renders and needs no external fetch.
-  const photoSrc = photo ? (opts.photoCid ? `cid:${opts.photoCid}` : photo) : '';
-  const photoBlock = photoSrc ? `
+  const photoBlock = photo ? `
     <td width="108" style="padding-right:14px;vertical-align:middle">
-      <img src="${photoSrc}" width="90" height="90" alt="${name}"
+      <img src="${photo}" width="90" height="90" alt="${name}"
            style="display:block;border-radius:50%;width:90px;height:90px;object-fit:cover" />
     </td>` : '';
 
@@ -857,6 +723,5 @@ module.exports = {
   parseEmailBody,
   buildRawEmailParts,
   buildSignatureHtml,
-  buildSignaturePlainText,
-  fetchInlinePhoto
+  buildSignaturePlainText
 };

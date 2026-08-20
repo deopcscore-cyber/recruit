@@ -4,7 +4,7 @@ const { simpleParser } = require('mailparser');
 const { v4: uuidv4 } = require('uuid');
 const dns = require('dns');
 const storage = require('./storage');
-const { buildRawEmailParts, buildSignatureHtml, buildSignaturePlainText, fetchInlinePhoto } = require('./gmail');
+const { buildRawEmailParts, buildSignatureHtml, buildSignaturePlainText } = require('./gmail');
 
 // Resolve hostname to IPv4 — Railway can't route IPv6 outbound
 async function resolveIPv4(hostname) {
@@ -72,12 +72,7 @@ async function sendEmail(userId, { to, cc, subject, body, inReplyTo, references,
   const fromName  = (cfg.fromName || user.name || '').trim();
   const from      = fromName ? `"${fromName}" <${fromEmail}>` : fromEmail;
 
-  // Raw SMTP (nodemailer) embeds the signature photo inline (CID); the Resend
-  // HTTP path keeps the remote URL (its custom-domain senders render remote
-  // images fine, and inline-CID support there isn't guaranteed).
-  const useResend = !!process.env.RESEND_API_KEY;
-  const inlinePhoto = useResend ? null : await fetchInlinePhoto(user);
-  const sigHtml  = buildSignatureHtml(user, inlinePhoto ? { photoCid: inlinePhoto.cid } : {});
+  const sigHtml  = buildSignatureHtml(user);
   const sigPlain = buildSignaturePlainText(user);
   const { BASE_URL } = require('../config');
   const pixelTrackingId = user.trackOpens === true ? trackingId : null;  // opt-in open tracking
@@ -104,13 +99,6 @@ async function sendEmail(userId, { to, cc, subject, body, inReplyTo, references,
   const resolvedHost = await resolveIPv4(cfg.host);
   const transporter = makeTransporter(cfg, resolvedHost);
 
-  // nodemailer marks an attachment inline when it carries a `cid` — that's how
-  // the signature photo resolves against the cid: ref in the HTML.
-  const mailAttachments = [
-    ...(inlinePhoto ? [{ filename: inlinePhoto.filename, content: inlinePhoto.content, contentType: inlinePhoto.contentType, cid: inlinePhoto.cid }] : []),
-    ...((attachments || []).map(a => ({ filename: a.filename, content: a.content, contentType: a.contentType })))
-  ];
-
   const mail = {
     from,
     to,
@@ -120,7 +108,9 @@ async function sendEmail(userId, { to, cc, subject, body, inReplyTo, references,
     ...(cc        ? { cc }                         : {}),
     ...(inReplyTo ? { inReplyTo: `<${inReplyTo.replace(/[<>]/g, '')}>` } : {}),
     ...(references? { references }                  : {}),
-    ...(mailAttachments.length ? { attachments: mailAttachments } : {})
+    ...(attachments && attachments.length
+      ? { attachments: attachments.map(a => ({ filename: a.filename, content: a.content, contentType: a.contentType })) }
+      : {})
   };
 
   const info = await transporter.sendMail(mail);
