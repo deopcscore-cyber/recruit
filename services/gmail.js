@@ -656,10 +656,13 @@ function buildSignatureHtml(user) {
     : `<p style="margin:0;font-size:20px;font-weight:700;color:#111111;font-family:Arial,sans-serif;line-height:1.2">${name}</p>
        ${company ? `<p style="margin:5px 0 0;font-size:15px;color:#444444;font-family:Arial,sans-serif;line-height:1.4">${company}</p>` : ''}`;
 
+  // No external <link> font here on purpose: an external stylesheet reference to
+  // a third-party domain inside email HTML is a spam signal, and email clients
+  // strip <link> tags anyway so it never rendered. Plain, self-contained markup
+  // keeps the message light and inbox-friendly.
   return `
-<link href="https://fonts.googleapis.com/css2?family=Dancing+Script:wght@600&display=swap" rel="stylesheet">
 <div style="margin-top:24px;font-family:Arial,sans-serif">
-  <p style="margin:0 0 14px;font-family:'Dancing Script',cursive;font-size:30px;color:#2d2d2d;line-height:1;font-weight:600">Sincerely</p>
+  <p style="margin:0 0 14px;font-size:16px;color:#2d2d2d;line-height:1.2">Sincerely,</p>
   <table border="0" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin-bottom:14px;width:100%">
     <tr>
       ${photoBlock}
