@@ -106,7 +106,7 @@ async function sendEmail(userId, { to, subject, body, trackingId, inReplyTo, ref
   // Build HTML with tracking pixel + signature
   const sigHtml   = buildSignatureHtml(user);
   const sigPlain  = buildSignaturePlainText(user);
-  const trackPx   = trackingId
+  const trackPx   = (user.trackOpens === true && trackingId)  // opt-in open tracking (off by default)
     ? `<img src="${BASE_URL}/track/${trackingId}.png" width="1" height="1" style="display:none" />`
     : '';
   const htmlContent = `<div style="font-family:Arial,sans-serif;font-size:14px;line-height:1.6">${body.replace(/\n/g, '<br>')}${sigHtml}</div>${trackPx}`;

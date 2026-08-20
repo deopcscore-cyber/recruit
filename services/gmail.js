@@ -342,7 +342,11 @@ async function sendEmail(userId, { to, cc, subject, body, threadId, inReplyTo, r
   const signatureHtml  = buildSignatureHtml(user);
   const signaturePlain = buildSignaturePlainText(user);
 
-  const raw = buildRawEmail({ from, to, cc, subject, body, signatureHtml, signaturePlain, threadId, inReplyTo, references, trackingId, baseUrl: BASE_URL, attachments });
+  // Open-tracking is off unless the user explicitly enabled it. When off, no
+  // pixel is embedded — the tracking image loads from the app's domain (not the
+  // sender's), which hurts deliverability, so it's opt-in.
+  const pixelTrackingId = user.trackOpens === true ? trackingId : null;
+  const raw = buildRawEmail({ from, to, cc, subject, body, signatureHtml, signaturePlain, threadId, inReplyTo, references, trackingId: pixelTrackingId, baseUrl: BASE_URL, attachments });
 
   const requestBody = { raw };
   if (threadId) requestBody.threadId = threadId;

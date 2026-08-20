@@ -66,6 +66,7 @@ router.get('/', async (req, res) => {
       additionalDocs:           (Array.isArray(user.additionalDocs) && user.additionalDocs.length) ? user.additionalDocs : [{ name: 'Technical Statement of Qualifications (TSQ)', description: '' }, { name: 'Executive Bio', description: '' }],
       skipTeamContacted:        !!user.skipTeamContacted,
       skipUndeliverable:        !!user.skipUndeliverable,
+      trackOpens:               user.trackOpens === true,
       outreachSample:           user.outreachSample           || '',
       subjectSample:            user.subjectSample            || '',
       followUpConfig:           user.followUpConfig           || { enabled: true, steps: [{ days: 3 }, { days: 7 }] },
@@ -130,6 +131,7 @@ router.put('/', async (req, res) => {
     // Skip candidates other recruiters have already contacted, on import
     if (req.body.skipTeamContacted !== undefined) user.skipTeamContacted = !!req.body.skipTeamContacted;
     if (req.body.skipUndeliverable !== undefined) user.skipUndeliverable = !!req.body.skipUndeliverable;
+    if (req.body.trackOpens !== undefined) user.trackOpens = !!req.body.trackOpens;
 
     // Additional documents requested when a resume is assessed "strong"
     // (TSQ, Executive Bio, …). Stored as [{name, description}], capped for sanity.
@@ -266,6 +268,7 @@ router.put('/', async (req, res) => {
       additionalDocs:           (Array.isArray(user.additionalDocs) && user.additionalDocs.length) ? user.additionalDocs : [{ name: 'Technical Statement of Qualifications (TSQ)', description: '' }, { name: 'Executive Bio', description: '' }],
       skipTeamContacted:        !!user.skipTeamContacted,
       skipUndeliverable:        !!user.skipUndeliverable,
+      trackOpens:               user.trackOpens === true,
       outreachSample:           user.outreachSample           || '',
       followUpConfig:           user.followUpConfig           || { enabled: true, steps: [{ days: 3 }, { days: 7 }] },
       autopilot:                Object.assign({ enabled:false, dailyCap:30, windowStart:'09:00', windowEnd:'17:00', weekdaysOnly:true, minSpacingMin:20, maxSpacingMin:60, warmup:true }, user.autopilot || {})

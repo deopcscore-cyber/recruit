@@ -260,7 +260,10 @@ async function sendEmail(userId, { to, cc, subject, body, inReplyTo, references,
 
   const sigHtml  = buildSignatureHtml(user);
   const sigPlain = buildSignaturePlainText(user);
-  const { htmlBody } = buildRawEmailParts({ body, signatureHtml: sigHtml, signaturePlain: sigPlain, trackingId, baseUrl: BASE_URL });
+  // Open-tracking pixel only when the user opted in (off by default — it loads
+  // from the app's domain, not the sender's, which hurts deliverability).
+  const pixelTrackingId = user.trackOpens === true ? trackingId : null;
+  const { htmlBody } = buildRawEmailParts({ body, signatureHtml: sigHtml, signaturePlain: sigPlain, trackingId: pixelTrackingId, baseUrl: BASE_URL });
 
   const fromName = (user.zoho.displayName || user.name || '').trim();
   const fromAddr = fromName ? `${fromName} <${address}>` : address;
