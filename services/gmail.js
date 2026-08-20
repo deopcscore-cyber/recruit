@@ -639,11 +639,6 @@ function buildSignatureHtml(user) {
     ? `<p style="margin:0 0 14px">${socialPills.join('')}</p>`
     : '';
 
-  const visitBtn = website
-    ? `<a href="${website}" target="_blank"
-          style="display:inline-block;padding:8px 24px;border:1.5px solid #333333;border-radius:6px;color:#333333;text-decoration:none;font-family:Arial,sans-serif;font-size:13px;font-weight:500;margin-bottom:14px">Visit Website</a>`
-    : '';
-
   const disclaimerBlock = disclaimer
     ? `<p style="margin:0;font-size:11px;color:#888888;line-height:1.6;font-family:Arial,sans-serif;max-width:560px">${disclaimer}</p>`
     : '';
@@ -676,7 +671,6 @@ function buildSignatureHtml(user) {
   ${locationLine}
   <div style="height:8px"></div>
   ${socialBlock}
-  ${visitBtn}
   ${disclaimerBlock}
 </div>`;
 }

@@ -2466,17 +2466,13 @@ function initSettingsPage() {
     const socialPills = [pillBtn(linkedin,'#0A66C2','in  LinkedIn'), pillBtn(facebook,'#1877F2','f  Facebook'), pillBtn(twitter,'#1a1a1a','X  Twitter')].filter(Boolean).join('');
     const socialBlock = socialPills ? `<p style="margin:0 0 14px">${socialPills}</p>` : '';
 
-    const visitBtn = website
-      ? `<a href="${website}" target="_blank" style="display:inline-block;padding:8px 24px;border:1.5px solid #333333;border-radius:6px;color:#333333;text-decoration:none;font-family:Arial,sans-serif;font-size:13px;font-weight:500;margin-bottom:14px">Visit Website</a>`
-      : '';
-
     const discHtml = disc
       ? `<p style="margin:0;font-size:11px;color:#888888;line-height:1.6;font-family:Arial,sans-serif;max-width:560px">${disc}</p>`
       : '';
 
     content.innerHTML = `
       <div style="font-family:Arial,sans-serif;max-width:600px;width:100%">
-        <p style="margin:0 0 14px;font-family:'Dancing Script',cursive;font-size:30px;color:#2d2d2d;line-height:1;font-weight:600">Sincerely</p>
+        <p style="margin:0 0 14px;font-size:16px;color:#2d2d2d;line-height:1.2">Sincerely,</p>
         <table border="0" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin-bottom:14px;width:100%">
           <tr>
             ${photoBlock}
@@ -2490,7 +2486,6 @@ function initSettingsPage() {
         ${locationLine}
         <div style="height:8px"></div>
         ${socialBlock}
-        ${visitBtn}
         ${discHtml}
       </div>`;
     box.style.display = 'block';
