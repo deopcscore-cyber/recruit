@@ -629,6 +629,28 @@ function buildSignatureHtml(user) {
   const twitter    = (sig.twitter   || '').trim();
   const disclaimer = (sig.disclaimer|| '').trim();
 
+  // ── Minimal style ─────────────────────────────────────────────────────────
+  // A light, text-only signature like the default Gmail/Outlook ones: no photo,
+  // no button graphics, no external anything — the most inbox-friendly option.
+  if (sig.style === 'minimal') {
+    const line2 = [title, company].filter(Boolean).join(' · ');
+    const link  = (href, label) => `<a href="${href}" style="color:#1155cc;text-decoration:none">${label}</a>`;
+    const bits  = [];
+    if (location) bits.push(location);
+    if (website)  bits.push(link(website, website.replace(/^https?:\/\//, '').replace(/\/+$/, '')));
+    if (linkedin) bits.push(link(linkedin, 'LinkedIn'));
+    if (facebook) bits.push(link(facebook, 'Facebook'));
+    if (twitter)  bits.push(link(twitter,  'X'));
+    return `
+<div style="margin-top:20px;font-family:Arial,Helvetica,sans-serif;font-size:13px;color:#555555;line-height:1.5">
+  <p style="margin:0 0 10px;font-size:15px;color:#2d2d2d;line-height:1.2">Sincerely,</p>
+  <p style="margin:0;font-size:14px;font-weight:bold;color:#222222">${name}</p>
+  ${line2 ? `<p style="margin:2px 0 0;color:#555555">${line2}</p>` : ''}
+  ${bits.length ? `<p style="margin:3px 0 0;color:#777777">${bits.join('&nbsp;&nbsp;&middot;&nbsp;&nbsp;')}</p>` : ''}
+  ${disclaimer ? `<p style="margin:12px 0 0;font-size:11px;color:#999999;max-width:560px;line-height:1.5">${disclaimer}</p>` : ''}
+</div>`;
+  }
+
   const photoBlock = photo ? `
     <td width="108" style="padding-right:14px;vertical-align:middle">
       <img src="${photo}" width="90" height="90" alt="${name}"

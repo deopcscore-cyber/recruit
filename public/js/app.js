@@ -2358,6 +2358,7 @@ function initSettingsPage() {
       await API.settings.update({
         signature: {
           enabled:    document.getElementById('sig-enabled').checked,
+          style:      document.getElementById('sig-style').value,
           photoUrl:   document.getElementById('sig-photo').value.trim(),
           website:    document.getElementById('sig-website').value.trim(),
           location:   document.getElementById('sig-location').value.trim(),
@@ -2445,6 +2446,28 @@ function initSettingsPage() {
     const facebook= document.getElementById('sig-facebook').value.trim();
     const twitter = document.getElementById('sig-twitter').value.trim();
     const disc    = document.getElementById('sig-disclaimer').value.trim();
+    const sigStyle= document.getElementById('sig-style').value;
+
+    if (sigStyle === 'minimal') {
+      const line2 = [title, company].filter(Boolean).join(' · ');
+      const link  = (href, label) => `<a href="${href}" style="color:#1155cc;text-decoration:none">${label}</a>`;
+      const bits  = [];
+      if (loc)      bits.push(loc);
+      if (website)  bits.push(link(website, website.replace(/^https?:\/\//, '').replace(/\/+$/, '')));
+      if (linkedin) bits.push(link(linkedin, 'LinkedIn'));
+      if (facebook) bits.push(link(facebook, 'Facebook'));
+      if (twitter)  bits.push(link(twitter,  'X'));
+      content.innerHTML = `
+        <div style="font-family:Arial,Helvetica,sans-serif;font-size:13px;color:#555555;line-height:1.5;max-width:600px">
+          <p style="margin:0 0 10px;font-size:15px;color:#2d2d2d;line-height:1.2">Sincerely,</p>
+          <p style="margin:0;font-size:14px;font-weight:bold;color:#222222">${name}</p>
+          ${line2 ? `<p style="margin:2px 0 0;color:#555555">${line2}</p>` : ''}
+          ${bits.length ? `<p style="margin:3px 0 0;color:#777777">${bits.join('&nbsp;&nbsp;&middot;&nbsp;&nbsp;')}</p>` : ''}
+          ${disc ? `<p style="margin:12px 0 0;font-size:11px;color:#999999;max-width:560px;line-height:1.5">${disc}</p>` : ''}
+        </div>`;
+      box.style.display = 'block';
+      return;
+    }
 
     const photoBlock = photo
       ? `<td width="108" style="padding-right:14px;vertical-align:middle"><img src="${photo}" width="90" height="90" alt="${name}" style="display:block;border-radius:50%;width:90px;height:90px;object-fit:cover"></td>`
@@ -3115,6 +3138,7 @@ async function loadSettingsPage() {
     // Signature fields
     const sig = style.signature || {};
     document.getElementById('sig-enabled').checked       = !!sig.enabled;
+    document.getElementById('sig-style').value           = sig.style === 'minimal' ? 'minimal' : 'rich';
     document.getElementById('sig-photo').value           = sig.photoUrl   || '';
     document.getElementById('sig-website').value         = sig.website    || '';
     document.getElementById('sig-location').value        = sig.location   || '';

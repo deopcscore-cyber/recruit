@@ -203,7 +203,7 @@ router.put('/', async (req, res) => {
     // Signature fields
     if (signature !== undefined) {
       user.signature = user.signature || {};
-      const fields = ['enabled', 'photoUrl', 'website', 'location', 'linkedin', 'facebook', 'twitter', 'disclaimer'];
+      const fields = ['enabled', 'style', 'photoUrl', 'website', 'location', 'linkedin', 'facebook', 'twitter', 'disclaimer'];
       fields.forEach(f => { if (signature[f] !== undefined) user.signature[f] = signature[f]; });
     }
 
