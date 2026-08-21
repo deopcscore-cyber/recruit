@@ -659,6 +659,16 @@ async function _processFollowUpJob(job) {
 
   const mode = job.mode || 'auto';
 
+  // Master switch: if the recruiter turned the automated follow-up sequence
+  // OFF, don't auto-send follow-ups that were already queued before they
+  // disabled it. Draft-mode touchpoints are review-only (never auto-sent), so
+  // they're unaffected. `=== false` on purpose: unset means on by default.
+  if (mode === 'auto' && user.followUpConfig && user.followUpConfig.enabled === false) {
+    queueSvc.updateJob(job.id, { status: 'cancelled', reason: 'followups_disabled' });
+    console.log(`Queue: follow-up cancelled (sequence disabled) → ${candidate.name}`);
+    return;
+  }
+
   if (mode === 'draft') {
     // Generate and save as a pending draft for the recruiter to review — never
     // auto-sent. Used for later, higher-stakes touchpoints (review, victory).

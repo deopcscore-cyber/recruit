@@ -75,6 +75,25 @@ function cancelPendingForCandidate(candidateId, type = null, kind = null) {
   if (changed) write(queue);
 }
 
+// Cancel a user's PENDING auto-send follow-ups — used when they switch the
+// automated follow-up sequence OFF, so touches queued before that don't keep
+// firing. Draft-mode touchpoints (review/victory) are review-only, never
+// auto-sent, so they're left in place.
+function cancelPendingAutoFollowUps(userId) {
+  const queue = read();
+  let n = 0;
+  queue.forEach(j => {
+    if (j.userId === userId && j.status === 'pending'
+      && (j.type || 'outreach') === 'followup' && (j.mode || 'auto') === 'auto') {
+      j.status = 'cancelled';
+      j.reason = 'followups_disabled';
+      n++;
+    }
+  });
+  if (n) write(queue);
+  return n;
+}
+
 // Count pending follow-up jobs for a user (dashboard indicator).
 function pendingFollowUpCount(userId) {
   return read().filter(j => j.userId === userId && j.status === 'pending' && (j.type || 'outreach') === 'followup').length;
@@ -162,5 +181,6 @@ function pruneOld() {
 
 module.exports = {
   addJobs, getJobsForUser, cancelPendingForUser, cancelPendingForCandidate,
+  cancelPendingAutoFollowUps,
   pendingFollowUpCount, getNextDueJob, updateJob, pruneOld, resetStuckJobs, advancePendingNow
 };

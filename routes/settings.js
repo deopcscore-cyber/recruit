@@ -198,6 +198,12 @@ router.put('/', async (req, res) => {
         enabled: !!fc.enabled,
         steps: steps.length ? steps : [{ days: 3 }, { days: 7 }]
       };
+      // Turning the sequence off should stop follow-ups that were already
+      // queued — otherwise they keep firing until the queue drains.
+      if (!fc.enabled) {
+        const cancelled = require('../services/queue').cancelPendingAutoFollowUps(user.id);
+        if (cancelled) console.log(`Follow-ups disabled for ${user.id} — cancelled ${cancelled} pending follow-up job(s)`);
+      }
     }
 
     // Signature fields
