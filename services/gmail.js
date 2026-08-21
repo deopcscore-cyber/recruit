@@ -613,9 +613,42 @@ function normalizePhotoUrl(url) {
   return `${base}${url.slice(idx)}`;
 }
 
+// Re-anchor any hosted /photos/ image URLs inside pasted HTML to the current
+// app domain (same reasoning as normalizePhotoUrl, applied to every <img>).
+function rewritePhotoSrcs(html) {
+  return html.replace(/(<img\b[^>]*?\bsrc\s*=\s*["'])([^"']+)(["'])/gi,
+    (m, pre, src, post) => pre + normalizePhotoUrl(src) + post);
+}
+
+// Light sanitizer for a user-pasted signature: strip scripts, pasted document
+// scaffolding, event handlers and javascript: URLs. It's the user's own mail
+// going out under their own account, so this is about keeping the markup clean
+// and safe to render in the Settings preview, not defending against a third
+// party.
+function sanitizeSignatureHtml(html) {
+  const cleaned = String(html || '')
+    .replace(/<script[\s\S]*?<\/script>/gi, '')
+    .replace(/<\/?(?:html|head|body|meta|title|link|base)\b[^>]*>/gi, '')
+    .replace(/\son[a-z]+\s*=\s*"[^"]*"/gi, '')
+    .replace(/\son[a-z]+\s*=\s*'[^']*'/gi, '')
+    .replace(/javascript:/gi, '');
+  return rewritePhotoSrcs(cleaned);
+}
+
 function buildSignatureHtml(user) {
   const sig  = user.signature || {};
   if (!sig.enabled) return '';
+
+  // ── Custom style ──────────────────────────────────────────────────────────
+  // The user pasted their own signature (from Outlook/Gmail/a generator). Use
+  // it verbatim, only sanitized and with hosted images re-anchored to the
+  // current domain.
+  if (sig.style === 'custom') {
+    const custom = (sig.customHtml || '').trim();
+    if (!custom) return '';
+    return `<div style="margin-top:20px">${sanitizeSignatureHtml(custom)}</div>`;
+  }
+
   const name = (user.name || '').trim();
   if (!name) return '';
 

@@ -733,8 +733,19 @@
                   <select id="sig-style" style="width:100%">
                     <option value="rich">Rich — photo, social buttons, website button</option>
                     <option value="minimal">Minimal — clean text only (best for inbox delivery)</option>
+                    <option value="custom">Paste my own — use a signature from Outlook/Gmail</option>
                   </select>
                   <div style="font-size:0.74rem;color:var(--text-muted);margin-top:4px">Minimal is a light, text-only signature like Gmail/Outlook defaults — no photo or buttons, so nothing to load or block. Photo &amp; social buttons below apply to the Rich style only.</div>
+                </div>
+
+                <div class="form-group" id="sig-custom-wrap" style="display:none">
+                  <label>Paste your signature here</label>
+                  <div id="sig-custom-editor" contenteditable="true" spellcheck="false"
+                       style="min-height:130px;border:1px solid var(--border);border-radius:var(--radius-lg);padding:14px;background:#ffffff;color:#111;overflow:auto"
+                       data-placeholder="Copy your signature from Outlook or Gmail and paste it right here (Ctrl/Cmd+V)…"></div>
+                  <div style="font-size:0.74rem;color:var(--text-muted);margin-top:6px;line-height:1.5">
+                    Select your whole signature in Outlook/Gmail, copy it, and paste it into the box above. Pasted images are uploaded and hosted automatically so they display in your sent emails. Then click <strong>Save Signature</strong>. This replaces the Rich/Minimal builder — what you paste is exactly what's sent.
+                  </div>
                 </div>
 
                 <div class="form-row">

@@ -2359,6 +2359,7 @@ function initSettingsPage() {
         signature: {
           enabled:    document.getElementById('sig-enabled').checked,
           style:      document.getElementById('sig-style').value,
+          customHtml: document.getElementById('sig-custom-editor').innerHTML.trim(),
           photoUrl:   document.getElementById('sig-photo').value.trim(),
           website:    document.getElementById('sig-website').value.trim(),
           location:   document.getElementById('sig-location').value.trim(),
@@ -2448,6 +2449,11 @@ function initSettingsPage() {
     const twitter = document.getElementById('sig-twitter').value.trim();
     const disc    = document.getElementById('sig-disclaimer').value.trim();
     const sigStyle= document.getElementById('sig-style').value;
+
+    if (sigStyle === 'custom') {
+      const custom = document.getElementById('sig-custom-editor').innerHTML.trim();
+      return custom || '<p style="color:#999;font-family:Arial,sans-serif">Nothing pasted yet — paste your signature into the box above.</p>';
+    }
 
     if (sigStyle === 'minimal') {
       const line2 = [title, company].filter(Boolean).join(' · ');
@@ -2549,6 +2555,66 @@ function initSettingsPage() {
       Toast.error('Could not copy automatically — select the preview above and copy it manually (Ctrl/Cmd+C)');
     }
   });
+
+  // Show the paste box only for the "custom" style.
+  const styleSel   = document.getElementById('sig-style');
+  const customWrap = document.getElementById('sig-custom-wrap');
+  const syncCustomWrap = () => { customWrap.style.display = styleSel.value === 'custom' ? 'block' : 'none'; };
+  styleSel.addEventListener('change', syncCustomWrap);
+  syncCustomWrap();
+
+  // Downscale a data-URL image to a signature-appropriate size, returning a new
+  // data URL. Keeps payloads small and images from ballooning the email.
+  function _downscaleDataUrl(dataUrl, maxDim) {
+    return new Promise(resolve => {
+      const img = new Image();
+      img.onload = () => {
+        let { width: w, height: h } = img;
+        if (w > maxDim || h > maxDim) {
+          if (w >= h) { h = Math.round(h * maxDim / w); w = maxDim; }
+          else        { w = Math.round(w * maxDim / h); h = maxDim; }
+        }
+        const c = document.createElement('canvas');
+        c.width = w; c.height = h;
+        c.getContext('2d').drawImage(img, 0, 0, w, h);
+        try { resolve(c.toDataURL('image/png')); } catch { resolve(dataUrl); }
+      };
+      img.onerror = () => resolve(dataUrl);
+      img.src = dataUrl;
+    });
+  }
+
+  // After a paste, any images that came in as data: URIs are uploaded to the
+  // hosted /photos store and their src rewritten to the returned URL — email
+  // clients strip data: images, so this is what makes a pasted photo actually
+  // display in sent mail.
+  async function _hostPastedImages(editor) {
+    const imgs = Array.from(editor.querySelectorAll('img')).filter(im => /^data:image\//i.test(im.getAttribute('src') || ''));
+    if (!imgs.length) return;
+    Toast.show('Uploading pasted image…');
+    for (const im of imgs) {
+      try {
+        const small = await _downscaleDataUrl(im.getAttribute('src'), 400);
+        const res = await fetch('/api/settings/signature/upload-inline-image', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ dataUrl: small })
+        });
+        const data = await res.json();
+        if (res.ok && data.url) im.setAttribute('src', data.url);
+        else { im.remove(); Toast.warning('A pasted image could not be uploaded and was removed'); }
+      } catch { im.remove(); Toast.warning('A pasted image could not be uploaded and was removed'); }
+    }
+    Toast.success('Pasted image ready — click Save Signature to keep it');
+  }
+
+  const customEditor = document.getElementById('sig-custom-editor');
+  if (customEditor) {
+    customEditor.addEventListener('paste', () => {
+      // Let the browser insert the pasted content first, then host any images.
+      setTimeout(() => _hostPastedImages(customEditor), 0);
+    });
+  }
 }
 
 // ================================================================
@@ -3174,7 +3240,9 @@ async function loadSettingsPage() {
     // Signature fields
     const sig = style.signature || {};
     document.getElementById('sig-enabled').checked       = !!sig.enabled;
-    document.getElementById('sig-style').value           = sig.style === 'minimal' ? 'minimal' : 'rich';
+    document.getElementById('sig-style').value           = ['minimal', 'custom'].includes(sig.style) ? sig.style : 'rich';
+    document.getElementById('sig-custom-editor').innerHTML = sig.customHtml || '';
+    document.getElementById('sig-custom-wrap').style.display = sig.style === 'custom' ? 'block' : 'none';
     document.getElementById('sig-photo').value           = sig.photoUrl   || '';
     document.getElementById('sig-website').value         = sig.website    || '';
     document.getElementById('sig-location').value        = sig.location   || '';

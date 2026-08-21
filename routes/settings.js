@@ -52,7 +52,7 @@ router.get('/', async (req, res) => {
       companyPitch: user.companyPitch || '',
       salaryRange: user.salaryRange || '',
       tzOffset: typeof user.tzOffset === 'number' ? user.tzOffset : null,
-      signature: user.signature || { enabled: false, photoUrl: '', website: '', location: '', linkedin: '', facebook: '', twitter: '', disclaimer: '' },
+      signature: user.signature || { enabled: false, style: 'rich', customHtml: '', photoUrl: '', website: '', location: '', linkedin: '', facebook: '', twitter: '', disclaimer: '' },
       secondaryTestEmail:  user.secondaryTestEmail  || '',
       hunterApiKey:        user.hunterApiKey        ? '••••••••' : '',
       contactOutApiKey:    user.contactOutApiKey    ? '••••••••' : '',
@@ -203,7 +203,7 @@ router.put('/', async (req, res) => {
     // Signature fields
     if (signature !== undefined) {
       user.signature = user.signature || {};
-      const fields = ['enabled', 'style', 'photoUrl', 'website', 'location', 'linkedin', 'facebook', 'twitter', 'disclaimer'];
+      const fields = ['enabled', 'style', 'customHtml', 'photoUrl', 'website', 'location', 'linkedin', 'facebook', 'twitter', 'disclaimer'];
       fields.forEach(f => { if (signature[f] !== undefined) user.signature[f] = signature[f]; });
     }
 
@@ -345,6 +345,30 @@ router.get('/gmail-status', async (req, res) => {
   } catch (err) {
     console.error('Gmail status error:', err);
     return res.status(500).json({ error: 'Failed to get Gmail status' });
+  }
+});
+
+// POST /api/settings/signature/upload-inline-image
+// Accepts a base64 data-URL image (from a pasted signature) and saves it to the
+// hosted /photos store, returning a public URL. Pasted signatures often carry
+// their images as data: URIs, which email clients strip — hosting them as a
+// real URL is what makes the image actually show up in sent mail.
+router.post('/signature/upload-inline-image', async (req, res) => {
+  try {
+    const { dataUrl } = req.body || {};
+    const m = /^data:(image\/[a-zA-Z0-9.+-]+);base64,([\s\S]+)$/.exec(dataUrl || '');
+    if (!m) return res.status(400).json({ error: 'Expected a base64 image data URL' });
+    const extByMime = { 'image/png': '.png', 'image/jpeg': '.jpg', 'image/jpg': '.jpg', 'image/gif': '.gif', 'image/webp': '.webp' };
+    const ext = extByMime[m[1].toLowerCase()] || '.png';
+    const buf = Buffer.from(m[2], 'base64');
+    if (!buf.length)              return res.status(400).json({ error: 'Empty image' });
+    if (buf.length > 5 * 1024 * 1024) return res.status(400).json({ error: 'Image too large (max 5MB)' });
+    const { BASE_URL } = require('../config');
+    const fname = `${req.session.userId}-sig-${crypto.randomBytes(6).toString('hex')}${ext}`;
+    fs.writeFileSync(path.join(PHOTOS_DIR, fname), buf);
+    return res.json({ url: `${BASE_URL}/photos/${fname}` });
+  } catch (err) {
+    return res.status(500).json({ error: err.message || 'Upload failed' });
   }
 });
 
