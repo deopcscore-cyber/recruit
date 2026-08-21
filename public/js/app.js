@@ -2584,6 +2584,21 @@ function initSettingsPage() {
     });
   }
 
+  // Downscale a data-URL image and upload it to the hosted /photos store,
+  // returning the public URL (or null on failure).
+  async function _uploadInlineImage(dataUrl) {
+    try {
+      const small = await _downscaleDataUrl(dataUrl, 400);
+      const res = await fetch('/api/settings/signature/upload-inline-image', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ dataUrl: small })
+      });
+      const data = await res.json();
+      return (res.ok && data.url) ? data.url : null;
+    } catch { return null; }
+  }
+
   // After a paste, any images that came in as data: URIs are uploaded to the
   // hosted /photos store and their src rewritten to the returned URL — email
   // clients strip data: images, so this is what makes a pasted photo actually
@@ -2593,17 +2608,9 @@ function initSettingsPage() {
     if (!imgs.length) return;
     Toast.show('Uploading pasted image…');
     for (const im of imgs) {
-      try {
-        const small = await _downscaleDataUrl(im.getAttribute('src'), 400);
-        const res = await fetch('/api/settings/signature/upload-inline-image', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ dataUrl: small })
-        });
-        const data = await res.json();
-        if (res.ok && data.url) im.setAttribute('src', data.url);
-        else { im.remove(); Toast.warning('A pasted image could not be uploaded and was removed'); }
-      } catch { im.remove(); Toast.warning('A pasted image could not be uploaded and was removed'); }
+      const url = await _uploadInlineImage(im.getAttribute('src'));
+      if (url) im.setAttribute('src', url);
+      else { im.remove(); Toast.warning('A pasted image could not be uploaded and was removed'); }
     }
     Toast.success('Pasted image ready — click Save Signature to keep it');
   }
@@ -2613,6 +2620,47 @@ function initSettingsPage() {
     customEditor.addEventListener('paste', () => {
       // Let the browser insert the pasted content first, then host any images.
       setTimeout(() => _hostPastedImages(customEditor), 0);
+    });
+
+    // ── WYSIWYG toolbar ───────────────────────────────────────────────────────
+    const toolbar = document.getElementById('sig-editor-toolbar');
+    const exec = (cmd, val = null) => { customEditor.focus(); document.execCommand(cmd, false, val); };
+
+    // Keep the editor's text selection while clicking a toolbar button.
+    toolbar.addEventListener('mousedown', (e) => { if (e.target.closest('.sig-tb, .sig-tb-select')) e.preventDefault(); });
+
+    toolbar.querySelectorAll('.sig-tb[data-cmd]').forEach(btn =>
+      btn.addEventListener('click', () => exec(btn.dataset.cmd)));
+    toolbar.querySelectorAll('.sig-tb[data-align]').forEach(btn =>
+      btn.addEventListener('click', () => exec('justify' + btn.dataset.align)));
+
+    document.getElementById('sig-tb-fontsize').addEventListener('change', (e) => {
+      if (e.target.value) exec('fontSize', e.target.value);
+      e.target.value = '';
+    });
+    document.getElementById('sig-tb-color').addEventListener('input', (e) => exec('foreColor', e.target.value));
+
+    document.getElementById('sig-tb-link').addEventListener('click', () => {
+      const url = prompt('Link URL (include https://):', 'https://');
+      if (url) exec('createLink', url);
+    });
+    document.getElementById('sig-tb-clear').addEventListener('click', () => exec('removeFormat'));
+
+    // Insert Image — upload then drop a hosted <img> at the cursor.
+    const imgFile = document.getElementById('sig-tb-image-file');
+    document.getElementById('sig-tb-image').addEventListener('click', () => imgFile.click());
+    imgFile.addEventListener('change', async () => {
+      const file = imgFile.files && imgFile.files[0];
+      imgFile.value = '';
+      if (!file) return;
+      Toast.show('Uploading image…');
+      const dataUrl = await new Promise(r => { const fr = new FileReader(); fr.onload = () => r(fr.result); fr.onerror = () => r(null); fr.readAsDataURL(file); });
+      if (!dataUrl) return Toast.error('Could not read that image');
+      const url = await _uploadInlineImage(dataUrl);
+      if (!url) return Toast.error('Image upload failed');
+      customEditor.focus();
+      document.execCommand('insertHTML', false, `<img src="${url}" style="max-width:180px;height:auto" alt="">`);
+      Toast.success('Image inserted — click Save Signature to keep it');
     });
   }
 }

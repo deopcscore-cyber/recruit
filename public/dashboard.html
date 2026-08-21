@@ -733,18 +733,43 @@
                   <select id="sig-style" style="width:100%">
                     <option value="rich">Rich — photo, social buttons, website button</option>
                     <option value="minimal">Minimal — clean text only (best for inbox delivery)</option>
-                    <option value="custom">Paste my own — use a signature from Outlook/Gmail</option>
+                    <option value="custom">Custom editor — build or paste your own (like Gmail/Outlook)</option>
                   </select>
                   <div style="font-size:0.74rem;color:var(--text-muted);margin-top:4px">Minimal is a light, text-only signature like Gmail/Outlook defaults — no photo or buttons, so nothing to load or block. Photo &amp; social buttons below apply to the Rich style only.</div>
                 </div>
 
                 <div class="form-group" id="sig-custom-wrap" style="display:none">
-                  <label>Paste your signature here</label>
+                  <label>Signature editor</label>
+                  <div id="sig-editor-toolbar" class="sig-toolbar">
+                    <button type="button" class="sig-tb" data-cmd="bold" title="Bold"><b>B</b></button>
+                    <button type="button" class="sig-tb" data-cmd="italic" title="Italic"><i>I</i></button>
+                    <button type="button" class="sig-tb" data-cmd="underline" title="Underline"><span style="text-decoration:underline">U</span></button>
+                    <span class="sig-tb-sep"></span>
+                    <select class="sig-tb-select" id="sig-tb-fontsize" title="Text size">
+                      <option value="">Size</option>
+                      <option value="2">Small</option>
+                      <option value="3">Normal</option>
+                      <option value="5">Large</option>
+                      <option value="6">Huge</option>
+                    </select>
+                    <label class="sig-tb" style="padding:0;position:relative;overflow:hidden" title="Text color">A
+                      <input type="color" id="sig-tb-color" value="#333333" style="position:absolute;inset:0;opacity:0;cursor:pointer">
+                    </label>
+                    <span class="sig-tb-sep"></span>
+                    <button type="button" class="sig-tb" data-cmd="insertUnorderedList" title="Bullet list">&bull;&nbsp;List</button>
+                    <button type="button" class="sig-tb" data-align="Left" title="Align left">&#8676;</button>
+                    <button type="button" class="sig-tb" data-align="Center" title="Center">&#8596;</button>
+                    <span class="sig-tb-sep"></span>
+                    <button type="button" class="sig-tb" id="sig-tb-link" title="Add / edit link">&#128279; Link</button>
+                    <button type="button" class="sig-tb" id="sig-tb-image" title="Insert image">&#128247; Image</button>
+                    <button type="button" class="sig-tb" id="sig-tb-clear" title="Clear formatting">&#10005; Format</button>
+                    <input type="file" id="sig-tb-image-file" accept="image/*" style="display:none">
+                  </div>
                   <div id="sig-custom-editor" contenteditable="true" spellcheck="false"
-                       style="min-height:130px;border:1px solid var(--border);border-radius:var(--radius-lg);padding:14px;background:#ffffff;color:#111;overflow:auto"
-                       data-placeholder="Copy your signature from Outlook or Gmail and paste it right here (Ctrl/Cmd+V)…"></div>
+                       style="min-height:150px;border:1px solid var(--border);border-top:none;border-radius:0 0 var(--radius-lg) var(--radius-lg);padding:14px;background:#ffffff;color:#111;overflow:auto;font-family:Arial,Helvetica,sans-serif;font-size:14px"
+                       data-placeholder="Type your signature here, or paste one from Outlook/Gmail (Ctrl/Cmd+V)…"></div>
                   <div style="font-size:0.74rem;color:var(--text-muted);margin-top:6px;line-height:1.5">
-                    Select your whole signature in Outlook/Gmail, copy it, and paste it into the box above. Pasted images are uploaded and hosted automatically so they display in your sent emails. Then click <strong>Save Signature</strong>. This replaces the Rich/Minimal builder — what you paste is exactly what's sent.
+                    Build your signature with the toolbar above, or paste one from Outlook/Gmail. Use <strong>&#128247; Image</strong> (or just paste) to add a photo/logo — images are uploaded and hosted automatically so they show in sent mail. Then click <strong>Save Signature</strong>. This replaces the Rich/Minimal builder — what's in the editor is exactly what's sent.
                   </div>
                 </div>
 

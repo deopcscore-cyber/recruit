@@ -1462,3 +1462,25 @@ code {
   color: #9aa0a6;
   pointer-events: none;
 }
+
+/* Signature WYSIWYG editor toolbar */
+.sig-toolbar {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 3px;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  background: var(--surface2);
+}
+.sig-tb {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 30px; height: 28px; padding: 0 8px;
+  font-size: 0.8rem; line-height: 1;
+  border: 1px solid var(--border); border-radius: 6px;
+  background: var(--surface); color: var(--text); cursor: pointer;
+}
+.sig-tb:hover { background: var(--surface-hover, #eef); }
+.sig-tb-select {
+  height: 28px; font-size: 0.78rem; border: 1px solid var(--border);
+  border-radius: 6px; background: var(--surface); color: var(--text); cursor: pointer;
+}
+.sig-tb-sep { width: 1px; align-self: stretch; background: var(--border); margin: 2px 4px; }
