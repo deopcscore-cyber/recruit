@@ -15,7 +15,10 @@ require('dotenv').config();
 const path = require('path');
 
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
-const BASE_URL = process.env.BASE_URL || 'http://localhost:3000';
+// Strip any trailing slash so URLs built as `${BASE_URL}/path` (OAuth redirect
+// URIs, tracking pixel, hosted photos) never end up with a double slash — a
+// mismatched redirect URI silently breaks OAuth.
+const BASE_URL = (process.env.BASE_URL || 'http://localhost:3000').replace(/\/+$/, '');
 const PORT = parseInt(process.env.PORT || '3000', 10);
 const IS_PRODUCTION = process.env.NODE_ENV === 'production' || !!process.env.RAILWAY_ENVIRONMENT;
 
