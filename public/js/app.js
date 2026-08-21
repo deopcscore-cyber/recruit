@@ -2433,9 +2433,10 @@ function initSettingsPage() {
     }
   });
 
-  document.getElementById('sig-preview-btn').addEventListener('click', () => {
-    const box     = document.getElementById('sig-preview-box');
-    const content = document.getElementById('sig-preview-content');
+  // Builds the signature markup for the currently-selected style. Shared by the
+  // Preview button and the "Copy for Gmail/Outlook" button so what you see is
+  // exactly what gets copied.
+  function buildSignatureMarkup() {
     const name    = document.getElementById('profile-name').value.trim()  || (currentUser && currentUser.name) || 'Your Name';
     const title   = document.getElementById('profile-title').value.trim() || '';
     const company = document.getElementById('profile-company-name').value.trim();
@@ -2457,7 +2458,7 @@ function initSettingsPage() {
       if (linkedin) bits.push(link(linkedin, 'LinkedIn'));
       if (facebook) bits.push(link(facebook, 'Facebook'));
       if (twitter)  bits.push(link(twitter,  'X'));
-      content.innerHTML = `
+      return `
         <div style="font-family:Arial,Helvetica,sans-serif;font-size:13px;color:#555555;line-height:1.5;max-width:600px">
           <p style="margin:0 0 10px;font-size:15px;color:#2d2d2d;line-height:1.2">Sincerely,</p>
           <p style="margin:0;font-size:14px;font-weight:bold;color:#222222">${name}</p>
@@ -2465,8 +2466,6 @@ function initSettingsPage() {
           ${bits.length ? `<p style="margin:3px 0 0;color:#777777">${bits.join('&nbsp;&nbsp;&middot;&nbsp;&nbsp;')}</p>` : ''}
           ${disc ? `<p style="margin:12px 0 0;font-size:11px;color:#999999;max-width:560px;line-height:1.5">${disc}</p>` : ''}
         </div>`;
-      box.style.display = 'block';
-      return;
     }
 
     const photoBlock = photo
@@ -2493,7 +2492,7 @@ function initSettingsPage() {
       ? `<p style="margin:0;font-size:11px;color:#888888;line-height:1.6;font-family:Arial,sans-serif;max-width:560px">${disc}</p>`
       : '';
 
-    content.innerHTML = `
+    return `
       <div style="font-family:Arial,sans-serif;max-width:600px;width:100%">
         <p style="margin:0 0 14px;font-size:16px;color:#2d2d2d;line-height:1.2">Sincerely,</p>
         <table border="0" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin-bottom:14px;width:100%">
@@ -2511,7 +2510,44 @@ function initSettingsPage() {
         ${socialBlock}
         ${discHtml}
       </div>`;
-    box.style.display = 'block';
+  }
+
+  document.getElementById('sig-preview-btn').addEventListener('click', () => {
+    document.getElementById('sig-preview-content').innerHTML = buildSignatureMarkup();
+    document.getElementById('sig-preview-box').style.display = 'block';
+  });
+
+  // Copy the rendered signature to the clipboard as rich HTML so it can be
+  // pasted straight into Gmail/Outlook signature settings — where the mail
+  // client fetches and embeds the photo itself.
+  document.getElementById('sig-copy-btn').addEventListener('click', async () => {
+    const html    = buildSignatureMarkup();
+    const content = document.getElementById('sig-preview-content');
+    content.innerHTML = html;                                  // also show what was copied
+    document.getElementById('sig-preview-box').style.display = 'block';
+    const plain = content.innerText || '';
+
+    try {
+      if (navigator.clipboard && window.ClipboardItem) {
+        await navigator.clipboard.write([new ClipboardItem({
+          'text/html':  new Blob([html],  { type: 'text/html'  }),
+          'text/plain': new Blob([plain], { type: 'text/plain' })
+        })]);
+      } else {
+        // Older browsers: select the rendered node and use execCommand copy so
+        // the clipboard still gets rich content (writeText would paste raw tags)
+        const range = document.createRange();
+        range.selectNodeContents(content);
+        const sel = window.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(range);
+        document.execCommand('copy');
+        sel.removeAllRanges();
+      }
+      Toast.success('Signature copied — paste it into your Gmail or Outlook signature settings');
+    } catch (err) {
+      Toast.error('Could not copy automatically — select the preview above and copy it manually (Ctrl/Cmd+C)');
+    }
   });
 }
 

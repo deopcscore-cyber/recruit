@@ -788,9 +788,13 @@
                   <div id="sig-preview-content"></div>
                 </div>
 
-                <div style="display:flex;gap:8px">
+                <div style="display:flex;gap:8px;flex-wrap:wrap">
                   <button type="submit" class="btn btn-primary btn-sm">Save Signature</button>
                   <button type="button" id="sig-preview-btn" class="btn btn-secondary btn-sm">Preview</button>
+                  <button type="button" id="sig-copy-btn" class="btn btn-secondary btn-sm">📋 Copy for Gmail/Outlook</button>
+                </div>
+                <div style="font-size:0.74rem;color:var(--text-muted);margin-top:8px;line-height:1.5">
+                  <strong>Copy for Gmail/Outlook</strong> puts this signature on your clipboard so you can paste it straight into your email client's own signature settings (Gmail → Settings → Signature, or Outlook → Signatures) — the client embeds the photo itself, so it always shows.
                 </div>
               </form>
             </div>
