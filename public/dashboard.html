@@ -875,6 +875,14 @@
                 different from everyone else's. Leave blank to use the built-in approach.
               </p>
               <div class="form-group">
+                <label>Outreach length</label>
+                <select id="outreach-length" style="width:100%">
+                  <option value="standard">Standard — detailed, personalized (under 250 words)</option>
+                  <option value="short">Short &amp; casual — a quick personal note (80–120 words)</option>
+                </select>
+                <div style="font-size:0.74rem;color:var(--text-muted);margin-top:4px">Short, casual notes tend to reach the inbox more often and get more replies than long emails. Saves instantly. Ignored when a style sample is set below (that mirrors your sample's length).</div>
+              </div>
+              <div class="form-group">
                 <label>Sample subject line <span style="font-weight:400;color:var(--text-muted)">(optional — AI will match this style)</span></label>
                 <input type="text" id="subject-sample" maxlength="200"
                   placeholder="e.g. Your path from Director to VP at Acme" style="font-size:0.88rem">

@@ -413,6 +413,31 @@ function subjectGuidance(user) {
   return `\nSUBJECT LINE STYLE: Mirror the style of this example subject the sender provided — match its length, tone, and level of specificity. Do NOT copy it verbatim; write a fresh one for this person:\nExample: "${s}"\n`;
 }
 
+// Anti-fingerprint + structure-variation guidance shared by the outreach
+// prompts. This targets the biggest content-level spam risk: identical
+// boilerplate (a canned CTA, a fixed positioning line, the same paragraph
+// skeleton) sent to many recipients gets fingerprinted by Gmail/Microsoft as a
+// bulk campaign. Every generated email must differ in wording AND shape.
+function variationDirective() {
+  return `
+ANTI-TEMPLATE / DELIVERABILITY (important — repeated wording across recipients gets flagged as bulk mail):
+- Write every sentence FRESH for this person. Never reuse a canned CTA, positioning line, or closing — there is no fixed sentence to copy anywhere in this email.
+- Vary the SHAPE: choose whatever paragraph count fits this person (2–4 short paragraphs), and vary sentence length and rhythm. Two different candidates must never receive emails that share a skeleton or repeated phrasing.
+- No formulaic transitions or stock phrases.`;
+}
+
+// Length/tone control for cold outreach. Users can opt into a short, casual
+// note (higher inbox rates, less "sales blast" shape) instead of the default.
+function outreachLengthDirective(user) {
+  const mode = (user && user.outreachLength) || 'standard';
+  if (mode === 'short') {
+    return `
+LENGTH & TONE: Keep it SHORT and casual — 80–120 words total, 2–3 tight paragraphs, like a quick personal note typed by a busy human on their phone. No formal multi-paragraph structure. Warm, direct, get to the point fast.`;
+  }
+  return `
+LENGTH & TONE: Under 250 words. Warm, specific, human — never a sales pitch.`;
+}
+
 // If the user provided an outreach sample, return a prompt block telling the
 // model to match their VOICE (tone/personality/rhythm) for messages that aren't
 // the cold outreach itself — follow-ups, replies. We borrow voice, not structure,
@@ -497,7 +522,7 @@ ${styleInfo ? '\nSTYLE GUIDANCE:\n' + styleInfo + '\n' : ''}
 CANDIDATE INFORMATION:
 ${candidateInfo}
 
-Write a 3-paragraph email. Follow this structure EXACTLY:
+Write a short email of 2–3 paragraphs. Use this structure as a guide, and vary it naturally so no two emails read the same:
 
 PARAGRAPH 1 — Open with the specific thing you noticed (2-3 sentences):
 - Address them as "Dear ${firstName},"
@@ -529,9 +554,10 @@ PARAGRAPH 3 — Close with a question that probes the discontent (2 sentences ma
   - "Are you where you expected to be by now, or does it feel like the role hasn't caught up to what you're actually doing?"
   - "If the right thing came along at the next level up, would you be open to it — or are you fully settled where you are?"
 - The goal: a question that makes them pause and quietly admit "...actually, no, it doesn't."
+${variationDirective()}
 
 RULES:
-- Do NOT add a signature, sign-off name, title, or company at the end — the sender's email signature is appended automatically. End the email after the question in paragraph 3.
+- Do NOT add a signature, sign-off name, title, or company at the end — the sender's email signature is appended automatically. End the email after the closing question.
 - Under 200 words total — short emails get read, long emails get deleted
 - Do NOT mention career coaching, consulting, resume writing, or any service you offer
 - Do NOT use numbers like "helped 2,000 professionals" — that's marketing copy, not a human
@@ -581,26 +607,13 @@ ${candidateInfo}
 STYLE GUIDANCE:
 ${styleInfo}
 
-Write a 4-paragraph outreach email following this structure EXACTLY:
-
-PARAGRAPH 1 — Career arc (the heart of the email):
-- "Dear [First Name],"
-- One sharp, specific observation about what makes this person rare — something most people in their field never develop. Reference real companies and roles.
-- Trace their career arc, naming specific companies and transitions chronologically.
-- End with one differentiating detail that reveals depth or character.
-
-PARAGRAPH 2 — Who you are / your positioning (REQUIRED — never omit this paragraph; this is a cold email and the reader must learn who is writing and why):
-- Explain briefly that you are an independent recruiter, not tied to one company.
-- Use the pitch above, lightly adapted for natural flow.
-- The key message: you bring opportunities from multiple companies and you are selective about who you bring them to.
-
-PARAGRAPH 3 — Bridge their background to your clients' needs:
-- "The companies I work with are specifically looking for [type of professional that matches the candidate] who understand [specific thing the candidate has done] from the inside — not just in a support or advisory function."
-- "Your background across [specific domains] is the kind of profile that travels well across [the relevant industry]."
-
-PARAGRAPH 4 — Curiosity CTA:
-- Do NOT say "I have an exciting opportunity." Do NOT ask for a call upfront.
-- "There is a specific situation I have in mind — I kept the details out of this note on purpose because context matters, and I'd rather share them in a reply than cold-drop a job description. If any part of this caught your attention, reply here and I'll send the specifics. No calls to schedule, no commitments."
+Write a warm, specific cold outreach email to this candidate. Cover these beats in a natural order — this is a set of ideas to hit, NOT a rigid template, and you should weave them together differently each time:
+- CAREER ARC (the heart of the email): open with "Dear [First Name]," then a sharp, specific observation about what makes this person rare — reference real companies and roles, trace their arc, and land one differentiating detail that reveals depth or character.
+- WHO YOU ARE: briefly convey, in your own fresh wording, that you're an independent recruiter (not tied to one company) who brings opportunities from multiple companies and is selective about who you approach. Adapt the pitch above — never quote it verbatim.
+- THE FIT: connect their real background to the kind of roles you fill, specific to their actual domains.
+- THE ASK: close with a low-friction, curiosity-driven invitation to reply — no calls, no commitments. Write this closing FRESH every time in your own words; there is no set sentence to reuse.
+${variationDirective()}
+${outreachLengthDirective(user)}
 
 SIGNATURE:
 ${recruiterName}
@@ -609,7 +622,6 @@ ${recruiterTitle}${agencyName ? '\nIndependent Recruiter' : ''}
 RULES:
 - DO NOT name a specific client company
 - DO NOT use phrases like "I came across your profile" or "exciting opportunity"
-- Sound warm, specific, human — under 300 words
 - Output ONLY the email body starting with "Dear [First Name],"
 
 Write the email now:`;
@@ -650,27 +662,13 @@ ${styleInfo}
 CANDIDATE INFORMATION:
 ${candidateInfo}
 
-STRICT STRUCTURE — follow this exactly, four paragraphs:
-
-PARAGRAPH 1 — Career arc (the heart of the email):
-- Open with "Dear [First Name]," on its own line, then a blank line
-- First sentence: one sharp observation about what makes this person rare or distinctive — something most people in their field never have. Make it specific to THEIR actual background (ownership, unique operational experience, rare combination of roles, etc.)
-- Continue by tracing their career chronologically — name specific companies, roles, and transitions in order, with dates where available. Show you actually read their background in detail.
-- End paragraph 1 with one specific differentiating detail — a certification, sustained practice, or unique dimension of their work that reveals character or depth. Phrase it as a reflection of who they are.
-
-PARAGRAPH 2 — Company introduction (REQUIRED — never omit this paragraph; this is a cold email and the reader must learn who is reaching out and from where. Use the recruiter's company pitch below — adapt slightly for natural flow but keep the core message):
-"${company.pitch}"
-
-PARAGRAPH 3 — Bridge their background to the company's need:
-- "We're looking for [type of professional that matches their background] who understand what it takes to [do the specific thing they've done] — not just support one from the outside — and who bring the hands-on [operational/strategic/clinical] knowledge that comes from having [done what they've done]."
-- Follow with: "Your background across [their specific domains, named] gives you a [grounded/rare/distinctive] view of [the relevant ecosystem] that translates well into the environments we manage."
-
-PARAGRAPH 4 — Curiosity CTA (use this structure — make them want to know more):
-Do NOT use the passive "If any of this resonates." Instead, create a knowledge gap that makes them curious about what you haven't told them yet. Structure it like this:
-- One sentence that hints there is something specific you deliberately left out of this email — something that "lands differently once you see the full picture" or that is "easier to show than describe"
-- Then the ask: "If any part of this caught your attention — even just part of it — reply here and I'll send it over."
-- Then remove all friction: "No calls to schedule, no forms — just a reply."
-Example: "There is one part of what we are building right now that I kept out of this email on purpose — the kind of detail that is easier to show than describe, and that I think lands differently once you see the full picture. If any part of this caught your attention, reply here and I will send it over. No calls to schedule, no commitments — just a reply."
+The example above shows the TARGET quality and voice — study its tone and specificity, but do NOT copy its phrasing or reuse its sentences. Cover these beats in a natural order (a checklist of ideas, not a rigid skeleton — weave them together differently each time):
+- CAREER ARC (the heart of the email): open with "Dear [First Name]," then a sharp observation about what makes this person distinctive, specific to THEIR actual background. Trace their career chronologically — name real companies, roles, and transitions with dates where available. Land one differentiating detail that reveals character or depth.
+- COMPANY INTRODUCTION: convey who's reaching out and from where, drawing on the recruiter's pitch below — adapt it into fresh wording, never quote it verbatim: "${company.pitch}"
+- THE FIT: connect their real background to the company's need, specific to their actual domains — the hands-on knowledge that comes from having done the work, not just supported it.
+- THE ASK: close by creating genuine curiosity — hint there's something specific you deliberately left out, then invite a reply with no friction (no calls, no forms). Write this closing FRESH in your own words every time; there is NO set sentence to reuse.
+${variationDirective()}
+${outreachLengthDirective(user)}
 
 SIGNATURE (after one blank line):
 ${user.name}
@@ -678,10 +676,8 @@ ${recruiterTitle} at ${company.name}
 
 CRITICAL RULES:
 - DO NOT mention any specific job title or role
-- DO NOT end with "May I send over the details?" — use the soft CTA above
 - DO NOT use generic openers like "I came across your profile" or "I'm impressed by your background"
 - DO NOT use hollow phrases like "your impressive career" — be specific always
-- Keep it under 300 words
 - Sound like a real human being who genuinely read this person's background — warm, direct, specific
 - Output ONLY the email body (starting with "Dear [First Name],") — no subject line, no commentary
 

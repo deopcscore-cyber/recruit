@@ -3329,7 +3329,7 @@ async function loadSettingsPage() {
     renderAutopilotConfig(style.autopilot || {});
 
     // Outreach style sample
-    renderOutreachSample(style.outreachSample || '', style.subjectSample || '');
+    renderOutreachSample(style.outreachSample || '', style.subjectSample || '', style.outreachLength || 'standard');
 
     await updateGmailStatus();
     await updateZohoStatus();
@@ -3465,12 +3465,26 @@ function collectFollowUpSteps() {
 }
 
 // ---- Outreach style sample ----
-function renderOutreachSample(sample, subjectSample) {
+function renderOutreachSample(sample, subjectSample, outreachLength) {
   const ta  = document.getElementById('outreach-sample');
   const sub = document.getElementById('subject-sample');
   if (!ta) return;
   ta.value  = sample || '';
   if (sub) sub.value = subjectSample || '';
+
+  const lenSel = document.getElementById('outreach-length');
+  if (lenSel) {
+    lenSel.value = outreachLength === 'short' ? 'short' : 'standard';
+    if (!lenSel._wired) {
+      lenSel._wired = true;
+      lenSel.addEventListener('change', async () => {
+        try {
+          await API.settings.update({ outreachLength: lenSel.value });
+          Toast.success(lenSel.value === 'short' ? 'Outreach set to short & casual' : 'Outreach set to standard length');
+        } catch (err) { Toast.error(err.message); }
+      });
+    }
+  }
 
   const saveBtn = document.getElementById('outreach-sample-save');
   if (saveBtn && !saveBtn._wired) {
