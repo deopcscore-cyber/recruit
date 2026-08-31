@@ -149,6 +149,7 @@ const API = {
   settings: {
     get() { return API.get('/api/settings'); },
     update(data) { return API.put('/api/settings', data); },
+    verifyTrackingDomain() { return API.post('/api/settings/tracking-domain/verify', {}); },
     gmailStatus() { return API.get('/api/settings/gmail-status'); },
     disconnectGmail() { return API.delete('/api/settings/gmail'); },
     addColleague(data) { return API.post('/api/settings/colleague', data); },

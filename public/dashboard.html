@@ -434,6 +434,23 @@
                 </label>
               </div>
 
+              <div style="border-top:1px solid var(--border);margin-top:16px;padding-top:14px">
+                <div style="font-weight:650;font-size:0.85rem;color:var(--text)">Custom tracking domain <span id="tracking-domain-badge" style="font-size:0.7rem;font-weight:600;padding:1px 7px;border-radius:999px;margin-left:6px"></span></div>
+                <div style="font-size:0.78rem;color:var(--text-muted);margin:3px 0 10px;line-height:1.5">Serve the open-tracking pixel from <em>your own</em> domain instead of this app's. A pixel from <code>track.yourdomain.com</code> is aligned with your sending domain, so it's far less of a spam signal than one from the app's domain — this lets you keep open tracking without the deliverability hit.</div>
+                <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+                  <input type="text" id="tracking-domain" placeholder="track.yourdomain.com" style="flex:1;min-width:200px;font-size:0.85rem" />
+                  <button type="button" class="btn btn-secondary btn-sm" id="tracking-domain-save">Save</button>
+                  <button type="button" class="btn btn-secondary btn-sm" id="tracking-domain-verify">Verify</button>
+                </div>
+                <div id="tracking-domain-setup" style="font-size:0.74rem;color:var(--text-muted);margin-top:8px;line-height:1.6;display:none">
+                  <strong>Setup (one time):</strong><br>
+                  1. Add <code id="tracking-domain-name">track.yourdomain.com</code> as a custom domain on this app's host (Railway → your service → Settings → Domains), which gives you a CNAME target.<br>
+                  2. At your DNS provider, create a <strong>CNAME</strong> for <code id="tracking-domain-name2">track.yourdomain.com</code> pointing to that target (fallback target: <code id="tracking-cname-target">this app's host</code>).<br>
+                  3. Wait for HTTPS to provision, then click <strong>Verify</strong>. Tracking only uses your domain once verified — until then it falls back to the app's domain automatically.
+                </div>
+                <div id="tracking-domain-msg" style="font-size:0.76rem;margin-top:6px"></div>
+              </div>
+
               <div style="margin-top:18px;display:flex;justify-content:flex-end">
                 <button class="btn btn-primary btn-sm" id="apify-save-btn">Save API Key</button>
               </div>

@@ -7,7 +7,7 @@ const axios   = require('axios');
 const { v4: uuidv4 } = require('uuid');
 const storage = require('./storage');
 const { BASE_URL, MICROSOFT_CLIENT_ID, MICROSOFT_CLIENT_SECRET } = require('../config');
-const { buildSignatureHtml, buildSignaturePlainText } = require('./gmail');
+const { buildSignatureHtml, buildSignaturePlainText, trackingBaseUrl } = require('./gmail');
 
 const TENANT       = 'consumers'; // personal Microsoft accounts only
 const AUTH_BASE    = `https://login.microsoftonline.com/${TENANT}/oauth2/v2.0`;
@@ -107,7 +107,7 @@ async function sendEmail(userId, { to, subject, body, trackingId, inReplyTo, ref
   const sigHtml   = buildSignatureHtml(user);
   const sigPlain  = buildSignaturePlainText(user);
   const trackPx   = (user.trackOpens === true && trackingId)  // opt-in open tracking (off by default)
-    ? `<img src="${BASE_URL}/track/${trackingId}.png" width="1" height="1" style="display:none" />`
+    ? `<img src="${trackingBaseUrl(user)}/track/${trackingId}.png" width="1" height="1" style="display:none" />`
     : '';
   const htmlContent = `<div style="font-family:Arial,sans-serif;font-size:14px;line-height:1.6">${body.replace(/\n/g, '<br>')}${sigHtml}</div>${trackPx}`;
   const plainContent = body + sigPlain;

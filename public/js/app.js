@@ -1917,6 +1917,34 @@ function initSettingsPage() {
     } catch (err) { Toast.error(err.message); e.target.checked = !e.target.checked; }
   });
 
+  // ── Custom tracking domain ───────────────────────────────────────────────
+  document.getElementById('tracking-domain-save')?.addEventListener('click', async () => {
+    const input = document.getElementById('tracking-domain');
+    const msg   = document.getElementById('tracking-domain-msg');
+    const val   = input.value.trim();
+    msg.textContent = '';
+    try {
+      await API.settings.update({ trackingDomain: val });
+      _renderTrackingDomainStatus(false, val.toLowerCase().replace(/^https?:\/\//, '').replace(/\/.*$/, ''));
+      msg.style.color = 'var(--text-muted)';
+      msg.textContent = val ? 'Saved. Complete the DNS setup below, then click Verify.' : 'Custom tracking domain removed — using the app domain.';
+      Toast.success('Saved');
+    } catch (err) { msg.style.color = '#b91c1c'; msg.textContent = err.message; }
+  });
+
+  document.getElementById('tracking-domain-verify')?.addEventListener('click', async () => {
+    const btn = document.getElementById('tracking-domain-verify');
+    const msg = document.getElementById('tracking-domain-msg');
+    btn.disabled = true; btn.textContent = 'Verifying…'; msg.textContent = '';
+    try {
+      const r = await API.settings.verifyTrackingDomain();
+      _renderTrackingDomainStatus(r.verified, document.getElementById('tracking-domain').value.trim().toLowerCase());
+      if (r.verified) { msg.style.color = '#166534'; msg.textContent = '✓ Verified — the tracking pixel now loads from your domain.'; Toast.success('Tracking domain verified'); }
+      else            { msg.style.color = '#b91c1c'; msg.textContent = r.error || 'Could not verify yet.'; }
+    } catch (err) { msg.style.color = '#b91c1c'; msg.textContent = err.message; }
+    finally { btn.disabled = false; btn.textContent = 'Verify'; }
+  });
+
   document.getElementById('apify-save-btn')?.addEventListener('click', async () => {
     const btn = document.getElementById('apify-save-btn');
     const val = document.getElementById('apify-key')?.value.trim() || '';
@@ -3234,6 +3262,24 @@ function urlBase64ToUint8Array(base64String) {
   return outputArray;
 }
 
+// Reflect custom-tracking-domain state in the UI (badge, setup steps). Module
+// scope so both the settings loader and the save/verify handlers can call it.
+function _renderTrackingDomainStatus(verified, domain) {
+  const badge = document.getElementById('tracking-domain-badge');
+  const setup = document.getElementById('tracking-domain-setup');
+  if (badge) {
+    if (!domain)        { badge.textContent = '';            badge.style.cssText = ''; }
+    else if (verified)  { badge.textContent = '✓ Verified';   badge.style.cssText = 'font-size:0.7rem;font-weight:600;padding:1px 7px;border-radius:999px;margin-left:6px;background:#dcfce7;color:#166534'; }
+    else                { badge.textContent = 'Not verified'; badge.style.cssText = 'font-size:0.7rem;font-weight:600;padding:1px 7px;border-radius:999px;margin-left:6px;background:#fef3c7;color:#92400e'; }
+  }
+  if (setup) setup.style.display = domain ? 'block' : 'none';
+  if (domain) {
+    ['tracking-domain-name', 'tracking-domain-name2'].forEach(id => { const el = document.getElementById(id); if (el) el.textContent = domain; });
+    const tgt = document.getElementById('tracking-cname-target');
+    if (tgt) tgt.textContent = window.location.host;
+  }
+}
+
 async function loadSettingsPage() {
   try {
     const style = await API.settings.get();
@@ -3260,6 +3306,10 @@ async function loadSettingsPage() {
     if (document.getElementById('apify-key'))                 document.getElementById('apify-key').value                 = style.apifyApiKey      === '••••••••' ? '' : (style.apifyApiKey      || '');
     if (document.getElementById('skip-undeliverable'))        document.getElementById('skip-undeliverable').checked      = !!style.skipUndeliverable;
     if (document.getElementById('track-opens'))               document.getElementById('track-opens').checked             = !!style.trackOpens;
+    if (document.getElementById('tracking-domain')) {
+      document.getElementById('tracking-domain').value = style.trackingDomain || '';
+      _renderTrackingDomainStatus(!!style.trackingDomainVerified, style.trackingDomain || '');
+    }
     document.getElementById('style-tone').value = style.tone || 'warm';
     document.getElementById('style-notes').value = style.notes || '';
     document.getElementById('style-use').value = (style.use || []).join(', ');

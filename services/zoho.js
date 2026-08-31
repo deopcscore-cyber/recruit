@@ -7,7 +7,7 @@ const axios   = require('axios');
 const { v4: uuidv4 } = require('uuid');
 const storage = require('./storage');
 const { BASE_URL, ZOHO_CLIENT_ID, ZOHO_CLIENT_SECRET } = require('../config');
-const { buildRawEmailParts, buildSignatureHtml, buildSignaturePlainText } = require('./gmail');
+const { buildRawEmailParts, buildSignatureHtml, buildSignaturePlainText, trackingBaseUrl } = require('./gmail');
 
 const TOKEN_URL      = 'https://accounts.zoho.com/oauth/v2/token';
 const API_BASE_DEFAULT = 'https://mail.zoho.com/api';
@@ -263,7 +263,7 @@ async function sendEmail(userId, { to, cc, subject, body, inReplyTo, references,
   // Open-tracking pixel only when the user opted in (off by default — it loads
   // from the app's domain, not the sender's, which hurts deliverability).
   const pixelTrackingId = user.trackOpens === true ? trackingId : null;
-  const { htmlBody } = buildRawEmailParts({ body, signatureHtml: sigHtml, signaturePlain: sigPlain, trackingId: pixelTrackingId, baseUrl: BASE_URL });
+  const { htmlBody } = buildRawEmailParts({ body, signatureHtml: sigHtml, signaturePlain: sigPlain, trackingId: pixelTrackingId, baseUrl: trackingBaseUrl(user) });
 
   const fromName = (user.zoho.displayName || user.name || '').trim();
   const fromAddr = fromName ? `${fromName} <${address}>` : address;

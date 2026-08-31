@@ -70,6 +70,8 @@ router.get('/', async (req, res) => {
       outreachSample:           user.outreachSample           || '',
       subjectSample:            user.subjectSample            || '',
       outreachLength:           user.outreachLength           || 'standard',
+      trackingDomain:           user.trackingDomain           || '',
+      trackingDomainVerified:   !!user.trackingDomainVerified,
       followUpConfig:           user.followUpConfig           || { enabled: true, steps: [{ days: 3 }, { days: 7 }] },
       autopilot:                Object.assign({ enabled:false, dailyCap:30, windowStart:'09:00', windowEnd:'17:00', weekdaysOnly:true, minSpacingMin:20, maxSpacingMin:60, warmup:true }, user.autopilot || {})
     });
@@ -149,6 +151,22 @@ router.put('/', async (req, res) => {
     if (req.body.subjectSample !== undefined) user.subjectSample = String(req.body.subjectSample).slice(0, 200);
     // Outreach length/tone — 'standard' (default) or 'short' (brief, casual)
     if (req.body.outreachLength !== undefined) user.outreachLength = req.body.outreachLength === 'short' ? 'short' : 'standard';
+    // Custom open-tracking domain (e.g. track.theirdomain.com). Store the bare
+    // hostname; changing it invalidates any prior verification so we never send
+    // pixels from an unproven domain.
+    if (req.body.trackingDomain !== undefined) {
+      const cleaned = String(req.body.trackingDomain || '')
+        .trim().toLowerCase()
+        .replace(/^https?:\/\//, '')      // strip protocol
+        .replace(/\/.*$/, '')             // strip any path
+        .replace(/[:.]+$/, '');           // strip trailing dot/port junk
+      const valid = cleaned === '' || /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/.test(cleaned);
+      if (!valid) return res.status(400).json({ error: 'Enter a valid subdomain like track.yourdomain.com' });
+      if (cleaned !== (user.trackingDomain || '')) {
+        user.trackingDomain = cleaned;
+        user.trackingDomainVerified = false;   // must re-verify after any change
+      }
+    }
 
     // Daily auto-outreach (autopilot) config
     if (req.body.autopilot && typeof req.body.autopilot === 'object') {
@@ -354,6 +372,34 @@ router.get('/gmail-status', async (req, res) => {
   } catch (err) {
     console.error('Gmail status error:', err);
     return res.status(500).json({ error: 'Failed to get Gmail status' });
+  }
+});
+
+// POST /api/settings/tracking-domain/verify
+// Confirms the user's custom tracking subdomain actually routes to THIS app
+// over HTTPS (DNS + TLS + routing all working) before we rely on it for pixels.
+router.post('/tracking-domain/verify', async (req, res) => {
+  try {
+    const user = await storage.getUserById(req.session.userId);
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    const domain = (user.trackingDomain || '').trim();
+    if (!domain) return res.status(400).json({ error: 'Add a tracking domain and save it first' });
+
+    const axios = require('axios');
+    let ok = false, detail = '';
+    try {
+      const r = await axios.get(`https://${domain}/track/ping`, { timeout: 8000, validateStatus: () => true });
+      ok = r.status === 200 && String(r.data).trim() === 'recruit-track-ok';
+      if (!ok) detail = `Reached ${domain} but it didn't return the app's tracking marker (status ${r.status}). Make sure the CNAME points to this app and the domain is added to the app's host.`;
+    } catch (err) {
+      detail = `Could not reach https://${domain} — check the CNAME record and that HTTPS is provisioned. (${err.code || err.message})`;
+    }
+
+    user.trackingDomainVerified = ok;
+    await storage.saveUser(user);
+    return res.json({ verified: ok, error: ok ? undefined : detail });
+  } catch (err) {
+    return res.status(500).json({ error: err.message || 'Verification failed' });
   }
 });
 

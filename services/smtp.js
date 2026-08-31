@@ -4,7 +4,7 @@ const { simpleParser } = require('mailparser');
 const { v4: uuidv4 } = require('uuid');
 const dns = require('dns');
 const storage = require('./storage');
-const { buildRawEmailParts, buildSignatureHtml, buildSignaturePlainText } = require('./gmail');
+const { buildRawEmailParts, buildSignatureHtml, buildSignaturePlainText, trackingBaseUrl } = require('./gmail');
 
 // Resolve hostname to IPv4 — Railway can't route IPv6 outbound
 async function resolveIPv4(hostname) {
@@ -76,7 +76,7 @@ async function sendEmail(userId, { to, cc, subject, body, inReplyTo, references,
   const sigPlain = buildSignaturePlainText(user);
   const { BASE_URL } = require('../config');
   const pixelTrackingId = user.trackOpens === true ? trackingId : null;  // opt-in open tracking
-  const { plainText: text, htmlBody: html } = buildRawEmailParts({ body, signatureHtml: sigHtml, signaturePlain: sigPlain, trackingId: pixelTrackingId, baseUrl: BASE_URL });
+  const { plainText: text, htmlBody: html } = buildRawEmailParts({ body, signatureHtml: sigHtml, signaturePlain: sigPlain, trackingId: pixelTrackingId, baseUrl: trackingBaseUrl(user) });
 
   // Prefer Resend when the platform key is set — Railway blocks raw SMTP
   if (process.env.RESEND_API_KEY) {

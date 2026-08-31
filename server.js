@@ -120,6 +120,13 @@ const OPEN_BOT_UA = /googleimageproxy|ggpht|feedfetcher|google-|yahoo|yandex|bin
 // read — the email has barely been delivered, no human could have opened it.
 const OPEN_GRACE_MS = 60 * 1000;
 
+// Health marker used to verify a custom tracking domain actually routes to this
+// app over HTTPS before we start using it for pixels. Must be declared BEFORE
+// the /track/:trackingId route so 'ping' isn't swallowed as a tracking id.
+app.get('/track/ping', (req, res) => {
+  res.set('Cache-Control', 'no-store').type('text/plain').send('recruit-track-ok');
+});
+
 app.get('/track/:trackingId', rateLimit({ windowMs: 60 * 1000, max: 120 }), async (req, res) => {
   res.set({ 'Content-Type': 'image/gif', 'Cache-Control': 'no-store' });
   try {

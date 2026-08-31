@@ -346,7 +346,7 @@ async function sendEmail(userId, { to, cc, subject, body, threadId, inReplyTo, r
   // pixel is embedded — the tracking image loads from the app's domain (not the
   // sender's), which hurts deliverability, so it's opt-in.
   const pixelTrackingId = user.trackOpens === true ? trackingId : null;
-  const raw = buildRawEmail({ from, to, cc, subject, body, signatureHtml, signaturePlain, threadId, inReplyTo, references, trackingId: pixelTrackingId, baseUrl: BASE_URL, attachments });
+  const raw = buildRawEmail({ from, to, cc, subject, body, signatureHtml, signaturePlain, threadId, inReplyTo, references, trackingId: pixelTrackingId, baseUrl: trackingBaseUrl(user), attachments });
 
   const requestBody = { raw };
   if (threadId) requestBody.threadId = threadId;
@@ -613,6 +613,18 @@ function normalizePhotoUrl(url) {
   return `${base}${url.slice(idx)}`;
 }
 
+// Base URL for the open-tracking pixel. When the user has set up and VERIFIED
+// their own tracking subdomain (e.g. track.theirdomain.com, CNAME'd to the
+// app), the pixel loads from that domain instead of the app's — aligned with
+// their sending domain, so it barely registers as a spam signal. Falls back to
+// the app domain until the custom domain is verified, so a misconfigured domain
+// can never silently break tracking.
+function trackingBaseUrl(user) {
+  const d = (user && user.trackingDomain || '').trim();
+  if (d && user.trackingDomainVerified) return `https://${d}`;
+  return BASE_URL;
+}
+
 // Re-anchor any hosted /photos/ image URLs inside pasted HTML to the current
 // app domain (same reasoning as normalizePhotoUrl, applied to every <img>).
 function rewritePhotoSrcs(html) {
@@ -791,5 +803,6 @@ module.exports = {
   parseEmailBody,
   buildRawEmailParts,
   buildSignatureHtml,
-  buildSignaturePlainText
+  buildSignaturePlainText,
+  trackingBaseUrl
 };
