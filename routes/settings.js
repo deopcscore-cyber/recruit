@@ -46,6 +46,7 @@ router.get('/', async (req, res) => {
 
     return res.json({
       ...(user.style || { tone: 'warm', notes: '', use: [], avoid: [] }),
+      aiProvider: require('../services/claude').getProviderInfo(),
       name: user.name || '',
       title: user.title || '',
       companyName: user.companyName || '',
@@ -279,6 +280,7 @@ router.put('/', async (req, res) => {
 
     return res.json({
       ...user.style,
+      aiProvider: require('../services/claude').getProviderInfo(),
       name: user.name || '',
       title: user.title || '',
       companyName:  user.companyName  || '',

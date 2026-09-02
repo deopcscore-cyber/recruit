@@ -50,6 +50,25 @@ const PRIMARY_VISION_MODEL = USE_OPENROUTER
   ? (process.env.OPENROUTER_VISION_MODEL || 'qwen/qwen-2.5-vl-72b-instruct')
   : (process.env.OPENAI_VISION_MODEL || PRIMARY_MODEL);
 
+// Read-only snapshot of which provider/model is actually active, for a
+// Settings-page readout — so switching via env vars (e.g. turning on
+// OpenRouter/Qwen) is visibly confirmed rather than a silent guess.
+function getProviderInfo() {
+  return {
+    primary: {
+      provider: PRIMARY_LABEL,                 // 'openrouter' | 'openai'
+      model: PRIMARY_MODEL,
+      visionModel: PRIMARY_VISION_MODEL,
+      configured: hasPrimary()
+    },
+    fallback: {
+      provider: 'claude',
+      model: CLAUDE_MODEL,
+      configured: !!process.env.ANTHROPIC_API_KEY
+    }
+  };
+}
+
 // Cost per million tokens in cents
 const CLAUDE_IN  = 300;   // $3.00
 const CLAUDE_OUT = 1500;  // $15.00
@@ -1872,5 +1891,6 @@ module.exports = {
   scoreCandidate,
   classifyReply,
   rewriteResume,
-  extractAttachmentText
+  extractAttachmentText,
+  getProviderInfo
 };

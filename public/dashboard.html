@@ -394,6 +394,18 @@
             </div>
           </div>
 
+          <!-- AI Provider status -->
+          <div class="settings-card">
+            <div class="settings-card-header">
+              <h3>AI Provider</h3>
+              <span class="settings-card-hint">Which model is actually generating your emails right now</span>
+            </div>
+            <div class="settings-card-body">
+              <div id="ai-provider-readout" style="display:flex;flex-direction:column;gap:10px"></div>
+              <div style="font-size:0.74rem;color:var(--text-muted);margin-top:10px;line-height:1.5">Set by environment variables on the server (not in this app) — <code>OPENROUTER_API_KEY</code> switches everything, outreach included, to OpenRouter/Qwen; without it, OpenAI is used. Claude is always the automatic fallback.</div>
+            </div>
+          </div>
+
           <!-- Email Verification -->
           <div class="settings-card">
             <div class="settings-card-header">
