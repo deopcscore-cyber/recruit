@@ -216,17 +216,22 @@ function pickProvider(user, instructions) {
 // finishReason lets callers tell "the model got cut off by maxTokens" apart
 // from "the model finished normally but produced something unusable" —
 // 'length' (OpenAI) / 'max_tokens' (Claude) means the former.
+// fellBack: true whenever the response did NOT come from the provider this
+// call preferred (preferClaude ? Claude : the primary provider) — i.e. the
+// preferred provider errored and the other one had to cover. Lets callers
+// (and eventually the UI) tell "this used Qwen as intended" apart from
+// "OpenRouter was down, so this used the Claude fallback instead."
 async function callAI(prompt, maxTokens, preferClaude = false) {
   if (preferClaude) {
-    // Claude first, OpenAI fallback — used for career consultant profiles
+    // Claude first, OpenAI/OpenRouter fallback — used for career consultant profiles
     try {
       const res = await anthropic.messages.create({
         model: CLAUDE_MODEL, max_tokens: maxTokens,
         messages: [{ role: 'user', content: prompt }]
       });
-      return { content: res.content, usage: res.usage, provider: 'claude', finishReason: res.stop_reason };
+      return { content: res.content, usage: res.usage, provider: 'claude', fellBack: false, finishReason: res.stop_reason };
     } catch (err) {
-      console.warn('[AI] Claude unavailable, switching to OpenAI:', err.message);
+      console.warn('[AI] Claude unavailable, switching to ' + PRIMARY_LABEL + ':', err.message);
     }
     const res = await getOpenAI().chat.completions.create({
       model: PRIMARY_MODEL, max_tokens: maxTokens,
@@ -236,11 +241,12 @@ async function callAI(prompt, maxTokens, preferClaude = false) {
       content: [{ text: res.choices[0].message.content }],
       usage: { input_tokens: res.usage.prompt_tokens, output_tokens: res.usage.completion_tokens },
       provider: PRIMARY_LABEL,
+      fellBack: true,
       finishReason: res.choices[0].finish_reason
     };
   }
 
-  // Default: OpenAI first, Claude fallback
+  // Default: primary (OpenAI or OpenRouter) first, Claude fallback
   if (hasPrimary()) {
     try {
       const res = await getOpenAI().chat.completions.create({
@@ -251,10 +257,11 @@ async function callAI(prompt, maxTokens, preferClaude = false) {
         content: [{ text: res.choices[0].message.content }],
         usage: { input_tokens: res.usage.prompt_tokens, output_tokens: res.usage.completion_tokens },
         provider: PRIMARY_LABEL,
+        fellBack: false,
         finishReason: res.choices[0].finish_reason
       };
     } catch (err) {
-      console.warn('[AI] OpenAI unavailable, switching to Claude:', err.message);
+      console.warn('[AI] ' + PRIMARY_LABEL + ' unavailable, switching to Claude:', err.message);
     }
   }
 
@@ -262,7 +269,7 @@ async function callAI(prompt, maxTokens, preferClaude = false) {
     model: CLAUDE_MODEL, max_tokens: maxTokens,
     messages: [{ role: 'user', content: prompt }]
   });
-  return { content: res.content, usage: res.usage, provider: 'claude', finishReason: res.stop_reason };
+  return { content: res.content, usage: res.usage, provider: 'claude', fellBack: hasPrimary(), finishReason: res.stop_reason };
 }
 
 // Multi-turn chat across both providers: a system prompt plus a running
@@ -270,14 +277,14 @@ async function callAI(prompt, maxTokens, preferClaude = false) {
 // preference/fallback but preserves the conversation instead of flattening it
 // into a single prompt.
 async function callChat(system, messages, maxTokens, preferClaude = false) {
-  const anthropicCall = async () => {
+  const anthropicCall = async (fellBack = false) => {
     const res = await anthropic.messages.create({
       model: CLAUDE_MODEL, max_tokens: maxTokens, system,
       messages: messages.map(m => ({ role: m.role, content: m.content }))
     });
-    return { content: res.content, usage: res.usage, provider: 'claude' };
+    return { content: res.content, usage: res.usage, provider: 'claude', fellBack };
   };
-  const openaiCall = async () => {
+  const openaiCall = async (fellBack = false) => {
     const res = await getOpenAI().chat.completions.create({
       model: PRIMARY_MODEL, max_tokens: maxTokens,
       messages: [{ role: 'system', content: system }, ...messages]
@@ -285,19 +292,20 @@ async function callChat(system, messages, maxTokens, preferClaude = false) {
     return {
       content: [{ text: res.choices[0].message.content }],
       usage: { input_tokens: res.usage.prompt_tokens, output_tokens: res.usage.completion_tokens },
-      provider: PRIMARY_LABEL
+      provider: PRIMARY_LABEL,
+      fellBack
     };
   };
 
   if (preferClaude) {
-    try { return await anthropicCall(); }
-    catch (err) { console.warn('[AI chat] Claude unavailable, switching to OpenAI:', err.message); return await openaiCall(); }
+    try { return await anthropicCall(false); }
+    catch (err) { console.warn('[AI chat] Claude unavailable, switching to ' + PRIMARY_LABEL + ':', err.message); return await openaiCall(true); }
   }
   if (hasPrimary()) {
-    try { return await openaiCall(); }
-    catch (err) { console.warn('[AI chat] OpenAI unavailable, switching to Claude:', err.message); }
+    try { return await openaiCall(false); }
+    catch (err) { console.warn('[AI chat] ' + PRIMARY_LABEL + ' unavailable, switching to Claude:', err.message); }
   }
-  return await anthropicCall();
+  return await anthropicCall(hasPrimary());
 }
 
 // Recruiting assistant chat. `messages` is the running conversation; `candidate`
@@ -324,7 +332,7 @@ Company context: ${company.pitch}${company.salaryRange ? `\nGeneral salary range
   const response = await callChat(system, messages, 1200, pickProvider(user, null) || prefersClaude(user));
   const text = (response.content[0].text || '').trim();
   const costCents = calcCostCents(response.usage, response.provider);
-  return { text, costCents };
+  return { text, costCents, provider: response.provider, fellBack: response.fellBack };
 }
 
 // ─── Attachment → text (for the "show the AI a file" instruction feature) ──────
@@ -361,9 +369,11 @@ async function _describeImage(buffer, mimeType, preferClaude) {
 
   const order = preferClaude ? [claudeCall, openaiCall] : [openaiCall, claudeCall];
   let lastErr;
-  for (const fn of order) {
-    try { return await fn(); }
-    catch (e) { lastErr = e; console.warn('[Vision] provider failed:', e.message); }
+  for (let i = 0; i < order.length; i++) {
+    try {
+      const r = await order[i]();
+      return { ...r, fellBack: i > 0 };
+    } catch (e) { lastErr = e; console.warn('[Vision] provider failed:', e.message); }
   }
   throw lastErr || new Error('Vision extraction failed');
 }
@@ -375,7 +385,7 @@ async function extractAttachmentText({ buffer, mimeType, filename, preferClaude 
 
   if (_VISION_IMAGE_MIME[mt] || /\.(jpe?g|png|gif|webp)$/.test(name)) {
     const r = await _describeImage(buffer, _VISION_IMAGE_MIME[mt] ? mt : 'image/png', preferClaude);
-    return { text: cap(r.text), costCents: calcCostCents(r.usage, r.provider) };
+    return { text: cap(r.text), costCents: calcCostCents(r.usage, r.provider), provider: r.provider, fellBack: r.fellBack };
   }
   if (mt.includes('pdf') || name.endsWith('.pdf')) {
     const pdfParse = require('pdf-parse');
@@ -575,9 +585,9 @@ Output ONLY valid JSON. No markdown, no commentary.`;
   const costCents = calcCostCents(response.usage, response.provider);
   try {
     const parsed = parseAIJson(raw);
-    return { text: parsed.body || parsed.text || raw, subject: parsed.subject || '', costCents };
+    return { text: parsed.body || parsed.text || raw, subject: parsed.subject || '', costCents, provider: response.provider, fellBack: response.fellBack };
   } catch {
-    return { text: raw, subject: '', costCents };
+    return { text: raw, subject: '', costCents, provider: response.provider, fellBack: response.fellBack };
   }
 }
 
@@ -655,10 +665,10 @@ Write the email now:`;
   const costCents = calcCostCents(response.usage, response.provider);
   try {
     const parsed = parseAIJson(raw);
-    return { text: parsed.body || parsed.text || raw, subject: parsed.subject || '', costCents };
+    return { text: parsed.body || parsed.text || raw, subject: parsed.subject || '', costCents, provider: response.provider, fellBack: response.fellBack };
   } catch {
     // Fallback: treat whole response as body text
-    return { text: raw, subject: '', costCents };
+    return { text: raw, subject: '', costCents, provider: response.provider, fellBack: response.fellBack };
   }
 }
 
@@ -704,7 +714,7 @@ RULES:
 Write the email now:`;
 
   const response = await callAI(appendInstructions(prompt, instructions), 800, pickProvider(user, instructions));
-  return { text: stripModelPreamble(response.content[0].text), costCents: calcCostCents(response.usage, response.provider) };
+  return { text: stripModelPreamble(response.content[0].text), costCents: calcCostCents(response.usage, response.provider), provider: response.provider, fellBack: response.fellBack };
 }
 
 // ── Company Recruiter outreach (original) ─────────────────────────────────────
@@ -762,7 +772,7 @@ Write the outreach email now:`;
 
   const response = await callAI(appendInstructions(prompt, instructions), 800, pickProvider(user, instructions));
 
-  return { text: stripModelPreamble(response.content[0].text), costCents: calcCostCents(response.usage, response.provider) };
+  return { text: stripModelPreamble(response.content[0].text), costCents: calcCostCents(response.usage, response.provider), provider: response.provider, fellBack: response.fellBack };
 }
 
 // Builds the JSON schema instructions for one role variant, reused for both
@@ -956,6 +966,7 @@ an all-caps company banner line (e.g. REIMAGINE SENIOR CARE WITH US)
       usable: !!(parsed && variantUsable(parsed.variant)),
       truncated,
       provider: response.provider,
+      fellBack: response.fellBack,
       finishReason: response.finishReason,
       costCents: calcCostCents(response.usage, response.provider)
     };
@@ -987,7 +998,9 @@ an all-caps company banner line (e.g. REIMAGINE SENIOR CARE WITH US)
     text: result.parsed.emailBody || '',
     variants: [result.parsed.variant],
     jdLocation,
-    costCents: result.costCents
+    costCents: result.costCents,
+    provider: result.provider,
+    fellBack: result.fellBack
   };
 }
 
@@ -1117,9 +1130,9 @@ Return ONLY the JSON object, no markdown, no extra text.`;
     // matches the path the recruiter actually chose.
     let verdict = (parsed.verdict || '').toLowerCase().includes('strong') ? 'strong' : 'needs_work';
     if (forcedPath) verdict = forcedPath;
-    return { ...parsed, verdict, costCents };
+    return { ...parsed, verdict, costCents, provider: response.provider, fellBack: response.fellBack };
   } catch {
-    return { verdict: forcedPath || 'needs_work', gaps: text, email: '', costCents };
+    return { verdict: forcedPath || 'needs_work', gaps: text, email: '', costCents, provider: response.provider, fellBack: response.fellBack };
   }
 }
 
@@ -1202,7 +1215,7 @@ Write the introduction email now:`;
 
   const response = await callAI(appendInstructions(prompt, instructions), 1000, pickProvider(user, instructions));
 
-  return { text: response.content[0].text.trim(), costCents: calcCostCents(response.usage, response.provider) };
+  return { text: response.content[0].text.trim(), costCents: calcCostCents(response.usage, response.provider), provider: response.provider, fellBack: response.fellBack };
 }
 
 // ── Route by userType ─────────────────────────────────────────────────────────
@@ -1276,7 +1289,7 @@ RULES:
 Write the proposal email now:`;
 
   const response = await callAI(appendInstructions(prompt, instructions), 900, pickProvider(user, instructions));
-  return { text: response.content[0].text.trim(), costCents: calcCostCents(response.usage, response.provider) };
+  return { text: response.content[0].text.trim(), costCents: calcCostCents(response.usage, response.provider), provider: response.provider, fellBack: response.fellBack };
 }
 
 // ── Career Consultant Reply ───────────────────────────────────────────────────
@@ -1378,7 +1391,7 @@ CRITICAL RULES:
 Write the reply now:`;
 
   const response = await callAI(appendInstructions(prompt, instructions), 900, pickProvider(user, instructions));
-  return { text: response.content[0].text.trim(), costCents: calcCostCents(response.usage, response.provider) };
+  return { text: response.content[0].text.trim(), costCents: calcCostCents(response.usage, response.provider), provider: response.provider, fellBack: response.fellBack };
 }
 
 // ── Career Consultant Resume Feedback ────────────────────────────────────────
@@ -1440,9 +1453,9 @@ Return ONLY the JSON. No markdown, no extra text.`;
   const text = response.content[0].text.trim();
   const costCents = calcCostCents(response.usage, response.provider);
   try {
-    return { ...parseAIJson(text), costCents };
+    return { ...parseAIJson(text), costCents, provider: response.provider, fellBack: response.fellBack };
   } catch {
-    return { gaps: '', email: text, costCents };
+    return { gaps: '', email: text, costCents, provider: response.provider, fellBack: response.fellBack };
   }
 }
 
@@ -1550,7 +1563,7 @@ Write the reply now:`;
 
   const response = await callAI(appendInstructions(prompt, instructions), 900, pickProvider(user, instructions));
 
-  return { text: response.content[0].text.trim(), costCents: calcCostCents(response.usage, response.provider) };
+  return { text: response.content[0].text.trim(), costCents: calcCostCents(response.usage, response.provider), provider: response.provider, fellBack: response.fellBack };
 }
 
 async function generateFollowUp(candidate, user, instructions, kind = 'outreach', followUpIndex = 0) {
@@ -1687,7 +1700,7 @@ Write the follow-up email now:`;
 
   const response = await callAI(appendInstructions(prompt, instructions), 600, pickProvider(user, instructions));
 
-  return { text: response.content[0].text.trim(), costCents: calcCostCents(response.usage, response.provider) };
+  return { text: response.content[0].text.trim(), costCents: calcCostCents(response.usage, response.provider), provider: response.provider, fellBack: response.fellBack };
 }
 
 // ── Review-stage follow-up (draft only — recruiter approves before sending) ───
@@ -1727,7 +1740,7 @@ CRITICAL RULES:
 Write the check-in email now:`;
 
   const response = await callAI(appendInstructions(prompt, instructions), 500, prefersClaude(user));
-  return { text: response.content[0].text.trim(), costCents: calcCostCents(response.usage, response.provider) };
+  return { text: response.content[0].text.trim(), costCents: calcCostCents(response.usage, response.provider), provider: response.provider, fellBack: response.fellBack };
 }
 
 // ── Victory-stage follow-up (draft only — recruiter approves before sending) ──
@@ -1770,7 +1783,7 @@ CRITICAL RULES:
 Write the check-in email now:`;
 
   const response = await callAI(appendInstructions(prompt, instructions), 500, prefersClaude(user));
-  return { text: response.content[0].text.trim(), costCents: calcCostCents(response.usage, response.provider) };
+  return { text: response.content[0].text.trim(), costCents: calcCostCents(response.usage, response.provider), provider: response.provider, fellBack: response.fellBack };
 }
 
 async function scoreCandidate(candidate, user) {
@@ -1800,7 +1813,7 @@ Return ONLY the JSON.`;
   const text = response.content[0].text.trim();
   const costCents = calcCostCents(response.usage, response.provider);
   try {
-    return { ...parseAIJson(text), costCents };
+    return { ...parseAIJson(text), costCents, provider: response.provider, fellBack: response.fellBack };
   } catch {
     throw new Error('Could not parse score response');
   }
@@ -1832,9 +1845,9 @@ Return ONLY valid JSON: {"label":"<one of the four>","reason":"<5-10 word justif
   try {
     const parsed = parseAIJson(text);
     if (!VALID.includes(parsed.label)) parsed.label = 'question';
-    return { ...parsed, costCents };
+    return { ...parsed, costCents, provider: response.provider, fellBack: response.fellBack };
   } catch {
-    return { label: 'question', reason: 'unparseable', costCents };
+    return { label: 'question', reason: 'unparseable', costCents, provider: response.provider, fellBack: response.fellBack };
   }
 }
 
@@ -1870,10 +1883,10 @@ Return ONLY valid JSON:
   const costCents = calcCostCents(response.usage, response.provider);
   try {
     const parsed = parseAIJson(text);
-    return { original, rewritten: parsed.rewritten || '', summary: parsed.summary || '', costCents };
+    return { original, rewritten: parsed.rewritten || '', summary: parsed.summary || '', costCents, provider: response.provider, fellBack: response.fellBack };
   } catch {
     // If JSON parsing fails, treat the whole response as the rewrite
-    return { original, rewritten: text, summary: '', costCents };
+    return { original, rewritten: text, summary: '', costCents, provider: response.provider, fellBack: response.fellBack };
   }
 }
 

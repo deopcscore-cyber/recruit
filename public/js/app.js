@@ -801,7 +801,7 @@ function loadHotLeadsPage() {
       if (!candidate) return;
       btn.disabled = true; btn.textContent = 'Generating…';
       try {
-        const { body } = await API.ai.followup(candidate.id);
+        const followupResult = await API.ai.followup(candidate.id);
         // Open candidate modal on thread tab with pre-filled follow-up
         openCandidateModal(candidate, currentUser,
           updated => { Object.assign(candidate, updated); loadHotLeadsPage(); },
@@ -809,6 +809,7 @@ function loadHotLeadsPage() {
         );
         setTimeout(() => switchModalTab('thread'), 100);
         Toast.show('Follow-up draft generated — review in the Thread tab');
+        if (typeof announceAIProvider === 'function') announceAIProvider(followupResult);
       } catch (err) {
         Toast.error('Failed to generate follow-up: ' + err.message);
         btn.disabled = false; btn.textContent = 'Send Follow-Up';
@@ -1603,6 +1604,7 @@ async function openFollowUpDraft(candidateId, regen = false) {
     const result = await API.ai.followup(candidateId);
     bodyEl.value = result.draft || '';
     bodyEl.disabled = false;
+    if (typeof announceAIProvider === 'function') announceAIProvider(result);
   } catch (err) {
     bodyEl.value = '';
     bodyEl.disabled = false;
@@ -2777,6 +2779,11 @@ async function sendAssistantMessage() {
     const res = await API.ai.chat(history, _assistantCandidateId || undefined);
     _assistantMessages = _assistantMessages.filter(m => !m.pending);
     _assistantMessages.push({ role: 'assistant', content: res.reply || '(no response)' });
+    // Only surface a toast on the noteworthy case (fell back to Claude) — a
+    // "written with X" toast on every chat turn would be noisy.
+    if (res.fellBack && typeof Toast !== 'undefined') {
+      Toast.show(`⚠ ${res.providerLabel || 'Primary AI'} was unavailable — this reply used Claude instead`, 'warning', 6000);
+    }
   } catch (err) {
     _assistantMessages = _assistantMessages.filter(m => !m.pending);
     _assistantMessages.push({ role: 'assistant', content: `⚠️ ${err.message}` });

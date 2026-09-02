@@ -1406,6 +1406,7 @@ function renderResumeTab(body) {
         _modalCandidate.resumeRewrite = { rewritten: data.rewritten, summary: data.summary };
         renderRewrite(data);
         if (typeof updateCreditsDisplay === 'function') updateCreditsDisplay(data.creditsRemaining);
+        announceAIProvider(data);
       } catch (err) { Toast.error(err.message); }
       finally { rewriteBtn.disabled = false; rewriteBtn.textContent = '↺ Regenerate Repositioned Resume'; }
     });
@@ -1581,6 +1582,7 @@ function renderRecruiterReviewTab(body) {
         draftHint.textContent = currentVerdict === 'strong' ? 'Praises the resume, asks for the documents, and recommends consultant help to format them' : 'Recommends your resume consultant';
         draftArea.style.display = '';
       }
+      announceAIProvider(result);
     } catch (err) { Toast.error(err.message); }
     finally { btn.disabled = false; btn.textContent = '✦ ' + (done ? 'Re-assess' : 'Assess Resume'); }
   }
@@ -1733,6 +1735,7 @@ function renderReviewTab(body) {
         draftBody.value = result.draft;
         draftArea.style.display = '';
       }
+      announceAIProvider(result);
     } catch (err) { Toast.error(err.message); }
     finally {
       const btnLabel = isConsultant ? (done ? 'Regenerate' : 'Write Feedback Email') : (done ? 'Regenerate Review' : 'Run Resume Review');
@@ -2061,6 +2064,7 @@ function renderThreadTab(body) {
         }
         body.querySelector('#th-body').focus();
       }
+      announceAIProvider(result);
     } catch (err) { Toast.error(err.message); }
     finally { btn.disabled = false; btn.textContent = origText; }
   }
@@ -2326,6 +2330,19 @@ function mountAttachControl(body, textareaId) {
   });
 }
 
+// Tells the user which model actually wrote a generated draft. `result` is
+// whatever the /api/ai/* endpoint returned — it carries providerLabel/fellBack
+// from services/claude.js's callAI/callChat so this reflects the REAL model
+// used for this specific generation, not just what's configured.
+function announceAIProvider(result) {
+  if (!result || !result.providerLabel) return;
+  if (result.fellBack) {
+    Toast.show(`⚠ ${result.providerLabel} was unavailable — this draft was written by Claude instead`, 'warning', 6000);
+  } else {
+    Toast.show(`✨ Written with ${result.providerLabel}`);
+  }
+}
+
 function wireAIDraft(body, { genBtnId, draftAreaId, subjectId, bodyId, regenBtnId, sendBtnId, defaultSubject, stepKey, stageTo, cc, instructionsId, generate, onGenerated, extraSendParams }) {
   const c = _modalCandidate;
 
@@ -2368,6 +2385,7 @@ function wireAIDraft(body, { genBtnId, draftAreaId, subjectId, bodyId, regenBtnI
       if (onGenerated) onGenerated(result);
       draftArea.style.display = '';
       bodyEl && bodyEl.focus();
+      announceAIProvider(result);
     } catch (err) { Toast.error(err.message); }
     finally { genBtn.disabled = false; genBtn.textContent = orig; }
   }

@@ -21,6 +21,19 @@ function withAttachment(req) {
   return instr ? `${instr}\n\n${block}` : block;
 }
 
+// Friendly display name for a generation result's provider, plus whether the
+// generator fell back to Claude — surfaced to the client so the UI can show
+// which model actually wrote a given draft (e.g. "Qwen" vs "fell back to
+// Claude because OpenRouter was unavailable").
+const PROVIDER_LABEL = { openrouter: 'OpenRouter', openai: 'OpenAI', claude: 'Claude' };
+function aiMeta(result) {
+  return {
+    provider: result.provider || null,
+    providerLabel: PROVIDER_LABEL[result.provider] || result.provider || null,
+    fellBack: !!result.fellBack
+  };
+}
+
 // ── Credit helpers ────────────────────────────────────────────────────────────
 
 async function checkCredits(user, res) {
@@ -98,16 +111,16 @@ router.post('/attachment', attachmentUpload.single('file'), async (req, res) => 
     const preferClaude = user.aiProvider === 'claude'
       || (user.aiProvider !== 'openai' && user.userType === 'career_consultant');
 
-    const { text, costCents } = await claude.extractAttachmentText({
+    const result = await claude.extractAttachmentText({
       buffer:   req.file.buffer,
       mimeType: req.file.mimetype,
       filename: req.file.originalname,
       preferClaude
     });
-    if (!text) return res.status(422).json({ error: "Couldn't read any text or content from that file." });
+    if (!result.text) return res.status(422).json({ error: "Couldn't read any text or content from that file." });
 
-    await deductCredits(user, costCents, 'Attachment read', req.file.originalname);
-    return res.json({ text, filename: req.file.originalname, chars: text.length, creditsRemaining: user.credits });
+    await deductCredits(user, result.costCents, 'Attachment read', req.file.originalname);
+    return res.json({ text: result.text, filename: req.file.originalname, chars: result.text.length, creditsRemaining: user.credits, ...aiMeta(result) });
   } catch (err) {
     console.error('AI attachment error:', err);
     const msg = /file too large/i.test(err.message) ? 'File is too large (max 12 MB).' : err.message;
@@ -140,7 +153,7 @@ router.post('/chat', async (req, res) => {
 
     const result = await claude.generateChatReply(user, messages, candidate);
     await deductCredits(user, result.costCents, 'Assistant chat', candidate ? candidate.name : null);
-    return res.json({ reply: result.text, creditsRemaining: user.credits });
+    return res.json({ reply: result.text, creditsRemaining: user.credits, ...aiMeta(result) });
   } catch (err) {
     console.error('AI chat error:', err);
     return res.status(500).json({ error: 'Chat failed: ' + err.message });
@@ -156,7 +169,7 @@ router.post('/outreach', async (req, res) => {
 
     const result = await claude.generateOutreach(ctx.candidate, ctx.user, withAttachment(req));
     await deductCredits(ctx.user, result.costCents, 'Outreach email', ctx.candidate.name);
-    return res.json({ draft: result.text, creditsRemaining: ctx.user.credits });
+    return res.json({ draft: result.text, creditsRemaining: ctx.user.credits, ...aiMeta(result) });
   } catch (err) {
     console.error('AI outreach error:', err);
     return res.status(500).json({ error: 'Failed to generate outreach: ' + err.message });
@@ -177,7 +190,8 @@ router.post('/role-jd', async (req, res) => {
       subject: result.subject,
       variants: result.variants,
       jdLocation: result.jdLocation,
-      creditsRemaining: ctx.user.credits
+      creditsRemaining: ctx.user.credits,
+      ...aiMeta(result)
     });
   } catch (err) {
     console.error('AI role JD error:', err);
@@ -201,7 +215,7 @@ router.post('/resume-review', async (req, res) => {
     const mode = ['request_docs', 'recommend_consultant'].includes(req.body.mode) ? req.body.mode : 'auto';
     const result = await claude.generateResumeFeedback(ctx.candidate, ctx.user, withAttachment(req), mode);
     await deductCredits(ctx.user, result.costCents, 'Resume review', ctx.candidate.name);
-    return res.json({ verdict: result.verdict, gaps: result.gaps, draft: result.email, creditsRemaining: ctx.user.credits });
+    return res.json({ verdict: result.verdict, gaps: result.gaps, draft: result.email, creditsRemaining: ctx.user.credits, ...aiMeta(result) });
   } catch (err) {
     console.error('AI resume review error:', err);
     return res.status(500).json({ error: 'Failed to generate resume review: ' + err.message });
@@ -217,7 +231,7 @@ router.post('/victory', async (req, res) => {
 
     const result = await claude.generateVictoryEmail(ctx.candidate, ctx.user, withAttachment(req));
     await deductCredits(ctx.user, result.costCents, 'Intro email', ctx.candidate.name);
-    return res.json({ draft: result.text, creditsRemaining: ctx.user.credits });
+    return res.json({ draft: result.text, creditsRemaining: ctx.user.credits, ...aiMeta(result) });
   } catch (err) {
     console.error('AI victory error:', err);
     return res.status(500).json({ error: 'Failed to generate Victory email: ' + err.message });
@@ -239,7 +253,7 @@ router.post('/score', async (req, res) => {
     await storage.saveCandidate(ctx.candidate);
 
     const { costCents, ...safeScore } = scoreData;
-    return res.json({ ...safeScore, creditsRemaining: ctx.user.credits });
+    return res.json({ ...safeScore, creditsRemaining: ctx.user.credits, ...aiMeta(scoreData) });
   } catch (err) {
     console.error('AI score error:', err);
     return res.status(500).json({ error: 'Failed to score candidate: ' + err.message });
@@ -255,7 +269,7 @@ router.post('/followup', async (req, res) => {
 
     const result = await claude.generateFollowUp(ctx.candidate, ctx.user, withAttachment(req));
     await deductCredits(ctx.user, result.costCents, 'Follow-up email', ctx.candidate.name);
-    return res.json({ draft: result.text, creditsRemaining: ctx.user.credits });
+    return res.json({ draft: result.text, creditsRemaining: ctx.user.credits, ...aiMeta(result) });
   } catch (err) {
     console.error('AI followup error:', err);
     return res.status(500).json({ error: 'Failed to generate follow-up: ' + err.message });
@@ -271,7 +285,7 @@ router.post('/proposal', async (req, res) => {
 
     const result = await claude.generateProposal(ctx.candidate, ctx.user, withAttachment(req));
     await deductCredits(ctx.user, result.costCents, 'Proposal', ctx.candidate.name);
-    return res.json({ draft: result.text, creditsRemaining: ctx.user.credits });
+    return res.json({ draft: result.text, creditsRemaining: ctx.user.credits, ...aiMeta(result) });
   } catch (err) {
     console.error('AI proposal error:', err);
     return res.status(500).json({ error: 'Failed to generate proposal: ' + err.message });
@@ -288,7 +302,7 @@ router.post('/reply', async (req, res) => {
     const { lastMessage } = req.body;
     const result = await claude.generateReply(ctx.candidate, ctx.user, lastMessage || null, withAttachment(req));
     await deductCredits(ctx.user, result.costCents, 'Reply draft', ctx.candidate.name);
-    return res.json({ draft: result.text, creditsRemaining: ctx.user.credits });
+    return res.json({ draft: result.text, creditsRemaining: ctx.user.credits, ...aiMeta(result) });
   } catch (err) {
     console.error('AI reply error:', err);
     return res.status(500).json({ error: 'Failed to generate reply: ' + err.message });
@@ -320,7 +334,8 @@ router.post('/rewrite-resume', async (req, res) => {
       original: result.original,
       rewritten: result.rewritten,
       summary: result.summary,
-      creditsRemaining: ctx.user.credits
+      creditsRemaining: ctx.user.credits,
+      ...aiMeta(result)
     });
   } catch (err) {
     console.error('AI rewrite-resume error:', err);
