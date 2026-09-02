@@ -2,24 +2,63 @@ const Anthropic = require('@anthropic-ai/sdk');
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-// Lazy-init OpenAI so a missing key doesn't crash the server at startup
+// ── Primary chat provider (OpenAI-compatible Chat Completions API) ───────────
+// By default this is OpenAI (gpt-4o-mini). Set OPENROUTER_API_KEY to route the
+// whole app through OpenRouter instead — e.g. a Qwen model, far cheaper and for
+// most tasks as good or better than gpt-4o-mini. OpenRouter speaks the same
+// Chat Completions API, so the same client and call sites work unchanged.
+// Everything (outreach included) flows through callAI/callChat, so this single
+// switch changes the entire app. Claude stays wired as the fallback.
+const USE_OPENROUTER = !!process.env.OPENROUTER_API_KEY;
+const PRIMARY_LABEL  = USE_OPENROUTER ? 'openrouter' : 'openai';
+
+function hasPrimary() {
+  return USE_OPENROUTER || !!process.env.OPENAI_API_KEY;
+}
+
+// Lazy-init the primary client so a missing key doesn't crash the server at startup
 let _openai = null;
 function getOpenAI() {
   if (!_openai) {
     const { default: OpenAI } = require('openai');
-    _openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+    if (USE_OPENROUTER) {
+      _openai = new OpenAI({
+        apiKey:  process.env.OPENROUTER_API_KEY,
+        baseURL: process.env.OPENROUTER_BASE_URL || 'https://openrouter.ai/api/v1',
+        // Optional attribution headers OpenRouter uses for its dashboards.
+        defaultHeaders: {
+          'HTTP-Referer': process.env.BASE_URL || 'https://recruit.app',
+          'X-Title':      'Recruit Pro'
+        }
+      });
+    } else {
+      _openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+    }
   }
   return _openai;
 }
 
 const CLAUDE_MODEL = 'claude-sonnet-4-6';
-const OPENAI_MODEL = 'gpt-4o-mini';
+// The primary (OpenAI-compatible) model. Under OpenRouter, defaults to a strong,
+// cheap Qwen; overridable via env without a code change.
+const PRIMARY_MODEL = USE_OPENROUTER
+  ? (process.env.OPENROUTER_MODEL || 'qwen/qwen-2.5-72b-instruct')
+  : (process.env.OPENAI_MODEL || 'gpt-4o-mini');
+// Vision-capable primary model (image attachments). Qwen text models can't see
+// images, so the OpenRouter path uses a Qwen-VL model by default.
+const PRIMARY_VISION_MODEL = USE_OPENROUTER
+  ? (process.env.OPENROUTER_VISION_MODEL || 'qwen/qwen-2.5-vl-72b-instruct')
+  : (process.env.OPENAI_VISION_MODEL || PRIMARY_MODEL);
 
 // Cost per million tokens in cents
 const CLAUDE_IN  = 300;   // $3.00
 const CLAUDE_OUT = 1500;  // $15.00
 const OPENAI_IN  = 15;    // $0.15
 const OPENAI_OUT = 60;    // $0.60
+// Rough OpenRouter/Qwen rates (cents per 1M tokens); override to match your
+// chosen model's real pricing.
+const OPENROUTER_IN  = parseInt(process.env.OPENROUTER_IN_CENTS  || '40', 10);
+const OPENROUTER_OUT = parseInt(process.env.OPENROUTER_OUT_CENTS || '40', 10);
 
 function _isPlainObject(v) {
   return v !== null && typeof v === 'object' && !Array.isArray(v);
@@ -65,10 +104,29 @@ function calcCostCents(usage, provider) {
   if (!usage) return 0;
   const inp = usage.input_tokens  || 0;
   const out = usage.output_tokens || 0;
-  const inRate  = provider === 'openai' ? OPENAI_IN  : CLAUDE_IN;
-  const outRate = provider === 'openai' ? OPENAI_OUT : CLAUDE_OUT;
+  let inRate, outRate;
+  if (provider === 'openrouter')  { inRate = OPENROUTER_IN; outRate = OPENROUTER_OUT; }
+  else if (provider === 'openai') { inRate = OPENAI_IN;     outRate = OPENAI_OUT; }
+  else                            { inRate = CLAUDE_IN;     outRate = CLAUDE_OUT; }
   return Math.ceil((inp * inRate + out * outRate) / 1_000_000);
 }
+
+// Safety net for plain-email output. Cheaper/open models (Qwen included)
+// sometimes wrap the email in a ``` code fence or prepend chatter like "Here is
+// the email:". Strip that so the recipient never sees model preamble. Only used
+// where the email is defined to begin with "Dear <Name>".
+function stripModelPreamble(text) {
+  let t = (text || '').trim();
+  const fence = t.match(/^```[a-z]*\s*([\s\S]*?)\s*```$/i);
+  if (fence) t = fence[1].trim();
+  const idx = t.search(/\bDear\s+[A-Z]/);
+  if (idx > 0 && idx < 240) t = t.slice(idx).trim();   // drop any preamble before the greeting
+  return t;
+}
+
+// Appended to plain-body outreach prompts so models return the email and
+// nothing else — important for cheaper models that like to add a preface.
+const CLEAN_OUTPUT_RULE = '\n- Return the email text ONLY — no preface, no explanation, no markdown or code fences. Your very first characters must be "Dear ".';
 
 function appendInstructions(prompt, instructions) {
   if (!instructions || !instructions.trim()) return prompt;
@@ -152,28 +210,28 @@ async function callAI(prompt, maxTokens, preferClaude = false) {
       console.warn('[AI] Claude unavailable, switching to OpenAI:', err.message);
     }
     const res = await getOpenAI().chat.completions.create({
-      model: OPENAI_MODEL, max_tokens: maxTokens,
+      model: PRIMARY_MODEL, max_tokens: maxTokens,
       messages: [{ role: 'user', content: prompt }]
     });
     return {
       content: [{ text: res.choices[0].message.content }],
       usage: { input_tokens: res.usage.prompt_tokens, output_tokens: res.usage.completion_tokens },
-      provider: 'openai',
+      provider: PRIMARY_LABEL,
       finishReason: res.choices[0].finish_reason
     };
   }
 
   // Default: OpenAI first, Claude fallback
-  if (process.env.OPENAI_API_KEY) {
+  if (hasPrimary()) {
     try {
       const res = await getOpenAI().chat.completions.create({
-        model: OPENAI_MODEL, max_tokens: maxTokens,
+        model: PRIMARY_MODEL, max_tokens: maxTokens,
         messages: [{ role: 'user', content: prompt }]
       });
       return {
         content: [{ text: res.choices[0].message.content }],
         usage: { input_tokens: res.usage.prompt_tokens, output_tokens: res.usage.completion_tokens },
-        provider: 'openai',
+        provider: PRIMARY_LABEL,
         finishReason: res.choices[0].finish_reason
       };
     } catch (err) {
@@ -202,13 +260,13 @@ async function callChat(system, messages, maxTokens, preferClaude = false) {
   };
   const openaiCall = async () => {
     const res = await getOpenAI().chat.completions.create({
-      model: OPENAI_MODEL, max_tokens: maxTokens,
+      model: PRIMARY_MODEL, max_tokens: maxTokens,
       messages: [{ role: 'system', content: system }, ...messages]
     });
     return {
       content: [{ text: res.choices[0].message.content }],
       usage: { input_tokens: res.usage.prompt_tokens, output_tokens: res.usage.completion_tokens },
-      provider: 'openai'
+      provider: PRIMARY_LABEL
     };
   };
 
@@ -216,7 +274,7 @@ async function callChat(system, messages, maxTokens, preferClaude = false) {
     try { return await anthropicCall(); }
     catch (err) { console.warn('[AI chat] Claude unavailable, switching to OpenAI:', err.message); return await openaiCall(); }
   }
-  if (process.env.OPENAI_API_KEY) {
+  if (hasPrimary()) {
     try { return await openaiCall(); }
     catch (err) { console.warn('[AI chat] OpenAI unavailable, switching to Claude:', err.message); }
   }
@@ -263,13 +321,13 @@ async function _describeImage(buffer, mimeType, preferClaude) {
 
   const openaiCall = async () => {
     const res = await getOpenAI().chat.completions.create({
-      model: OPENAI_MODEL, max_tokens: 1500,
+      model: PRIMARY_VISION_MODEL, max_tokens: 1500,
       messages: [{ role: 'user', content: [
         { type: 'text', text: instruction },
         { type: 'image_url', image_url: { url: `data:${mimeType};base64,${b64}` } }
       ] }]
     });
-    return { text: res.choices[0].message.content, usage: { input_tokens: res.usage.prompt_tokens, output_tokens: res.usage.completion_tokens }, provider: 'openai' };
+    return { text: res.choices[0].message.content, usage: { input_tokens: res.usage.prompt_tokens, output_tokens: res.usage.completion_tokens }, provider: PRIMARY_LABEL };
   };
   const claudeCall = async () => {
     const res = await anthropic.messages.create({
@@ -622,12 +680,12 @@ ${recruiterTitle}${agencyName ? '\nIndependent Recruiter' : ''}
 RULES:
 - DO NOT name a specific client company
 - DO NOT use phrases like "I came across your profile" or "exciting opportunity"
-- Output ONLY the email body starting with "Dear [First Name],"
+- Output ONLY the email body starting with "Dear [First Name],"${CLEAN_OUTPUT_RULE}
 
 Write the email now:`;
 
   const response = await callAI(appendInstructions(prompt, instructions), 800, pickProvider(user, instructions));
-  return { text: response.content[0].text.trim(), costCents: calcCostCents(response.usage, response.provider) };
+  return { text: stripModelPreamble(response.content[0].text), costCents: calcCostCents(response.usage, response.provider) };
 }
 
 // ── Company Recruiter outreach (original) ─────────────────────────────────────
@@ -679,13 +737,13 @@ CRITICAL RULES:
 - DO NOT use generic openers like "I came across your profile" or "I'm impressed by your background"
 - DO NOT use hollow phrases like "your impressive career" — be specific always
 - Sound like a real human being who genuinely read this person's background — warm, direct, specific
-- Output ONLY the email body (starting with "Dear [First Name],") — no subject line, no commentary
+- Output ONLY the email body (starting with "Dear [First Name],") — no subject line, no commentary${CLEAN_OUTPUT_RULE}
 
 Write the outreach email now:`;
 
   const response = await callAI(appendInstructions(prompt, instructions), 800, pickProvider(user, instructions));
 
-  return { text: response.content[0].text.trim(), costCents: calcCostCents(response.usage, response.provider) };
+  return { text: stripModelPreamble(response.content[0].text), costCents: calcCostCents(response.usage, response.provider) };
 }
 
 // Builds the JSON schema instructions for one role variant, reused for both
