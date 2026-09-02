@@ -348,6 +348,16 @@ app.get('/health', (req, res) => {
 app.listen(PORT, async () => {
   console.log(`Welltower Recruiter listening on port ${PORT}`);
   console.log(`DATA_DIR in use: ${DATA_DIR}`);
+  // Print exactly which AI provider/model this deploy resolved at boot — the
+  // fastest way to confirm an env var change (e.g. OPENROUTER_API_KEY) was
+  // actually picked up, without having to load Settings in the browser.
+  try {
+    const info = require('./services/claude').getProviderInfo();
+    console.log(`AI primary: ${info.primary.provider} (${info.primary.model}) — configured: ${info.primary.configured}`);
+    console.log(`AI fallback: ${info.fallback.provider} (${info.fallback.model}) — configured: ${info.fallback.configured}`);
+  } catch (err) {
+    console.warn('AI provider info unavailable at boot:', err.message);
+  }
 
   // Verify we can write to DATA_DIR
   try {
