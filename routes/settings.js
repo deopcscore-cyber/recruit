@@ -46,7 +46,6 @@ router.get('/', async (req, res) => {
 
     return res.json({
       ...(user.style || { tone: 'warm', notes: '', use: [], avoid: [] }),
-      aiProvider: require('../services/claude').getProviderInfo(),
       name: user.name || '',
       title: user.title || '',
       companyName: user.companyName || '',
@@ -280,7 +279,6 @@ router.put('/', async (req, res) => {
 
     return res.json({
       ...user.style,
-      aiProvider: require('../services/claude').getProviderInfo(),
       name: user.name || '',
       title: user.title || '',
       companyName:  user.companyName  || '',
@@ -757,8 +755,15 @@ router.get('/credit-history', async (req, res) => {
 
 // GET /api/settings/ai-status — which AI provider is active for this user
 router.get('/ai-status', async (req, res) => {
-  const hasAnthropic = !!process.env.ANTHROPIC_API_KEY;
-  const hasOpenAI    = !!process.env.OPENAI_API_KEY;
+  // Single source of truth for what's actually configured server-side (env
+  // vars) — includes OpenRouter, so this reflects a switch to e.g. Qwen
+  // instead of hardcoding "OpenAI".
+  const info = require('../services/claude').getProviderInfo();
+  const hasAnthropic = info.fallback.configured;
+  const hasPrimary   = info.primary.configured;
+  const primaryProviderLabel = { openrouter: 'OpenRouter', openai: 'OpenAI' }[info.primary.provider] || info.primary.provider;
+  const primaryDesc  = `${primaryProviderLabel} (${info.primary.model})`;
+  const claudeDesc   = `Claude (${info.fallback.model})`;
 
   // Effective preference: explicit setting wins, otherwise consultants get Claude
   let claudeFirst = false;
@@ -771,15 +776,15 @@ router.get('/ai-status', async (req, res) => {
 
   let primary, fallback = null;
   if (claudeFirst && hasAnthropic) {
-    primary  = 'Claude (claude-sonnet-4-6)';
-    fallback = hasOpenAI ? 'GPT-4o-mini (auto-switches if Claude is unavailable)' : null;
-  } else if (hasOpenAI) {
-    primary  = 'GPT-4o-mini';
-    fallback = hasAnthropic ? 'Claude (auto-switches if OpenAI is unavailable)' : null;
+    primary  = claudeDesc;
+    fallback = hasPrimary ? `${primaryDesc} (auto-switches if Claude is unavailable)` : null;
+  } else if (hasPrimary) {
+    primary  = primaryDesc;
+    fallback = hasAnthropic ? `${claudeDesc} (auto-switches if ${primaryProviderLabel} is unavailable)` : null;
   } else {
-    primary = hasAnthropic ? 'Claude (claude-sonnet-4-6)' : 'None';
+    primary = hasAnthropic ? claudeDesc : 'None';
   }
-  res.json({ primary, fallback, hasAnthropic, hasOpenAI });
+  res.json({ primary, fallback, hasAnthropic, hasOpenAI: hasPrimary, primaryProvider: info.primary.provider });
 });
 
 // ── SMTP / IMAP ───────────────────────────────────────────────────────────────

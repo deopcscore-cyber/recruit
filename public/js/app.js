@@ -3280,36 +3280,10 @@ function _renderTrackingDomainStatus(verified, domain) {
   }
 }
 
-// Shows which AI provider/model is actually active — set server-side via env
-// vars, so this readout is what confirms a switch (e.g. to OpenRouter/Qwen)
-// actually took effect, rather than the user having to guess.
-function renderAIProviderReadout(info) {
-  const box = document.getElementById('ai-provider-readout');
-  if (!box) return;
-  if (!info || !info.primary) { box.innerHTML = ''; return; }
-
-  const providerLabel = { openrouter: 'OpenRouter', openai: 'OpenAI', claude: 'Claude (Anthropic)' };
-  const row = (label, provider, model, active, extra) => `
-    <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 12px;border:1px solid var(--border);border-radius:var(--radius);background:${active ? 'var(--surface2)' : 'transparent'}">
-      <div>
-        <div style="font-size:0.82rem;font-weight:600;color:var(--text)">${label}${active ? ' <span style="font-weight:700;color:#166534">— ACTIVE</span>' : ''}</div>
-        <div style="font-size:0.78rem;color:var(--text-muted);margin-top:2px">${providerLabel[provider] || provider} · <code>${escapeHtml(model)}</code>${extra ? ' · ' + extra : ''}</div>
-      </div>
-      <span style="font-size:0.7rem;font-weight:600;padding:2px 9px;border-radius:999px;white-space:nowrap;${active ? 'background:#dcfce7;color:#166534' : 'background:var(--surface2);color:var(--text-muted)'}">${active ? 'In use' : 'Configured'}</span>
-    </div>`;
-
-  const p = info.primary, f = info.fallback;
-  box.innerHTML =
-    row('Primary (text + outreach)', p.provider, p.model, p.configured, p.configured ? null : 'no API key set — falling through to fallback') +
-    (p.visionModel && p.visionModel !== p.model ? row('Vision (image attachments)', p.provider, p.visionModel, p.configured) : '') +
-    row('Fallback', f.provider, f.model, !p.configured && f.configured, f.configured ? null : 'no API key set');
-}
-
 async function loadSettingsPage() {
   try {
     const style = await API.settings.get();
     if (currentUser) currentUser.skipTeamContacted = !!style.skipTeamContacted;
-    renderAIProviderReadout(style.aiProvider);
     document.getElementById('profile-name').value = style.name || (currentUser && currentUser.name) || '';
     document.getElementById('profile-title').value = style.title || (currentUser && currentUser.title) || '';
     if (document.getElementById('profile-company-name'))  document.getElementById('profile-company-name').value  = style.companyName  || '';
@@ -3909,5 +3883,13 @@ async function updateAIModelStatus() {
     const s = await fetch('/api/settings/ai-status').then(r => r.json());
     el.innerHTML = `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${s.hasAnthropic || s.hasOpenAI ? '#22c55e' : '#ef4444'};margin-right:6px;vertical-align:middle"></span>
       <strong>Active model:</strong> ${s.primary}${s.fallback ? `<br><span style="font-size:0.8rem;color:var(--text-muted);margin-left:14px">Fallback: ${s.fallback}</span>` : ''}`;
+
+    // Reflect the real primary provider in the "Preferred AI" dropdown, which
+    // otherwise hardcodes "OpenAI" — it may now be OpenRouter/Qwen.
+    const primaryLabel = { openrouter: 'OpenRouter', openai: 'OpenAI' }[s.primaryProvider] || 'the primary provider';
+    const opt = document.getElementById('ai-provider-option-primary');
+    if (opt) opt.textContent = `${primaryLabel} — lowest cost`;
+    const helper = document.getElementById('ai-provider-helper-text');
+    if (helper) helper.textContent = `Auto uses Claude for career consultants and ${primaryLabel} for recruiters. If your choice is unavailable, the other is used as backup automatically.`;
   } catch { /* ignore */ }
 }
