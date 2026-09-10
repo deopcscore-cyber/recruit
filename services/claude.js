@@ -900,7 +900,7 @@ async function generateRoleJD(candidate, user, instructions) {
   const expectedVariants = isIndependent ? 2 : 1;
   const agencyName = (user.companyName || '').trim();
 
-  const prompt = isIndependent ? `You are ${user.name}, an independent executive recruiter${agencyName ? ' at ' + agencyName : ''}. You place candidates across MULTIPLE client companies — you do not work for one employer, and a role you present is never at your own company. You are producing TWO things at once: (1) a short personal email, and (2) TWO tailored role descriptions — each a clear step up from the candidate's current level, each at a DIFFERENT confidential client — that will be attached as a single Word document (referenced from the email, not pasted into it).
+  const prompt = isIndependent ? `You are ${user.name}, an independent executive recruiter${agencyName ? ' at ' + agencyName : ''}. You place candidates across MULTIPLE client companies — you do not work for one employer, and a role you present is never at your own company. You are producing TWO things at once: (1) a short personal email, and (2) TWO tailored role descriptions — each a clear step up from the candidate's current level, each at a DIFFERENT confidential client — that will be attached as two SEPARATE Word documents, one per opportunity (referenced from the email, not pasted into it).
 
 CONFIDENTIALITY RULE (standard in retained executive search): the client's identity is protected until later stages. NEVER name a real, identifiable company, brand, or executive. Label each opportunity exactly as "Confidential Client — Fortune 500 [specific industry]" — fill in a specific, plausible industry drawn from the candidate's real background (e.g. "Confidential Client — Fortune 500 Senior Living & Post-Acute Care"). The two opportunities must use genuinely DIFFERENT industries or angles so they read as two distinct real searches, not duplicates.
 
@@ -927,7 +927,7 @@ Looking forward to hearing your thoughts!
 ---
 
 RULES FOR THE EMAIL BODY:
-1. If there is a candidate conversation above, the opening paragraph MUST directly acknowledge and respond to their latest message. If there's no conversation yet, open warmly referencing their actual background instead.
+1. If "THE CANDIDATE'S LATEST MESSAGE" appears above, the opening paragraph is NOT optional small talk — it MUST directly respond to what they actually wrote: answer any question they asked, react to any detail, name, or concern they raised, and reference their actual words (not a generic acknowledgment like "thanks for your interest"). A reader should be able to tell you read their specific message, not just their resume. Only if there is no conversation yet should you open warmly referencing their background instead.
 2. Mention that you've attached TWO role descriptions (not one) — both step-ups, both with confidential clients. Never imply they're at your own company or at one single employer.
 3. REQUIRED, near the end: invite them to say which direction excites them, or if neither fits, to tell you — warm, pressure-free.
 4. Keep total length similar to the example — do not pad it out.
@@ -942,6 +942,7 @@ Each is "Your Next Step": a role one clear level above the candidate's current t
 The tailoring is invisible: summaries, responsibility themes, and requirements are engineered from this candidate's REAL background so they clearly qualify — but never name the candidate.
 LENGTH AND DEPTH — each must read as a genuine, thorough corporate job posting. Aim for 6-8 responsibility groups (3-5 detailed full-sentence bullets each); a dense 2-paragraph summary; 8-10 requirement bullets; 6-8 offer bullets.
 ${company.salaryRange ? `Recruiter's general placement salary range for context (a loose, REALISTIC anchor for the step-up level — do not inflate into fantasy territory): ${company.salaryRange}.` : 'Keep compensation realistic and market-consistent for the step-up level — never inflate it to manufacture urgency.'}
+COMPENSATION MUST ESCALATE ACROSS THE TWO VARIANTS: Variant 2's compensation range must be noticeably HIGHER than Variant 1's — Variant 2 should read as the bigger of the two step-ups (broader scope, larger organization, or a more senior title), so the two opportunities form a genuine ladder rather than two lateral options at the same level. Keep both realistic; the escalation should feel earned by the added scope, never arbitrary.
 
 ═════════════════════════
 OUTPUT FORMAT — plain text with section markers. NO JSON, NO markdown fences, NO commentary before or after.
@@ -979,8 +980,8 @@ an all-caps mission banner line for this confidential client (industry-appropria
 ===VARIANT_2_EMPLOYER===
 Confidential Client — Fortune 500 [a DIFFERENT specific industry/angle]
 ===VARIANT_2_JD_TITLE===
-...
-(repeat all the same VARIANT_2_ fields, mirroring variant 1's structure with different content)
+... (a bigger step up than Variant 1 — broader scope or more senior title)
+(repeat all the same VARIANT_2_ fields, mirroring variant 1's structure with different content — remember VARIANT_2_OFFER's compensation must be HIGHER than VARIANT_1_OFFER's)
 ===END===` : `You are ${user.name}, writing to an executive candidate at ${company.name}. You are producing TWO things at once: (1) a short personal email, and (2) ONE tailored role description — a clear step up from the candidate's current level — that will be attached as a Word document (referenced from the email, not pasted into it).
 
 RECRUITER STYLE:
@@ -1008,7 +1009,7 @@ Looking forward to hearing your thoughts!
 ---
 
 RULES FOR THE EMAIL BODY:
-1. If there is a candidate conversation above, the opening paragraph MUST directly acknowledge and respond to their latest message — reference their actual words, answer anything they asked, don't ignore it and open generically. If there's no conversation yet (first time sending a JD), open warmly referencing their actual background instead.
+1. If "THE CANDIDATE'S LATEST MESSAGE" appears above, the opening paragraph is NOT optional small talk — it MUST directly respond to what they actually wrote: answer any question they asked, react to any detail, name, or concern they raised, and reference their actual words (not a generic acknowledgment like "thanks for your interest"). A reader should be able to tell you read their specific message, not just their resume. Only if there is no conversation yet (first time sending a JD) should you open warmly referencing their actual background instead.
 2. Mention that you've attached ONE role description and be upfront that it represents a step up from their current level.
 3. REQUIRED, near the end: tell them plainly that if they don't feel ready for this kind of step, they should let you know — you may have something else for them. Keep it warm and pressure-free (their honesty helps you), never condescending.
 4. Keep total length similar to the example — do not pad it out.

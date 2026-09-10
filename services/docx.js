@@ -221,4 +221,37 @@ async function buildRoleJDDocx({ companyName, candidateName, jdLocation, variant
   return Packer.toBuffer(doc);
 }
 
-module.exports = { buildRoleJDDocx };
+/**
+ * Build a DOCX for a SINGLE variant — its own standalone file rather than one
+ * section of a combined document. Used when multiple confidential-client
+ * opportunities (independent recruiter) should go out as separate, cleanly
+ * distinguishable attachments instead of one merged doc with a page break.
+ * Returns a Promise<Buffer>.
+ */
+async function buildSingleVariantDocx({ companyName, candidateName, jdLocation, variant }) {
+  const children = buildVariantSection(companyName, jdLocation, variant, true);
+
+  children.push(rule());
+  children.push(new Paragraph({
+    children: [new TextRun({
+      text: `Confidential — this role overview was prepared for ${candidateName || 'the recipient'}.`,
+      italics: true, color: MUTED, size: 17
+    })]
+  }));
+
+  const doc = new Document({
+    creator: companyName || 'Recruit Pro',
+    title: variant.title || 'Role Overview',
+    numbering: numberingConfig,
+    sections: [{
+      properties: {
+        page: { margin: { top: 1008, bottom: 1008, left: 1008, right: 1008 } }
+      },
+      children
+    }]
+  });
+
+  return Packer.toBuffer(doc);
+}
+
+module.exports = { buildRoleJDDocx, buildSingleVariantDocx };

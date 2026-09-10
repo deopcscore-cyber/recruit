@@ -77,12 +77,12 @@ const API = {
     scheduled(candidateId) { return API.get(`/api/email/scheduled/${candidateId}`); },
     cancelScheduled(jobId) { return API.delete(`/api/email/scheduled/${jobId}`); },
     // Returns a Blob (DOCX bytes), not JSON — bypasses API.request's res.json() parsing.
-    async downloadRoleJDDocx(candidateId, { roleJDVariants, jdLocation, customAttachmentId, customAttachmentFilename } = {}) {
+    async downloadRoleJDDocx(candidateId, { roleJDVariants, jdLocation, customAttachmentId, customAttachmentFilename, variantIndex } = {}) {
       const res = await fetch('/api/email/role-jd-download', {
         method: 'POST',
         credentials: 'same-origin',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ candidateId, roleJDVariants, jdLocation, customAttachmentId, customAttachmentFilename })
+        body: JSON.stringify({ candidateId, roleJDVariants, jdLocation, customAttachmentId, customAttachmentFilename, variantIndex })
       });
       if (res.status === 401) { window.location.href = '/login'; return null; }
       if (!res.ok) {

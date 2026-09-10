@@ -607,11 +607,11 @@ async function _processScheduledSendJob(job) {
   // build failure propagate — an email promising an attached role description
   // that silently has none is worse than a job the user can see failed and retry.
   let attachments = null;
-  const att = await outbound.resolveRoleJDAttachment(candidate, user, {
+  const atts = await outbound.resolveRoleJDAttachment(candidate, user, {
     roleJDVariants: job.roleJDVariants, jdLocation: job.jdLocation,
     customAttachmentId: job.customAttachmentId, customAttachmentFilename: job.customAttachmentFilename
   });
-  if (att) attachments = [att];
+  if (atts && atts.length) attachments = atts;
 
   await outbound.sendComposed(user, candidate, {
     subject: job.subject,

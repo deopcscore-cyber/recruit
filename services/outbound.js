@@ -258,30 +258,59 @@ async function sendComposed(user, candidate, { subject, body, isReply = false, c
 
 const DOCX_MIME = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
 
-// Build the role-JD DOCX attachment from structured variant data. Used by
+// Build the role-JD DOCX attachment(s) from structured variant data. Used by
 // both the immediate-send route and the scheduled-send queue job (variants
 // are stored as plain JSON on the job, and the document is rebuilt fresh at
 // whichever point the send actually happens — a Buffer can't be persisted in
 // the queue's JSON file). DOCX rather than PDF so a recruiter can open and
 // edit the wording before it's attached to an outbound email.
+//
+// A single variant still ships as one file (unchanged for company recruiters
+// / consultants). Multiple variants — the independent recruiter's confidential
+// step-up opportunities — ship as SEPARATE files, one per client, instead of
+// one merged doc with a page break: each opportunity is a distinct engagement
+// and should be individually openable/saveable/forwardable.
+// Returns an array of { filename, content, contentType }.
 async function buildRoleJDAttachment(candidate, user, roleJDVariants, jdLocation) {
-  if (!roleJDVariants || !roleJDVariants.length) return null;
+  if (!roleJDVariants || !roleJDVariants.length) return [];
   const docxSvc = require('./docx');
   const company = (user.companyName || '').trim() || 'Confidential Role Overview';
-  const buffer = await docxSvc.buildRoleJDDocx({
-    companyName: company,
-    candidateName: candidate.name || '',
-    jdLocation: jdLocation || '',
-    variants: roleJDVariants
-  });
   const safeName = (candidate.name || 'Candidate').replace(/[^a-zA-Z0-9 _-]/g, '').trim() || 'Candidate';
-  return { filename: `Role Description - ${safeName}.docx`, content: buffer, contentType: DOCX_MIME };
+
+  if (roleJDVariants.length === 1) {
+    const buffer = await docxSvc.buildRoleJDDocx({
+      companyName: company,
+      candidateName: candidate.name || '',
+      jdLocation: jdLocation || '',
+      variants: roleJDVariants
+    });
+    return [{ filename: `Role Description - ${safeName}.docx`, content: buffer, contentType: DOCX_MIME }];
+  }
+
+  const attachments = [];
+  for (let i = 0; i < roleJDVariants.length; i++) {
+    const variant = roleJDVariants[i];
+    const buffer = await docxSvc.buildSingleVariantDocx({
+      companyName: company,
+      candidateName: candidate.name || '',
+      jdLocation: jdLocation || '',
+      variant
+    });
+    // Drop the repeated "Confidential Client — " boilerplate from the filename,
+    // keeping just the distinguishing industry (or fall back to an index).
+    const label = (variant.employerLabel || variant.variantLabel || '')
+      .replace(/^Confidential Client\s*[—-]\s*/i, '')
+      .replace(/[^a-zA-Z0-9 _-]/g, ' ').replace(/\s+/g, ' ').trim() || `Option ${i + 1}`;
+    attachments.push({ filename: `Role Description - ${safeName} - ${label}.docx`, content: buffer, contentType: DOCX_MIME });
+  }
+  return attachments;
 }
 
-// Single point of truth for "what attachment does this send carry", used by
-// both the immediate /send route and the scheduled-send queue job so they
+// Single point of truth for "what attachment(s) does this send carry", used
+// by both the immediate /send route and the scheduled-send queue job so they
 // can never drift: a recruiter's uploaded edit always wins over the
 // AI-generated variants, whether the send happens now or days from now.
+// Returns an array (possibly empty) of { filename, content, contentType }.
 async function resolveRoleJDAttachment(candidate, user, { roleJDVariants, jdLocation, customAttachmentId, customAttachmentFilename } = {}) {
   if (customAttachmentId) {
     const filePath = jdAttachmentPath(customAttachmentId);
@@ -290,12 +319,12 @@ async function resolveRoleJDAttachment(candidate, user, { roleJDVariants, jdLoca
     }
     const content = fs.readFileSync(filePath);
     const safeName = (customAttachmentFilename || 'Role Description.docx').replace(/[\\/]/g, '_');
-    return { filename: safeName, content, contentType: DOCX_MIME };
+    return [{ filename: safeName, content, contentType: DOCX_MIME }];
   }
   if (roleJDVariants && roleJDVariants.length) {
     return buildRoleJDAttachment(candidate, user, roleJDVariants, jdLocation);
   }
-  return null;
+  return [];
 }
 
 module.exports = {

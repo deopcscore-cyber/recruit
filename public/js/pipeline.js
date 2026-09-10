@@ -1158,7 +1158,7 @@ function renderRoleJDTab(body) {
     if (!jdVariants || !jdVariants.length) { el.innerHTML = ''; return; }
     el.innerHTML = `
       <div style="border:1px solid var(--border);border-radius:8px;padding:12px 14px;background:var(--bg-primary)">
-        <div style="font-size:0.78rem;font-weight:600;color:var(--text-muted);margin-bottom:8px">📎 ${jdVariants.length} role variant${jdVariants.length===1?'':'s'} will be attached as a Word document</div>
+        <div style="font-size:0.78rem;font-weight:600;color:var(--text-muted);margin-bottom:8px">📎 ${jdVariants.length===1 ? 'A role description will be attached as a Word document' : `${jdVariants.length} role variants will be attached as ${jdVariants.length} separate Word documents`}</div>
         ${jdVariants.map(v => `
           <div style="padding:6px 0;border-top:1px solid var(--border)">
             <div style="font-size:0.72rem;font-weight:700;color:var(--blue);text-transform:uppercase;letter-spacing:0.03em">${escapeHtml(v.variantLabel || 'Role option')}</div>
@@ -1214,6 +1214,17 @@ function renderRoleJDTab(body) {
       : (jdVariants && jdVariants.length ? { roleJDVariants: jdVariants, jdLocation: jdLocationVal } : {}))
   });
 
+  function saveBlob(blob, filename) {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 4000);
+  }
+
   const downloadBtn = body.querySelector('#jd-download-docx');
   if (downloadBtn) {
     downloadBtn.addEventListener('click', async () => {
@@ -1221,17 +1232,26 @@ function renderRoleJDTab(body) {
       const orig = downloadBtn.textContent;
       downloadBtn.disabled = true; downloadBtn.textContent = 'Preparing…';
       try {
-        const blob = await API.email.downloadRoleJDDocx(c.id, customAttachment
-          ? { customAttachmentId: customAttachment.id, customAttachmentFilename: customAttachment.filename }
-          : { roleJDVariants: jdVariants, jdLocation: jdLocationVal });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = customAttachment ? customAttachment.filename : `Role Description - ${(c.name || 'Candidate').replace(/[^a-zA-Z0-9 _-]/g, '')}.docx`;
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        setTimeout(() => URL.revokeObjectURL(url), 4000);
+        if (customAttachment) {
+          const blob = await API.email.downloadRoleJDDocx(c.id, { customAttachmentId: customAttachment.id, customAttachmentFilename: customAttachment.filename });
+          saveBlob(blob, customAttachment.filename);
+        } else if (jdVariants.length > 1) {
+          // Multiple confidential-client opportunities are separate files —
+          // save each individually rather than one merged doc. A short delay
+          // between saves avoids the browser's multi-download prompt/throttle.
+          const safeName = (c.name || 'Candidate').replace(/[^a-zA-Z0-9 _-]/g, '');
+          for (let i = 0; i < jdVariants.length; i++) {
+            const v = jdVariants[i];
+            const label = (v.employerLabel || v.variantLabel || `Option ${i + 1}`)
+              .replace(/^Confidential Client\s*[—-]\s*/i, '').replace(/[^a-zA-Z0-9 _-]/g, ' ').replace(/\s+/g, ' ').trim() || `Option ${i + 1}`;
+            const blob = await API.email.downloadRoleJDDocx(c.id, { roleJDVariants: jdVariants, jdLocation: jdLocationVal, variantIndex: i });
+            saveBlob(blob, `Role Description - ${safeName} - ${label}.docx`);
+            if (i < jdVariants.length - 1) await new Promise(r => setTimeout(r, 400));
+          }
+        } else {
+          const blob = await API.email.downloadRoleJDDocx(c.id, { roleJDVariants: jdVariants, jdLocation: jdLocationVal });
+          saveBlob(blob, `Role Description - ${(c.name || 'Candidate').replace(/[^a-zA-Z0-9 _-]/g, '')}.docx`);
+        }
       } catch (err) {
         Toast.error(err.message);
       } finally {

@@ -147,8 +147,8 @@ router.post('/send', requireAuth, async (req, res) => {
     // uploaded edited DOCX — resolveRoleJDAttachment prefers the upload.
     let attachments = null;
     try {
-      const att = await outbound.resolveRoleJDAttachment(candidate, user, { roleJDVariants, jdLocation, customAttachmentId, customAttachmentFilename });
-      if (att) attachments = [att];
+      const atts = await outbound.resolveRoleJDAttachment(candidate, user, { roleJDVariants, jdLocation, customAttachmentId, customAttachmentFilename });
+      if (atts && atts.length) attachments = atts;
     } catch (attErr) {
       console.error('Role JD attachment build failed:', attErr.message);
       return res.status(500).json({ error: 'Failed to build the role description attachment: ' + attErr.message });
@@ -228,7 +228,7 @@ router.post('/send', requireAuth, async (req, res) => {
 // can't render this inline, so the response is a real download.
 router.post('/role-jd-download', requireAuth, async (req, res) => {
   try {
-    const { candidateId, roleJDVariants, jdLocation, customAttachmentId, customAttachmentFilename } = req.body;
+    const { candidateId, roleJDVariants, jdLocation, customAttachmentId, customAttachmentFilename, variantIndex } = req.body;
     if (!candidateId || (!(roleJDVariants && roleJDVariants.length) && !customAttachmentId)) {
       return res.status(400).json({ error: 'candidateId and roleJDVariants (or customAttachmentId) are required' });
     }
@@ -239,7 +239,18 @@ router.post('/role-jd-download', requireAuth, async (req, res) => {
     const user = await storage.getUserById(req.session.userId);
     if (!user) return res.status(404).json({ error: 'User not found' });
 
-    const attachment = await outbound.resolveRoleJDAttachment(candidate, user, { roleJDVariants, jdLocation, customAttachmentId, customAttachmentFilename });
+    // Multiple confidential-client opportunities are separate files — pass
+    // variantIndex to download just one of them (the frontend loops over
+    // indexes to save each separately); omit it to get the first/only file.
+    let effectiveVariants = roleJDVariants;
+    if (Number.isInteger(variantIndex) && roleJDVariants && roleJDVariants.length) {
+      const one = roleJDVariants[variantIndex];
+      if (!one) return res.status(400).json({ error: 'Invalid variant index' });
+      effectiveVariants = [one];
+    }
+
+    const atts = await outbound.resolveRoleJDAttachment(candidate, user, { roleJDVariants: effectiveVariants, jdLocation, customAttachmentId, customAttachmentFilename });
+    const attachment = atts && atts[0];
     if (!attachment) return res.status(400).json({ error: 'No role description to download' });
 
     res.set({
