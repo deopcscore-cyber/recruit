@@ -88,7 +88,7 @@ const gmailCallback = async (req, res) => {
 // POST /api/email/send
 router.post('/send', requireAuth, async (req, res) => {
   try {
-    const { candidateId, subject, body, isReply, cc, scheduledAt, isFollowUp, roleJDVariants, jdLocation, customAttachmentId, customAttachmentFilename } = req.body;
+    const { candidateId, subject, body, isReply, cc, scheduledAt, isFollowUp, roleJDVariants, jdLocation, customAttachmentId, customAttachmentFilename, overrideBounced } = req.body;
 
     if (!candidateId || !subject || !body) {
       return res.status(400).json({ error: 'candidateId, subject, and body are required' });
@@ -102,6 +102,16 @@ router.post('/send', requireAuth, async (req, res) => {
     // instead of telling the recruiter what's actually wrong.
     if (!candidate.email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(candidate.email.trim())) {
       return res.status(400).json({ error: `${candidate.name || 'This candidate'} doesn't have a valid email address on file — add one before sending.` });
+    }
+    // Automated sends (autopilot, follow-ups) already refuse to mail a bounced
+    // address — this is the one gap: a recruiter manually hitting Send. Require
+    // explicit confirmation (overrideBounced) rather than silently blocking,
+    // since some bounces are soft/transient and a recruiter may know better.
+    if (candidate.bounced && !overrideBounced) {
+      return res.status(409).json({
+        error: `${candidate.name || 'This candidate'}'s email previously bounced${candidate.bouncedAt ? ' on ' + new Date(candidate.bouncedAt).toLocaleDateString() : ''} — sending again risks your sender reputation.`,
+        code: 'CANDIDATE_BOUNCED'
+      });
     }
 
     const user = await storage.getUserById(req.session.userId);
@@ -134,6 +144,7 @@ router.post('/send', requireAuth, async (req, res) => {
           jdLocation:    jdLocation || '',
           customAttachmentId:       customAttachmentId || null,
           customAttachmentFilename: customAttachmentFilename || null,
+          overrideBounced: !!overrideBounced,
           scheduledAt:   new Date(t).toISOString(),
           status:        'pending',
           createdAt:     new Date().toISOString()

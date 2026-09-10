@@ -1962,6 +1962,11 @@ function renderThreadTab(body) {
     <div class="thread-container">
       <div class="thread-messages" id="thread-msgs">${threadHtml}</div>
 
+      ${c.bounced ? `
+        <div id="bounced-warning-banner" style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:#fef2f2;border:1px solid #fecaca;border-radius:9px;margin:0 16px 10px;font-size:0.82rem;color:#991b1b">
+          <span>⚠️</span>
+          <span style="flex:1"><strong>${escapeHtml(c.email || 'This email')} previously bounced</strong>${c.bouncedAt ? ' on ' + new Date(c.bouncedAt).toLocaleDateString() : ''} — sending again risks your sender reputation. You'll be asked to confirm before it goes out.</span>
+        </div>` : ''}
       ${c.pendingFollowUpDraft ? `
         <div id="pending-draft-banner" style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:#ecfeff;border:1px solid #a5f3fc;border-radius:9px;margin:0 16px 10px;font-size:0.82rem;color:#155e75">
           <span>✍️</span>
@@ -2189,6 +2194,22 @@ function renderThreadTab(body) {
     } catch (err) { out.innerHTML = `<span style="color:#ef4444">${escapeHtml(err.message)}</span>`; }
   });
 
+  // Sends via API.email.send, and if the server refuses because this address
+  // previously bounced (CANDIDATE_BOUNCED), asks for explicit confirmation
+  // and retries once with overrideBounced. Returns the send result, or null
+  // if the send didn't happen (validation failure or the user backed out).
+  async function sendWithBounceConfirm(params) {
+    try {
+      return await API.email.send(params);
+    } catch (err) {
+      if (err.code === 'CANDIDATE_BOUNCED') {
+        if (!confirm(err.message + '\n\nSend anyway?')) return null;
+        return await API.email.send({ ...params, overrideBounced: true });
+      }
+      throw err;
+    }
+  }
+
   // Send
   body.querySelector('#th-send').addEventListener('click', async () => {
     const subject = body.querySelector('#th-subject').value.trim();
@@ -2200,7 +2221,8 @@ function renderThreadTab(body) {
     btn.disabled = true; btn.textContent = 'Sending…';
     try {
       const isReply = thread.some(m => m.direction === 'outbound');
-      const result = await API.email.send({ candidateId: c.id, subject, body: msgBody, isReply, isFollowUp: lastGeneratedType === 'followup' });
+      const result = await sendWithBounceConfirm({ candidateId: c.id, subject, body: msgBody, isReply, isFollowUp: lastGeneratedType === 'followup' });
+      if (!result) return; // user backed out of the bounce confirmation
       if (result.candidate) Object.assign(_modalCandidate, result.candidate);
       _modalOnUpdate(_modalCandidate);
       clearDraft(c.id, 'thread');
@@ -2244,7 +2266,8 @@ function renderThreadTab(body) {
     schedToggle.disabled = true;
     try {
       const isReply = thread.some(m => m.direction === 'outbound');
-      await API.email.send({ candidateId: c.id, subject, body: msgBody, isReply, isFollowUp: lastGeneratedType === 'followup', scheduledAt: when.toISOString() });
+      const result = await sendWithBounceConfirm({ candidateId: c.id, subject, body: msgBody, isReply, isFollowUp: lastGeneratedType === 'followup', scheduledAt: when.toISOString() });
+      if (!result) return; // user backed out of the bounce confirmation
       clearDraft(c.id, 'thread');
       clearDraft(c.id, 'thread_subj');
       Toast.success(`Scheduled for ${fmtWhen(when)}`);

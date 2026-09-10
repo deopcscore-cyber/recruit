@@ -600,6 +600,15 @@ async function _processScheduledSendJob(job) {
   const candidate = await storageSvc.getCandidateById(job.candidateId);
 
   if (!user || !candidate) { queueSvc.updateJob(job.id, { status: 'cancelled', reason: 'missing' }); return; }
+  // Re-check at send time, not just at schedule time — a bounce can arrive
+  // any time between the two. Respect an explicit override made when the job
+  // was scheduled (the recruiter already saw and dismissed the warning then);
+  // otherwise this is a fresh bounce the recruiter never confirmed.
+  if (candidate.bounced && !job.overrideBounced) {
+    queueSvc.updateJob(job.id, { status: 'cancelled', reason: 'bounced' });
+    console.log(`Queue: scheduled send cancelled (bounced) → ${candidate.name}`);
+    return;
+  }
   if (!outbound.isEmailConnected(user)) throw new Error('No email provider connected');
 
   // Role JD sends carry either structured AI variant data or a recruiter's

@@ -33,6 +33,7 @@ const API = {
       const err = new Error(data.error || `Request failed (${res.status})`);
       if (data.reauth) err.reauth = data.reauth;
       if (data.code === 'NO_CREDITS') err.noCredits = true;
+      if (data.code) err.code = data.code;
       throw err;
     }
     return data;
