@@ -87,6 +87,18 @@ function buildVariantSection(companyName, jdLocation, variant, isFirst) {
     }));
   }
 
+  // Independent-recruiter variants: the client's identity is confidential at
+  // this stage (standard retained-search practice) — a distinct line names the
+  // engagement (e.g. "Confidential Client — Fortune 500 Senior Living") without
+  // claiming a real, identifiable company. Separate from the recruiter's own
+  // letterhead (companyName) above, which always renders as-is.
+  if (variant.employerLabel) {
+    children.push(new Paragraph({
+      spacing: { after: 60 },
+      children: [new TextRun({ text: variant.employerLabel, bold: true, color: NAVY, size: 20 })]
+    }));
+  }
+
   children.push(new Paragraph({
     spacing: { after: 100 },
     children: [new TextRun({ text: variant.title || 'Role Overview', bold: true, color: NAVY, size: 42 })]

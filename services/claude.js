@@ -787,9 +787,15 @@ Write the outreach email now:`;
 //
 // Section headers look like:  ===TAG===  or  ===GROUP: Heading Text===
 // Bullets are lines beginning with -, *, or •.
+// Tags may carry an optional "VARIANT_<n>_" prefix (e.g. "VARIANT_2_JD_TITLE")
+// to route content into the n-th role variant — used when a persona (the
+// independent recruiter) generates multiple distinct opportunities in one
+// response. Unprefixed tags (the single-role personas) all route to variant 0,
+// so existing prompts/output are parsed exactly as before.
 function parseRoleJDMarkers(raw) {
-  const headerRe = /^\s*={2,}\s*([A-Z_]+)\s*(?::\s*(.*?))?\s*={2,}\s*$/;
+  const headerRe = /^\s*={2,}\s*([A-Z0-9_]+)\s*(?::\s*(.*?))?\s*={2,}\s*$/;
   const bulletRe = /^\s*[-*•]\s+(.*\S)\s*$/;
+  const variantPrefixRe = /^VARIANT_(\d+)_(.+)$/;
 
   const sections = []; // { tag, label, lines: [] }
   let current = null;
@@ -813,21 +819,40 @@ function parseRoleJDMarkers(raw) {
   };
   const firstLine = lines => (lines.map(l => l.trim()).find(Boolean) || '');
 
-  const variant = {
+  const blankVariant = () => ({
     variantLabel: 'Your Next Step',
+    employerLabel: '',
     title: '', employmentType: '', workMode: '',
     companyIntro: { headline: '', body: '' },
     summary: '',
     responsibilityGroups: [],
     requirements: [],
     whatWeOffer: []
+  });
+  const variants = [];
+  const getVariant = idx => {
+    while (variants.length <= idx) variants.push(blankVariant());
+    return variants[idx];
   };
+
   let emailSubject = '', emailBody = '';
 
   for (const s of sections) {
-    switch (s.tag) {
+    let tag = s.tag, idx = 0;
+    const vm = tag.match(variantPrefixRe);
+    if (vm) { idx = parseInt(vm[1], 10) - 1; tag = vm[2]; }
+    const variant = getVariant(Math.max(0, idx));
+
+    switch (tag) {
       case 'EMAIL_SUBJECT': emailSubject = firstLine(s.lines); break;
       case 'EMAIL_BODY':    emailBody = prose(s.lines); break;
+      // The confidential-client label for an independent recruiter's variant
+      // (e.g. "Confidential Client — Fortune 500 Senior Living") — never a
+      // real, identifiable company name. Also doubles as the UI's variant tag.
+      case 'EMPLOYER':
+        variant.employerLabel = firstLine(s.lines);
+        if (variant.employerLabel) variant.variantLabel = variant.employerLabel;
+        break;
       case 'JD_TITLE':      variant.title = firstLine(s.lines); break;
       case 'JD_TYPE':       variant.employmentType = firstLine(s.lines); break;
       case 'JD_MODE':       variant.workMode = firstLine(s.lines); break;
@@ -850,7 +875,7 @@ function parseRoleJDMarkers(raw) {
     }
   }
 
-  return { emailSubject, emailBody, variant };
+  return { emailSubject, emailBody, variants: variants.length ? variants : [blankVariant()] };
 }
 
 async function generateRoleJD(candidate, user, instructions) {
@@ -865,7 +890,98 @@ async function generateRoleJD(candidate, user, instructions) {
 
   const convoContext = formatConversationContext(candidate);
 
-  const prompt = `You are ${user.name}, writing to an executive candidate at ${company.name}. You are producing TWO things at once: (1) a short personal email, and (2) ONE tailored role description — a clear step up from the candidate's current level — that will be attached as a Word document (referenced from the email, not pasted into it).
+  // Independent recruiters place candidates at CLIENT companies, not their own
+  // — so their Role JD must never be framed as an opening at the recruiter's
+  // own company (that was the bug: every persona used to get ${company.name}
+  // as the employer). They get two distinct step-up opportunities instead,
+  // each at an anonymized "Confidential Client" — standard retained-search
+  // practice — never a real, identifiable company name.
+  const isIndependent = user.userType === 'recruiter_independent';
+  const expectedVariants = isIndependent ? 2 : 1;
+  const agencyName = (user.companyName || '').trim();
+
+  const prompt = isIndependent ? `You are ${user.name}, an independent executive recruiter${agencyName ? ' at ' + agencyName : ''}. You place candidates across MULTIPLE client companies — you do not work for one employer, and a role you present is never at your own company. You are producing TWO things at once: (1) a short personal email, and (2) TWO tailored role descriptions — each a clear step up from the candidate's current level, each at a DIFFERENT confidential client — that will be attached as a single Word document (referenced from the email, not pasted into it).
+
+CONFIDENTIALITY RULE (standard in retained executive search): the client's identity is protected until later stages. NEVER name a real, identifiable company, brand, or executive. Label each opportunity exactly as "Confidential Client — Fortune 500 [specific industry]" — fill in a specific, plausible industry drawn from the candidate's real background (e.g. "Confidential Client — Fortune 500 Senior Living & Post-Acute Care"). The two opportunities must use genuinely DIFFERENT industries or angles so they read as two distinct real searches, not duplicates.
+
+RECRUITER STYLE:
+${styleInfo}
+
+CANDIDATE INFORMATION:
+${candidateInfo}
+${convoContext ? '\n' + convoContext + '\n' : ''}
+─────────────────────────
+PART 1 — THE EMAIL BODY
+─────────────────────────
+GOLD STANDARD EXAMPLE (follow this exact structure and tone — adapt to this specific candidate, don't copy wording verbatim):
+---
+Dear ${firstName},
+
+I'm thrilled to hear that you're interested in connecting further! Your experience as [their actual title] at [their actual company], coupled with [a specific real detail from their background], is exactly the kind of profile my clients are looking for right now.
+
+I've attached two role descriptions I have in mind for you — both step-up opportunities with confidential clients, deliberately so, because I think your background has outgrown your current seat. Take a look and let me know which direction genuinely excites you, or if neither lands, tell me — that's useful too, and I likely have other mandates that fit better.
+
+[ROLE DESCRIPTIONS ATTACHED]
+
+Looking forward to hearing your thoughts!
+---
+
+RULES FOR THE EMAIL BODY:
+1. If there is a candidate conversation above, the opening paragraph MUST directly acknowledge and respond to their latest message. If there's no conversation yet, open warmly referencing their actual background instead.
+2. Mention that you've attached TWO role descriptions (not one) — both step-ups, both with confidential clients. Never imply they're at your own company or at one single employer.
+3. REQUIRED, near the end: invite them to say which direction excites them, or if neither fits, to tell you — warm, pressure-free.
+4. Keep total length similar to the example — do not pad it out.
+5. Include the literal line "[ROLE DESCRIPTIONS ATTACHED]" on its own line.
+6. Do NOT add a signature, sign-off name, title, or company at the end — appended automatically.
+7. ${styleInfo ? 'Follow the style guidance above.' : 'Warm, professional, not salesy.'}
+
+─────────────────────────
+PART 2 — THE TWO ROLE DESCRIPTIONS (for the attachment)
+─────────────────────────
+Each is "Your Next Step": a role one clear level above the candidate's current title/scope — same functional area, meaningfully more scope/seniority/ownership — so it reads as an aspirational but credible next move, not a fantasy leap. Write each in the style of an official corporate careers-site posting: confident, polished, impersonal in voice. NEVER name a real company — use the "Confidential Client — Fortune 500 [industry]" framing established above, described credibly by industry and scale (e.g. "a Fortune 500 operator of 400+ senior living communities") without naming the real company.
+The tailoring is invisible: summaries, responsibility themes, and requirements are engineered from this candidate's REAL background so they clearly qualify — but never name the candidate.
+LENGTH AND DEPTH — each must read as a genuine, thorough corporate job posting. Aim for 6-8 responsibility groups (3-5 detailed full-sentence bullets each); a dense 2-paragraph summary; 8-10 requirement bullets; 6-8 offer bullets.
+${company.salaryRange ? `Recruiter's general placement salary range for context (a loose, REALISTIC anchor for the step-up level — do not inflate into fantasy territory): ${company.salaryRange}.` : 'Keep compensation realistic and market-consistent for the step-up level — never inflate it to manufacture urgency.'}
+
+═════════════════════════
+OUTPUT FORMAT — plain text with section markers. NO JSON, NO markdown fences, NO commentary before or after.
+═════════════════════════
+Write each section header on its own line exactly as shown (===TAG===). Repeat the whole block once with a "VARIANT_1_" prefix and once with a "VARIANT_2_" prefix, each with different content. Write naturally — no escaping needed. Finish with ===END===.
+
+===EMAIL_SUBJECT===
+a short, specific, non-generic subject line
+===EMAIL_BODY===
+the full email body from PART 1 (multiple paragraphs, plain text)
+===VARIANT_1_EMPLOYER===
+Confidential Client — Fortune 500 [specific industry]
+===VARIANT_1_JD_TITLE===
+the role title, formatted like a real corporate posting
+===VARIANT_1_JD_TYPE===
+Full-Time (or whatever fits)
+===VARIANT_1_JD_MODE===
+On-site, Hybrid, or Remote
+===VARIANT_1_COMPANY_HEADLINE===
+an all-caps mission banner line for this confidential client (industry-appropriate, no real brand names)
+===VARIANT_1_COMPANY_BODY===
+2 substantial paragraphs selling this confidential client's mission, scale, and ambition in a confident careers-page voice — describe the industry and scale credibly, never a real company name
+===VARIANT_1_SUMMARY===
+2 dense paragraphs describing the role's mandate and scope, engineered so this candidate's real background is obviously the profile it calls for (never name the candidate)
+===VARIANT_1_GROUP: Strategic Leadership===
+- a detailed responsibility bullet, a complete sentence
+- another detailed bullet
+===VARIANT_1_GROUP: (next theme heading)===
+- ...
+(6-8 GROUP sections total for variant 1)
+===VARIANT_1_REQUIREMENTS===
+- 8-10 requirement bullets written so THIS candidate clearly meets every one
+===VARIANT_1_OFFER===
+- FIRST bullet is a realistic compensation range for this level; then benefits/perks
+===VARIANT_2_EMPLOYER===
+Confidential Client — Fortune 500 [a DIFFERENT specific industry/angle]
+===VARIANT_2_JD_TITLE===
+...
+(repeat all the same VARIANT_2_ fields, mirroring variant 1's structure with different content)
+===END===` : `You are ${user.name}, writing to an executive candidate at ${company.name}. You are producing TWO things at once: (1) a short personal email, and (2) ONE tailored role description — a clear step up from the candidate's current level — that will be attached as a Word document (referenced from the email, not pasted into it).
 
 RECRUITER STYLE:
 ${styleInfo}
@@ -942,10 +1058,12 @@ an all-caps company banner line (e.g. REIMAGINE SENIOR CARE WITH US)
 ===END===`;
 
   // Plain-text markers instead of JSON: the JD is 1,500-2,500 words of dense
-  // prose, and forcing that through strict JSON escaping failed constantly (a
-  // single unescaped quote lost the whole response). Markers need no escaping,
-  // and a truncated response still parses whatever sections completed.
-  const MAX_TOKENS = 15000;
+  // prose PER VARIANT, and forcing that through strict JSON escaping failed
+  // constantly (a single unescaped quote lost the whole response). Markers
+  // need no escaping, and a truncated response still parses whatever sections
+  // completed. Two variants roughly double the expected output, so the
+  // independent-recruiter case gets a taller token ceiling.
+  const MAX_TOKENS = isIndependent ? 26000 : 15000;
   const TRUNCATED_REASON = { openai: 'length', claude: 'max_tokens' };
   const oneLine = s => (s || '').replace(/\r?\n/g, '\\n');
 
@@ -953,6 +1071,10 @@ an all-caps company banner line (e.g. REIMAGINE SENIOR CARE WITH US)
     return v && typeof v.title === 'string' && v.title.trim()
       && Array.isArray(v.responsibilityGroups)
       && v.responsibilityGroups.some(g => g && Array.isArray(g.bullets) && g.bullets.length);
+  }
+  function variantsUsable(variants) {
+    return Array.isArray(variants) && variants.length >= expectedVariants
+      && variants.slice(0, expectedVariants).every(variantUsable);
   }
 
   async function attempt(fullPrompt) {
@@ -963,7 +1085,7 @@ an all-caps company banner line (e.g. REIMAGINE SENIOR CARE WITH US)
     try { parsed = parseRoleJDMarkers(raw); } catch (err) { /* parsed stays null */ }
     return {
       raw, parsed,
-      usable: !!(parsed && variantUsable(parsed.variant)),
+      usable: !!(parsed && variantsUsable(parsed.variants)),
       truncated,
       provider: response.provider,
       fellBack: response.fellBack,
@@ -973,7 +1095,7 @@ an all-caps company banner line (e.g. REIMAGINE SENIOR CARE WITH US)
   }
 
   let result = await attempt(appendInstructions(prompt, instructions));
-  console.log(`Role JD attempt 1: provider=${result.provider} finishReason=${result.finishReason} truncated=${result.truncated} usable=${result.usable} groups=${result.parsed?.variant?.responsibilityGroups?.length || 0} rawLength=${result.raw.length}`);
+  console.log(`Role JD attempt 1: provider=${result.provider} finishReason=${result.finishReason} truncated=${result.truncated} usable=${result.usable} variants=${result.parsed?.variants?.length || 0} groups=${result.parsed?.variants?.[0]?.responsibilityGroups?.length || 0} rawLength=${result.raw.length}`);
 
   // One retry if the model ignored the format or got cut off before enough
   // sections completed. Far rarer than the JSON-escaping failures were, since
@@ -981,9 +1103,9 @@ an all-caps company banner line (e.g. REIMAGINE SENIOR CARE WITH US)
   if (!result.usable) {
     const retryNote = result.truncated
       ? `\n\nIMPORTANT: your previous attempt was cut off before ===END===. This time keep bullets to ~15-20 words and aim for the lower end of each range so the whole document finishes — a complete, slightly shorter document is required, an incomplete long one is useless.`
-      : `\n\nIMPORTANT: your previous attempt did not follow the required output format. Output ONLY the section markers exactly as specified (===EMAIL_SUBJECT===, ===EMAIL_BODY===, ===JD_TITLE===, ===GROUP: ...===, ===REQUIREMENTS===, ===OFFER===, ===END===), each on its own line, with content on the lines beneath. No JSON, no commentary.`;
+      : `\n\nIMPORTANT: your previous attempt did not follow the required output format. Output ONLY the section markers exactly as specified${isIndependent ? ' (===EMAIL_SUBJECT===, ===EMAIL_BODY===, ===VARIANT_1_JD_TITLE===, ===VARIANT_1_GROUP: ...===, ===VARIANT_2_JD_TITLE===, ...)' : ' (===EMAIL_SUBJECT===, ===EMAIL_BODY===, ===JD_TITLE===, ===GROUP: ...===, ===REQUIREMENTS===, ===OFFER===)'}, each on its own line, with content on the lines beneath. No JSON, no commentary.`;
     const retryResult = await attempt(appendInstructions(prompt, instructions) + retryNote);
-    console.log(`Role JD attempt 2 (retry): provider=${retryResult.provider} finishReason=${retryResult.finishReason} truncated=${retryResult.truncated} usable=${retryResult.usable} groups=${retryResult.parsed?.variant?.responsibilityGroups?.length || 0} rawLength=${retryResult.raw.length}`);
+    console.log(`Role JD attempt 2 (retry): provider=${retryResult.provider} finishReason=${retryResult.finishReason} truncated=${retryResult.truncated} usable=${retryResult.usable} variants=${retryResult.parsed?.variants?.length || 0} groups=${retryResult.parsed?.variants?.[0]?.responsibilityGroups?.length || 0} rawLength=${retryResult.raw.length}`);
     retryResult.costCents += result.costCents; // both attempts ran, both cost tokens
     result = retryResult;
   }
@@ -996,7 +1118,7 @@ an all-caps company banner line (e.g. REIMAGINE SENIOR CARE WITH US)
   return {
     subject: result.parsed.emailSubject || '',
     text: result.parsed.emailBody || '',
-    variants: [result.parsed.variant],
+    variants: result.parsed.variants.slice(0, expectedVariants),
     jdLocation,
     costCents: result.costCents,
     provider: result.provider,
