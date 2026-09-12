@@ -2586,32 +2586,6 @@ function initSettingsPage() {
     }
   });
 
-  // Raw HTML source, as literal text — for pasting into a code/HTML field
-  // rather than a formatted signature box (that's what the Copy button above
-  // is for; this one is a plain-text copy of the markup itself).
-  document.getElementById('sig-source-btn').addEventListener('click', () => {
-    const box = document.getElementById('sig-source-box');
-    const ta  = document.getElementById('sig-source-textarea');
-    const showing = box.style.display !== 'none';
-    if (showing) { box.style.display = 'none'; return; }
-    ta.value = buildSignatureMarkup().trim();
-    box.style.display = 'block';
-    ta.focus();
-    ta.select();
-  });
-
-  document.getElementById('sig-source-copy-btn').addEventListener('click', async () => {
-    const ta = document.getElementById('sig-source-textarea');
-    try {
-      await navigator.clipboard.writeText(ta.value);
-      Toast.success('HTML source copied as text');
-    } catch (err) {
-      ta.focus();
-      ta.select();
-      Toast.warning('Could not copy automatically — it\'s selected, press Ctrl/Cmd+C');
-    }
-  });
-
   // Show the paste box only for the "custom" style.
   const styleSel   = document.getElementById('sig-style');
   const customWrap = document.getElementById('sig-custom-wrap');
