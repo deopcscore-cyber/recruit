@@ -8,6 +8,7 @@ const { parse } = require('csv-parse/sync');
 const storage = require('../services/storage');
 const requireAuth = require('../middleware/auth');
 const { verifyEmailsBatch } = require('../services/apify');
+const { deadDomainReason } = require('../services/deadDomains');
 
 // All routes require auth
 router.use(requireAuth);
@@ -307,13 +308,26 @@ router.post('/:id/verify-email', async (req, res) => {
     const candidate = await storage.getCandidateById(req.params.id);
     if (!candidate) return res.status(404).json({ error: 'Candidate not found' });
     if (candidate.userId !== req.session.userId) return res.status(403).json({ error: 'Forbidden' });
+    if (!candidate.email) {
+      return res.status(400).json({ error: 'This candidate has no email to verify.' });
+    }
+
+    // Free, no API key needed: a known-defunct domain (Adelphia, Angelfire,
+    // old Roadrunner/rr.com) is certain to bounce — no need to spend a paid
+    // check confirming it.
+    const deadReason = deadDomainReason(candidate.email);
+    if (deadReason) {
+      candidate.emailStatus = 'undeliverable';
+      candidate.emailStatusSource = deadReason;
+      candidate.emailVerifiedAt = new Date().toISOString();
+      candidate.updatedAt = new Date().toISOString();
+      await storage.saveCandidate(candidate);
+      return res.json(candidate);
+    }
 
     const user = await storage.getUserById(req.session.userId);
     if (!user?.apifyApiKey) {
       return res.status(400).json({ error: 'Add an Apify API key in Settings to verify emails.' });
-    }
-    if (!candidate.email) {
-      return res.status(400).json({ error: 'This candidate has no email to verify.' });
     }
 
     const results = await verifyEmailsBatch([candidate.email], user.apifyApiKey);
@@ -339,23 +353,49 @@ router.post('/bulk-verify', async (req, res) => {
     const { ids } = req.body;
     if (!Array.isArray(ids) || ids.length === 0) return res.status(400).json({ error: 'Provide an ids array' });
 
-    const user = await storage.getUserById(req.session.userId);
-    if (!user?.apifyApiKey) return res.status(400).json({ error: 'Add an Apify API key in Settings to verify emails.' });
-
     const idSet = new Set(ids);
     const all = await storage.getAllCandidates();
     const mine = all.filter(c => idSet.has(c.id) && c.userId === req.session.userId && c.email);
     if (!mine.length) return res.json({ verified: 0, counts: {} });
 
-    const results = await verifyEmailsBatch(mine.map(c => c.email), user.apifyApiKey);
     const counts = { deliverable: 0, risky: 0, undeliverable: 0, unknown: 0 };
     const now = new Date().toISOString();
+
+    // Free, no API key needed: known-defunct domains are certain to bounce —
+    // flag them directly and don't spend a paid check confirming it.
+    const toApify = [];
     for (const c of mine) {
-      c.emailStatus = results.get(c.email.toLowerCase()) || 'unknown';
-      c.emailVerifiedAt = now;
-      c.updatedAt = now;
-      counts[c.emailStatus] = (counts[c.emailStatus] || 0) + 1;
+      const deadReason = deadDomainReason(c.email);
+      if (deadReason) {
+        c.emailStatus = 'undeliverable';
+        c.emailStatusSource = deadReason;
+        c.emailVerifiedAt = now;
+        c.updatedAt = now;
+        counts.undeliverable++;
+      } else {
+        toApify.push(c);
+      }
     }
+
+    if (toApify.length) {
+      const user = await storage.getUserById(req.session.userId);
+      if (!user?.apifyApiKey) {
+        // Still save the free dead-domain flags even if the rest can't be
+        // checked without a key.
+        await storage.saveAllCandidates(all);
+        return res.status(400).json({
+          error: `Add an Apify API key in Settings to verify the remaining ${toApify.length} email(s) (${counts.undeliverable} known-dead address${counts.undeliverable === 1 ? '' : 'es'} flagged for free without one).`
+        });
+      }
+      const results = await verifyEmailsBatch(toApify.map(c => c.email), user.apifyApiKey);
+      for (const c of toApify) {
+        c.emailStatus = results.get(c.email.toLowerCase()) || 'unknown';
+        c.emailVerifiedAt = now;
+        c.updatedAt = now;
+        counts[c.emailStatus] = (counts[c.emailStatus] || 0) + 1;
+      }
+    }
+
     await storage.saveAllCandidates(all);
     return res.json({ verified: mine.length, counts });
   } catch (err) {
@@ -632,22 +672,42 @@ router.post('/import', csvUpload.single('csv'), async (req, res) => {
       seenEmails.add(email.toLowerCase().trim());
     }
 
+    // Known-defunct domains (Adelphia, Angelfire, old Roadrunner/rr.com — see
+    // services/deadDomains.js) are flagged undeliverable immediately: free, no
+    // Apify call, no API key needed, and it catches the address BEFORE the
+    // first send instead of after a real bounce spends reputation on it.
+    let deadDomainCount = 0;
+    const deadDomainVerifiedAt = new Date().toISOString();
+    pendingCandidates.forEach(candidate => {
+      const reason = deadDomainReason(candidate.email);
+      if (reason) {
+        candidate.emailStatus = 'undeliverable';
+        candidate.emailVerifiedAt = deadDomainVerifiedAt;
+        candidate.emailStatusSource = reason;
+        deadDomainCount++;
+      }
+    });
+    if (deadDomainCount) verifyCounts.undeliverable = (verifyCounts.undeliverable || 0) + deadDomainCount;
+
     // Inline deliverability verification blocks the whole request (each Apify
     // batch is a live SMTP run), so it's only run for reasonably-sized imports.
     // Large imports skip it and complete fast; the recruiter can run the bulk
     // "Verify Emails" action afterward. Prevents the request from timing out
-    // (the 500 seen on huge uploads).
+    // (the 500 seen on huge uploads). Already-flagged dead-domain rows are
+    // excluded from the batch — no need to spend a paid check confirming what
+    // we already know for free.
     const VERIFY_ON_IMPORT_CAP = 500;
     let verifySkipped = false;
-    if (apifyApiKey && pendingCandidates.length && pendingCandidates.length <= VERIFY_ON_IMPORT_CAP) {
+    const toVerify = pendingCandidates.filter(c => c.emailStatus !== 'undeliverable');
+    if (apifyApiKey && toVerify.length && toVerify.length <= VERIFY_ON_IMPORT_CAP) {
       const verifiedAt = new Date().toISOString();
-      const results = await verifyEmailsBatch(pendingCandidates.map(c => c.email), apifyApiKey);
-      pendingCandidates.forEach(candidate => {
+      const results = await verifyEmailsBatch(toVerify.map(c => c.email), apifyApiKey);
+      toVerify.forEach(candidate => {
         candidate.emailStatus = results.get(candidate.email) || 'unknown';
         candidate.emailVerifiedAt = verifiedAt;
         verifyCounts[candidate.emailStatus] = (verifyCounts[candidate.emailStatus] || 0) + 1;
       });
-    } else if (apifyApiKey && pendingCandidates.length > VERIFY_ON_IMPORT_CAP) {
+    } else if (apifyApiKey && toVerify.length > VERIFY_ON_IMPORT_CAP) {
       verifySkipped = true;
     }
 
