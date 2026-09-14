@@ -165,6 +165,38 @@ app.get('/track/:trackingId', rateLimit({ windowMs: 60 * 1000, max: 120 }), asyn
   res.send(BLANK_GIF);
 });
 
+// ─── Unsubscribe (List-Unsubscribe target) ───────────────────────────────────
+// Public, unauthenticated — the recipient isn't a logged-in user. Handles both
+// a human clicking the link (GET) and a mail client's automated one-click
+// unsubscribe (POST, per RFC 8058's List-Unsubscribe-Post). Marking a
+// candidate unsubscribed is a hard, permanent stop on every future send path
+// (autopilot, follow-ups, manual) — never overridable, unlike a bounce.
+async function _handleUnsubscribe(req, res) {
+  try {
+    const storage = require('./services/storage');
+    const candidates = await storage.getAllCandidates();
+    const candidate = candidates.find(c => c.unsubscribeToken === req.params.token);
+    if (candidate && !candidate.unsubscribed) {
+      candidate.unsubscribed = true;
+      candidate.unsubscribedAt = new Date().toISOString();
+      await storage.saveAllCandidates(candidates);
+      console.log(`Unsubscribe: ${candidate.name} <${candidate.email}> opted out`);
+    }
+  } catch (err) {
+    console.error('Unsubscribe error:', err.message);
+  }
+  if (req.method === 'POST') return res.status(200).end(); // one-click: mail client expects a bare 200
+  res.set('Cache-Control', 'no-store').type('html').send(
+    '<!doctype html><html><head><meta charset="utf-8"><title>Unsubscribed</title></head>' +
+    '<body style="font-family:Arial,sans-serif;max-width:480px;margin:80px auto;text-align:center;color:#2d2d2d">' +
+    '<h2 style="margin:0 0 12px">You’ve been unsubscribed</h2>' +
+    '<p style="color:#666">You won’t receive any further emails from this sender.</p>' +
+    '</body></html>'
+  );
+}
+app.get('/unsubscribe/:token', rateLimit({ windowMs: 60 * 1000, max: 30 }), _handleUnsubscribe);
+app.post('/unsubscribe/:token', rateLimit({ windowMs: 60 * 1000, max: 30 }), _handleUnsubscribe);
+
 // ─── Gmail OAuth callback ─────────────────────────────────────────────────────
 const emailRoutes = require('./routes/email');
 app.get('/auth/gmail/callback', emailRoutes.gmailCallback);
@@ -489,6 +521,16 @@ async function _processOutreachJob(job) {
   if (!_isEmailConnected(user)) throw new Error('No email provider connected');
   if ((user.credits || 0) <= 0) throw new Error('Insufficient credits');
 
+  // A candidate can bounce or unsubscribe any time after this job was queued —
+  // re-check at send time, not just at eligibility-filter time. Unsubscribes
+  // are a hard stop (no override anywhere, including autopilot) — honoring an
+  // opt-out isn't optional the way a soft bounce retry might be.
+  if (candidate.bounced || candidate.unsubscribed) {
+    queueSvc.updateJob(job.id, { status: 'cancelled', reason: candidate.unsubscribed ? 'unsubscribed' : 'bounced' });
+    console.log(`Queue: outreach skipped (${candidate.unsubscribed ? 'unsubscribed' : 'bounced'}) → ${candidate.name} <${candidate.email}>`);
+    return;
+  }
+
   // Opt-in only: when the recruiter has enabled it, don't send to an address
   // verification flagged undeliverable. Off by default because the check
   // over-flags (many "undeliverable" addresses actually deliver). Cancel the
@@ -550,6 +592,10 @@ async function _processOutreachJob(job) {
   candidate.trackingId = queueUuidV4();
   candidate.opened     = false;
   candidate.openedAt   = null;
+  // Stable for the candidate's lifetime (unlike trackingId, which rotates
+  // every send) — a link from this email still has to work weeks from now.
+  if (!candidate.unsubscribeToken) candidate.unsubscribeToken = queueUuidV4();
+  const { trackingBaseUrl } = require('./services/gmail');
 
   const emailSvc = _getEmailService(user);
   const { gmailMessageId, gmailThreadId, smtpMessageId } =
@@ -557,7 +603,8 @@ async function _processOutreachJob(job) {
       to:      candidate.email,
       subject,
       body:    draft,
-      trackingId: candidate.trackingId
+      trackingId: candidate.trackingId,
+      unsubscribeUrl: `${trackingBaseUrl(user)}/unsubscribe/${candidate.unsubscribeToken}`
     });
 
   const msg = {
@@ -600,10 +647,15 @@ async function _processScheduledSendJob(job) {
   const candidate = await storageSvc.getCandidateById(job.candidateId);
 
   if (!user || !candidate) { queueSvc.updateJob(job.id, { status: 'cancelled', reason: 'missing' }); return; }
-  // Re-check at send time, not just at schedule time — a bounce can arrive
-  // any time between the two. Respect an explicit override made when the job
-  // was scheduled (the recruiter already saw and dismissed the warning then);
-  // otherwise this is a fresh bounce the recruiter never confirmed.
+  // Re-check at send time, not just at schedule time — a bounce or unsubscribe
+  // can arrive any time between the two. Respect an explicit bounce override
+  // made when the job was scheduled (the recruiter already saw and dismissed
+  // that warning then); unsubscribe is never overridable at any point.
+  if (candidate.unsubscribed) {
+    queueSvc.updateJob(job.id, { status: 'cancelled', reason: 'unsubscribed' });
+    console.log(`Queue: scheduled send cancelled (unsubscribed) → ${candidate.name}`);
+    return;
+  }
   if (candidate.bounced && !job.overrideBounced) {
     queueSvc.updateJob(job.id, { status: 'cancelled', reason: 'bounced' });
     console.log(`Queue: scheduled send cancelled (bounced) → ${candidate.name}`);
@@ -655,9 +707,9 @@ async function _processFollowUpJob(job) {
 
   if (!user || !candidate) { queueSvc.updateJob(job.id, { status: 'cancelled', reason: 'missing' }); return; }
 
-  if (candidate.bounced) {
-    queueSvc.updateJob(job.id, { status: 'cancelled', reason: 'bounced' });
-    console.log(`Queue: follow-up skipped (bounced) → ${candidate.name}`);
+  if (candidate.bounced || candidate.unsubscribed) {
+    queueSvc.updateJob(job.id, { status: 'cancelled', reason: candidate.unsubscribed ? 'unsubscribed' : 'bounced' });
+    console.log(`Queue: follow-up skipped (${candidate.unsubscribed ? 'unsubscribed' : 'bounced'}) → ${candidate.name}`);
     return;
   }
   if (user.skipUndeliverable && candidate.emailStatus === 'undeliverable') {
@@ -775,8 +827,11 @@ async function _processFollowUpJob(job) {
   const subject = candidate.originalSubject
     ? 'Re: ' + candidate.originalSubject.replace(/^re:\s*/i, '')
     : (candidate.lastSubject || 'Following up');
+  if (!candidate.unsubscribeToken) candidate.unsubscribeToken = require('uuid').v4();
+  const { trackingBaseUrl: _followupTrackingBaseUrl } = require('./services/gmail');
   const sendParams = {
-    to: candidate.email, subject, body: draft, trackingId: candidate.trackingId
+    to: candidate.email, subject, body: draft, trackingId: candidate.trackingId,
+    unsubscribeUrl: `${_followupTrackingBaseUrl(user)}/unsubscribe/${candidate.unsubscribeToken}`
   };
   if (candidate.gmailThreadId)     sendParams.threadId  = candidate.gmailThreadId;
   if (candidate.lastSmtpMessageId) {
@@ -1014,10 +1069,16 @@ async function runAutoFetch() {
                 user.totalSpent = (user.totalSpent || 0) + sent.costCents;
                 await storageService.saveUser(user);
               }
-              // Auto-close the clearly-uninterested so they leave the active pipeline
+              // Auto-close the clearly-uninterested so they leave the active pipeline.
+              // This label already covers explicit "unsubscribe/stop contacting" replies
+              // (see classifyReply's prompt) — treat it as a real opt-out, not just a
+              // stage change, so it's honored everywhere a bounce/unsubscribe already is
+              // (including the hard block on a recruiter manually re-sending).
               if (sent.label === 'not_interested') {
                 candidate.stage = 'Closed';
                 candidate.closedReason = 'Declined (auto-detected)';
+                candidate.unsubscribed = true;
+                candidate.unsubscribedAt = new Date().toISOString();
               }
             }
           } catch (clsErr) { console.error('Reply classify error:', clsErr.message); }

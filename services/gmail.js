@@ -198,12 +198,25 @@ function stripToPlainText(body) {
     .trim();
 }
 
-function buildRawEmail({ from, to, cc, subject, body, signatureHtml = '', signaturePlain = '', threadId, inReplyTo, references, trackingId, baseUrl, attachments = [] }) {
+// Small, visible opt-out link appended after the signature — the header-level
+// List-Unsubscribe (RFC 8058) is invisible and only Gmail/Yahoo surface it as
+// a native button; every other client (and Zoho, which can't carry the header
+// at all) needs a real link a recipient can actually find and click. This is
+// standard practice for any legitimate cold-outreach sender and is itself a
+// trust signal — a real opt-out beats a recipient hitting "Report spam".
+function unsubscribeFooterHtml(url) {
+  return `<p style="margin:16px 0 0;font-size:11px;color:#999999;font-family:Arial,Helvetica,sans-serif">If you'd rather not hear from us again, <a href="${url}" style="color:#999999;text-decoration:underline">unsubscribe here</a>.</p>`;
+}
+function unsubscribeFooterPlain(url) {
+  return `\n\nIf you'd rather not hear from us again, unsubscribe: ${url}`;
+}
+
+function buildRawEmail({ from, to, cc, subject, body, signatureHtml = '', signaturePlain = '', threadId, inReplyTo, references, trackingId, baseUrl, attachments = [], unsubscribeUrl }) {
   const boundary = `_wt_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
 
   // ── Plain-text part ───────────────────────────────────────────────────────────
   // Strip only the email body — signature plain text is appended separately
-  const plainText = stripToPlainText(body) + (signaturePlain || '');
+  const plainText = stripToPlainText(body) + (signaturePlain || '') + (unsubscribeUrl ? unsubscribeFooterPlain(unsubscribeUrl) : '');
 
   // ── HTML part — detect format of body ONLY (never include signature in detection) ──
   const pixel = trackingId
@@ -223,7 +236,8 @@ function buildRawEmail({ from, to, cc, subject, body, signatureHtml = '', signat
   }
 
   // Signature is appended AFTER body conversion, separately from detection above
-  const fullHtml = `<html style="color-scheme:light"><body style="color-scheme:light;background-color:#ffffff">${htmlBody}${signatureHtml}${pixel}</body></html>`;
+  const unsubFooter = unsubscribeUrl ? unsubscribeFooterHtml(unsubscribeUrl) : '';
+  const fullHtml = `<html style="color-scheme:light"><body style="color-scheme:light;background-color:#ffffff">${htmlBody}${signatureHtml}${unsubFooter}${pixel}</body></html>`;
 
   // ── Headers ──────────────────────────────────────────────────────────────────
   // Email headers must be ASCII. Encode non-ASCII chars (em dash, curly quotes,
@@ -248,6 +262,16 @@ function buildRawEmail({ from, to, cc, subject, body, signatureHtml = '', signat
       ? `Content-Type: multipart/mixed; boundary="${outerBoundary}"`
       : `Content-Type: multipart/alternative; boundary="${boundary}"`
   ];
+
+  // One-click unsubscribe (RFC 8058) — a real, recognized trust signal for
+  // Gmail/Yahoo and required outright above their bulk-sender thresholds. Also
+  // gives recipients an easy opt-out instead of hitting "Report spam", which
+  // is one of the worst signals a sender can accumulate.
+  if (unsubscribeUrl) {
+    const fromAddr = (from.match(/<([^>]+)>/) || [])[1] || from;
+    headers.push(`List-Unsubscribe: <mailto:${fromAddr}?subject=unsubscribe>, <${unsubscribeUrl}>`);
+    headers.push('List-Unsubscribe-Post: List-Unsubscribe=One-Click');
+  }
 
   if (inReplyTo) {
     const bracket = inReplyTo.startsWith('<') ? inReplyTo : `<${inReplyTo}>`;
@@ -316,7 +340,7 @@ function buildRawEmail({ from, to, cc, subject, body, signatureHtml = '', signat
     .replace(/=+$/, '');
 }
 
-async function sendEmail(userId, { to, cc, subject, body, threadId, inReplyTo, references, trackingId, attachments }) {
+async function sendEmail(userId, { to, cc, subject, body, threadId, inReplyTo, references, trackingId, attachments, unsubscribeUrl }) {
   const user = await storage.getUserById(userId);
   if (!user) throw new Error('User not found');
 
@@ -346,7 +370,7 @@ async function sendEmail(userId, { to, cc, subject, body, threadId, inReplyTo, r
   // pixel is embedded — the tracking image loads from the app's domain (not the
   // sender's), which hurts deliverability, so it's opt-in.
   const pixelTrackingId = user.trackOpens === true ? trackingId : null;
-  const raw = buildRawEmail({ from, to, cc, subject, body, signatureHtml, signaturePlain, threadId, inReplyTo, references, trackingId: pixelTrackingId, baseUrl: trackingBaseUrl(user), attachments });
+  const raw = buildRawEmail({ from, to, cc, subject, body, signatureHtml, signaturePlain, threadId, inReplyTo, references, trackingId: pixelTrackingId, baseUrl: trackingBaseUrl(user), attachments, unsubscribeUrl });
 
   const requestBody = { raw };
   if (threadId) requestBody.threadId = threadId;
@@ -773,8 +797,8 @@ function buildSignaturePlainText(user) {
 }
 
 // ── Shared helper: build plain + HTML content (used by Zoho service too) ──────
-function buildRawEmailParts({ body, signatureHtml = '', signaturePlain = '', trackingId, baseUrl }) {
-  const plainText = stripToPlainText(body) + (signaturePlain || '');
+function buildRawEmailParts({ body, signatureHtml = '', signaturePlain = '', trackingId, baseUrl, unsubscribeUrl }) {
+  const plainText = stripToPlainText(body) + (signaturePlain || '') + (unsubscribeUrl ? unsubscribeFooterPlain(unsubscribeUrl) : '');
 
   const pixel = trackingId
     ? `<img src="${baseUrl}/track/${trackingId}" width="1" height="1" style="max-height:1px;overflow:hidden;border:0;margin:0;padding:0" />`
@@ -790,7 +814,8 @@ function buildRawEmailParts({ body, signatureHtml = '', signaturePlain = '', tra
     htmlBody = `<div style="font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:1.6;color:#2d2d2d">${body.replace(/\n/g, '<br>')}</div>`;
   }
 
-  const fullHtml = `<html style="color-scheme:light"><body style="color-scheme:light;background-color:#ffffff">${htmlBody}${signatureHtml}${pixel}</body></html>`;
+  const unsubFooter = unsubscribeUrl ? unsubscribeFooterHtml(unsubscribeUrl) : '';
+  const fullHtml = `<html style="color-scheme:light"><body style="color-scheme:light;background-color:#ffffff">${htmlBody}${signatureHtml}${unsubFooter}${pixel}</body></html>`;
   return { plainText, htmlBody: fullHtml };
 }
 
@@ -804,5 +829,7 @@ module.exports = {
   buildRawEmailParts,
   buildSignatureHtml,
   buildSignaturePlainText,
-  trackingBaseUrl
+  trackingBaseUrl,
+  unsubscribeFooterHtml,
+  unsubscribeFooterPlain
 };

@@ -7,7 +7,7 @@ const axios   = require('axios');
 const { v4: uuidv4 } = require('uuid');
 const storage = require('./storage');
 const { BASE_URL, MICROSOFT_CLIENT_ID, MICROSOFT_CLIENT_SECRET } = require('../config');
-const { buildSignatureHtml, buildSignaturePlainText, trackingBaseUrl } = require('./gmail');
+const { buildSignatureHtml, buildSignaturePlainText, trackingBaseUrl, unsubscribeFooterHtml, unsubscribeFooterPlain } = require('./gmail');
 
 const TENANT       = 'consumers'; // personal Microsoft accounts only
 const AUTH_BASE    = `https://login.microsoftonline.com/${TENANT}/oauth2/v2.0`;
@@ -99,7 +99,7 @@ async function getAccessToken(user) {
 
 // ── Send email ────────────────────────────────────────────────────────────────
 
-async function sendEmail(userId, { to, subject, body, trackingId, inReplyTo, references, attachments }) {
+async function sendEmail(userId, { to, subject, body, trackingId, inReplyTo, references, attachments, unsubscribeUrl }) {
   const user  = await storage.getUserById(userId);
   const token = await getAccessToken(user);
 
@@ -109,8 +109,10 @@ async function sendEmail(userId, { to, subject, body, trackingId, inReplyTo, ref
   const trackPx   = (user.trackOpens === true && trackingId)  // opt-in open tracking (off by default)
     ? `<img src="${trackingBaseUrl(user)}/track/${trackingId}.png" width="1" height="1" style="display:none" />`
     : '';
-  const htmlContent = `<div style="font-family:Arial,sans-serif;font-size:14px;line-height:1.6">${body.replace(/\n/g, '<br>')}${sigHtml}</div>${trackPx}`;
-  const plainContent = body + sigPlain;
+  const unsubFooterHtml  = unsubscribeUrl ? unsubscribeFooterHtml(unsubscribeUrl) : '';
+  const unsubFooterPlain = unsubscribeUrl ? unsubscribeFooterPlain(unsubscribeUrl) : '';
+  const htmlContent = `<div style="font-family:Arial,sans-serif;font-size:14px;line-height:1.6">${body.replace(/\n/g, '<br>')}${sigHtml}</div>${unsubFooterHtml}${trackPx}`;
+  const plainContent = body + sigPlain + unsubFooterPlain;
 
   const message = {
     subject,
@@ -118,13 +120,25 @@ async function sendEmail(userId, { to, subject, body, trackingId, inReplyTo, ref
     toRecipients: [{ emailAddress: { address: to } }]
   };
 
-  // Threading headers
+  // Threading + one-click-unsubscribe headers (best-effort: Graph accepts
+  // In-Reply-To/References here, but may silently ignore less-common custom
+  // headers depending on tenant policy — worst case the email still sends
+  // fine, it just doesn't carry List-Unsubscribe).
+  const customHeaders = [];
   if (inReplyTo) {
-    message.internetMessageHeaders = [
+    customHeaders.push(
       { name: 'In-Reply-To', value: `<${inReplyTo.replace(/^<|>$/g, '')}>` },
       { name: 'References',  value: references || `<${inReplyTo.replace(/^<|>$/g, '')}>` }
-    ];
+    );
   }
+  if (unsubscribeUrl) {
+    const fromAddr = (user.outlook && user.outlook.address) || '';
+    customHeaders.push(
+      { name: 'List-Unsubscribe', value: `<mailto:${fromAddr}?subject=unsubscribe>, <${unsubscribeUrl}>` },
+      { name: 'List-Unsubscribe-Post', value: 'List-Unsubscribe=One-Click' }
+    );
+  }
+  if (customHeaders.length) message.internetMessageHeaders = customHeaders;
 
   if (attachments && attachments.length) {
     message.attachments = attachments.map(a => ({

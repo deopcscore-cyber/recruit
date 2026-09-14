@@ -10,6 +10,7 @@ const path = require('path');
 const { v4: uuidv4 } = require('uuid');
 const storage        = require('./storage');
 const gmailService   = require('./gmail');
+const { trackingBaseUrl } = gmailService;
 const zohoService    = require('./zoho');
 const outlookService = require('./outlook');
 const smtpService    = require('./smtp');
@@ -94,11 +95,18 @@ async function sendComposed(user, candidate, { subject, body, isReply = false, c
   // or wrote something else entirely, its job is done either way.
   candidate.pendingFollowUpDraft = null;
 
+  // Unlike trackingId (rotates every send), the unsubscribe token must stay
+  // stable for the candidate's lifetime — a link from an email sent weeks ago
+  // still has to work. Generate it once, lazily, and never again.
+  if (!candidate.unsubscribeToken) candidate.unsubscribeToken = uuidv4();
+  const unsubscribeUrl = `${trackingBaseUrl(user)}/unsubscribe/${candidate.unsubscribeToken}`;
+
   const sendParams = {
     to: candidate.email,
     subject,
     body,
     trackingId: candidate.trackingId,
+    unsubscribeUrl,
     ...(cc ? { cc } : {}),
     ...(attachments && attachments.length ? { attachments } : {})
   };

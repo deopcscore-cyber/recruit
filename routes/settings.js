@@ -621,6 +621,7 @@ router.get('/autopilot-status', async (req, res) => {
     const candidates = await storage.getUserCandidates(req.session.userId);
     const eligible = candidates.filter(c => c.email
       && !c.bounced
+      && !c.unsubscribed
       && (!user.skipUndeliverable || c.emailStatus !== 'undeliverable')   // matches the planner
       && (c.stage || 'Imported') === 'Imported'
       && !(c.stepsCompleted || {}).outreach

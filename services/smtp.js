@@ -36,11 +36,18 @@ function makeTransporter(cfg, resolvedHost) {
 // Shared platform Resend account (RESEND_API_KEY env var). Railway blocks
 // outbound SMTP ports, so custom-domain sending routes over HTTPS instead.
 // The consultant's domain must be verified in the Resend account.
-async function sendViaResend({ from, to, cc, subject, html, text, inReplyTo, references, attachments }) {
+async function sendViaResend({ from, to, cc, subject, html, text, inReplyTo, references, attachments, unsubscribeUrl }) {
   const axios = require('axios');
   const headers = {};
   if (inReplyTo)  headers['In-Reply-To'] = `<${inReplyTo.replace(/[<>]/g, '')}>`;
   if (references) headers['References']  = references;
+  // One-click unsubscribe (RFC 8058) — a real trust signal for Gmail/Yahoo,
+  // and gives recipients an easy opt-out instead of hitting "Report spam".
+  if (unsubscribeUrl) {
+    const fromAddr = (from.match(/<([^>]+)>/) || [])[1] || from;
+    headers['List-Unsubscribe'] = `<mailto:${fromAddr}?subject=unsubscribe>, <${unsubscribeUrl}>`;
+    headers['List-Unsubscribe-Post'] = 'List-Unsubscribe=One-Click';
+  }
 
   const payload = {
     from,
@@ -63,7 +70,7 @@ async function sendViaResend({ from, to, cc, subject, html, text, inReplyTo, ref
 }
 
 // ─── Send via SMTP (or Resend when configured) ────────────────────────────────
-async function sendEmail(userId, { to, cc, subject, body, inReplyTo, references, trackingId, attachments }) {
+async function sendEmail(userId, { to, cc, subject, body, inReplyTo, references, trackingId, attachments, unsubscribeUrl }) {
   const user = await storage.getUserById(userId);
   if (!user?.smtp?.host) throw new Error('SMTP not configured');
 
@@ -76,12 +83,12 @@ async function sendEmail(userId, { to, cc, subject, body, inReplyTo, references,
   const sigPlain = buildSignaturePlainText(user);
   const { BASE_URL } = require('../config');
   const pixelTrackingId = user.trackOpens === true ? trackingId : null;  // opt-in open tracking
-  const { plainText: text, htmlBody: html } = buildRawEmailParts({ body, signatureHtml: sigHtml, signaturePlain: sigPlain, trackingId: pixelTrackingId, baseUrl: trackingBaseUrl(user) });
+  const { plainText: text, htmlBody: html } = buildRawEmailParts({ body, signatureHtml: sigHtml, signaturePlain: sigPlain, trackingId: pixelTrackingId, baseUrl: trackingBaseUrl(user), unsubscribeUrl });
 
   // Prefer Resend when the platform key is set — Railway blocks raw SMTP
   if (process.env.RESEND_API_KEY) {
     try {
-      const id = await sendViaResend({ from, to, cc, subject, html, text, inReplyTo, references, attachments });
+      const id = await sendViaResend({ from, to, cc, subject, html, text, inReplyTo, references, attachments, unsubscribeUrl });
       return { gmailMessageId: id, gmailThreadId: null, smtpMessageId: id };
     } catch (err) {
       const status = err.response?.status;
@@ -99,6 +106,13 @@ async function sendEmail(userId, { to, cc, subject, body, inReplyTo, references,
   const resolvedHost = await resolveIPv4(cfg.host);
   const transporter = makeTransporter(cfg, resolvedHost);
 
+  const headers = {};
+  if (unsubscribeUrl) {
+    const fromAddr = (from.match(/<([^>]+)>/) || [])[1] || from;
+    headers['List-Unsubscribe'] = `<mailto:${fromAddr}?subject=unsubscribe>, <${unsubscribeUrl}>`;
+    headers['List-Unsubscribe-Post'] = 'List-Unsubscribe=One-Click';
+  }
+
   const mail = {
     from,
     to,
@@ -108,6 +122,7 @@ async function sendEmail(userId, { to, cc, subject, body, inReplyTo, references,
     ...(cc        ? { cc }                         : {}),
     ...(inReplyTo ? { inReplyTo: `<${inReplyTo.replace(/[<>]/g, '')}>` } : {}),
     ...(references? { references }                  : {}),
+    ...(Object.keys(headers).length ? { headers } : {}),
     ...(attachments && attachments.length
       ? { attachments: attachments.map(a => ({ filename: a.filename, content: a.content, contentType: a.contentType })) }
       : {})

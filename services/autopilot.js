@@ -116,11 +116,12 @@ function planDailyRun(user, candidates, now = new Date()) {
     .filter(j => j.status === 'pending')
     .map(j => j.candidateId));
 
-  // Eligible = imported, never contacted, has email, not bounced, not already queued.
+  // Eligible = imported, never contacted, has email, not bounced/unsubscribed, not already queued.
   // Oldest imports first (FIFO).
   const eligible = candidates
     .filter(c => c.email
       && !c.bounced
+      && !c.unsubscribed
       && (!user.skipUndeliverable || c.emailStatus !== 'undeliverable')   // opt-in: skip known-dead addresses
       && (c.stage || 'Imported') === 'Imported'
       && !(c.stepsCompleted || {}).outreach

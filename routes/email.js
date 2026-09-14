@@ -103,6 +103,14 @@ router.post('/send', requireAuth, async (req, res) => {
     if (!candidate.email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(candidate.email.trim())) {
       return res.status(400).json({ error: `${candidate.name || 'This candidate'} doesn't have a valid email address on file — add one before sending.` });
     }
+    // Unsubscribed is a hard stop, never overridable — honoring an opt-out is
+    // a compliance matter (CAN-SPAM), not a soft reputation judgment call.
+    if (candidate.unsubscribed) {
+      return res.status(403).json({
+        error: `${candidate.name || 'This candidate'} unsubscribed${candidate.unsubscribedAt ? ' on ' + new Date(candidate.unsubscribedAt).toLocaleDateString() : ''} — this address can't be emailed again.`,
+        code: 'CANDIDATE_UNSUBSCRIBED'
+      });
+    }
     // Automated sends (autopilot, follow-ups) already refuse to mail a bounced
     // address — this is the one gap: a recruiter manually hitting Send. Require
     // explicit confirmation (overrideBounced) rather than silently blocking,
@@ -544,9 +552,15 @@ router.post('/fetch', requireAuth, async (req, res) => {
             user.totalSpent = (user.totalSpent || 0) + sent.costCents;
             await storage.saveUser(user);
           }
+          // This label already covers explicit "unsubscribe/stop contacting" replies
+          // (see classifyReply's prompt) — treat it as a real opt-out, not just a stage
+          // change, so it's honored everywhere a bounce/unsubscribe already is
+          // (including the hard block on a recruiter manually re-sending).
           if (sent.label === 'not_interested') {
             candidate.stage = 'Closed';
             candidate.closedReason = 'Declined (auto-detected)';
+            candidate.unsubscribed = true;
+            candidate.unsubscribedAt = new Date().toISOString();
           }
         }
       } catch (clsErr) { console.error('Reply classify error:', clsErr.message); }

@@ -1962,7 +1962,11 @@ function renderThreadTab(body) {
     <div class="thread-container">
       <div class="thread-messages" id="thread-msgs">${threadHtml}</div>
 
-      ${c.bounced ? `
+      ${c.unsubscribed ? `
+        <div id="unsubscribed-warning-banner" style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:#fef2f2;border:1px solid #fecaca;border-radius:9px;margin:0 16px 10px;font-size:0.82rem;color:#991b1b">
+          <span>🚫</span>
+          <span style="flex:1"><strong>${escapeHtml(c.email || 'This email')} unsubscribed</strong>${c.unsubscribedAt ? ' on ' + new Date(c.unsubscribedAt).toLocaleDateString() : ''} — this address can't be emailed again. Sending is disabled for this candidate.</span>
+        </div>` : c.bounced ? `
         <div id="bounced-warning-banner" style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:#fef2f2;border:1px solid #fecaca;border-radius:9px;margin:0 16px 10px;font-size:0.82rem;color:#991b1b">
           <span>⚠️</span>
           <span style="flex:1"><strong>${escapeHtml(c.email || 'This email')} previously bounced</strong>${c.bouncedAt ? ' on ' + new Date(c.bouncedAt).toLocaleDateString() : ''} — sending again risks your sender reputation. You'll be asked to confirm before it goes out.</span>
@@ -1999,8 +2003,8 @@ function renderThreadTab(body) {
           <span class="text-xs text-muted">All sends require your approval above</span>
           <button class="btn btn-ghost btn-sm" id="th-check-deliver" title="Check spam/deliverability risk">🛡 Check deliverability</button>
           <span style="position:relative;display:inline-flex">
-            <button class="btn btn-primary" id="th-send" style="border-top-right-radius:0;border-bottom-right-radius:0">Send Email</button>
-            <button class="btn btn-primary" id="th-schedule-btn" title="Schedule send for later" style="border-top-left-radius:0;border-bottom-left-radius:0;border-left:1px solid rgba(255,255,255,0.3);padding-left:10px;padding-right:10px">🕐 ▾</button>
+            <button class="btn btn-primary" id="th-send" ${c.unsubscribed ? 'disabled title="This candidate unsubscribed — sending is disabled"' : ''} style="border-top-right-radius:0;border-bottom-right-radius:0">Send Email</button>
+            <button class="btn btn-primary" id="th-schedule-btn" ${c.unsubscribed ? 'disabled title="This candidate unsubscribed — sending is disabled"' : 'title="Schedule send for later"'} style="border-top-left-radius:0;border-bottom-left-radius:0;border-left:1px solid rgba(255,255,255,0.3);padding-left:10px;padding-right:10px">🕐 ▾</button>
             <div id="th-schedule-menu" style="display:none;position:absolute;bottom:calc(100% + 6px);right:0;background:var(--card-bg);border:1px solid var(--border);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,0.22);padding:6px;min-width:220px;z-index:60">
               <div style="font-size:0.68rem;font-weight:600;color:var(--text-muted);letter-spacing:0.08em;text-transform:uppercase;padding:4px 8px 6px">Send later</div>
               <button class="btn btn-ghost btn-sm th-sched-preset" data-mins="15" style="width:100%;justify-content:flex-start">In 15 minutes</button>

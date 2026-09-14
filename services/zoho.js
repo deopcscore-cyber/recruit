@@ -251,7 +251,13 @@ async function uploadAttachment(apiBase, accountId, token, attachment) {
 }
 
 // ── Send email via Zoho REST API ──────────────────────────────────────────────
-async function sendEmail(userId, { to, cc, subject, body, inReplyTo, references, trackingId, attachments }) {
+// Note: unsubscribeUrl is accepted for signature parity with the other
+// providers but NOT sent — Zoho's REST send endpoint (unlike Gmail's raw MIME,
+// nodemailer, or Graph's internetMessageHeaders) has no field for arbitrary
+// custom headers, so List-Unsubscribe can't be attached here. The unsubscribe
+// LINK still works if a recipient finds it another way (e.g. forwarded); it
+// just won't show as a one-click header on Zoho-sent mail.
+async function sendEmail(userId, { to, cc, subject, body, inReplyTo, references, trackingId, attachments, unsubscribeUrl }) {
   const user = await storage.getUserById(userId);
   if (!user) throw new Error('User not found');
 
@@ -263,7 +269,7 @@ async function sendEmail(userId, { to, cc, subject, body, inReplyTo, references,
   // Open-tracking pixel only when the user opted in (off by default — it loads
   // from the app's domain, not the sender's, which hurts deliverability).
   const pixelTrackingId = user.trackOpens === true ? trackingId : null;
-  const { htmlBody } = buildRawEmailParts({ body, signatureHtml: sigHtml, signaturePlain: sigPlain, trackingId: pixelTrackingId, baseUrl: trackingBaseUrl(user) });
+  const { htmlBody } = buildRawEmailParts({ body, signatureHtml: sigHtml, signaturePlain: sigPlain, trackingId: pixelTrackingId, baseUrl: trackingBaseUrl(user), unsubscribeUrl });
 
   const fromName = (user.zoho.displayName || user.name || '').trim();
   const fromAddr = fromName ? `${fromName} <${address}>` : address;
