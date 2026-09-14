@@ -46,7 +46,7 @@ function markdownToHtml(text) {
       closeList();
       const lv = h1 ? 1 : h2 ? 2 : 3;
       const txt = (h1 || h2 || h3)[1];
-      const sz = lv === 1 ? '18px' : lv === 2 ? '16px' : '15px';
+      const sz = lv === 1 ? '17px' : lv === 2 ? '15px' : '14px';
       out.push(`<h${lv} style="margin:16px 0 4px;font-size:${sz};font-weight:bold;color:#2d2d2d;font-family:Arial,Helvetica,sans-serif;line-height:1.4">${inlineFormat(txt)}</h${lv}>`);
       continue;
     }
@@ -62,7 +62,7 @@ function markdownToHtml(text) {
     const bullet = line.match(/^[-*]\s+(.+)$/);
     if (bullet) {
       if (!inList) { out.push('<ul style="margin:6px 0 6px 0;padding-left:22px">'); inList = true; }
-      out.push(`<li style="margin:4px 0;color:#2d2d2d;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:1.6">${inlineFormat(bullet[1])}</li>`);
+      out.push(`<li style="margin:4px 0;color:#2d2d2d;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6">${inlineFormat(bullet[1])}</li>`);
       continue;
     }
 
@@ -70,7 +70,7 @@ function markdownToHtml(text) {
     const numbered = line.match(/^\d+\.\s+(.+)$/);
     if (numbered) {
       if (!inNumberedList) { out.push('<ol style="margin:6px 0;padding-left:22px">'); inNumberedList = true; }
-      out.push(`<li style="margin:4px 0;color:#2d2d2d;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:1.6">${inlineFormat(numbered[1])}</li>`);
+      out.push(`<li style="margin:4px 0;color:#2d2d2d;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6">${inlineFormat(numbered[1])}</li>`);
       continue;
     }
 
@@ -91,7 +91,7 @@ function markdownToHtml(text) {
 
     // Regular paragraph
     closeList();
-    out.push(`<p style="margin:5px 0;color:#2d2d2d;line-height:1.6;font-family:Arial,Helvetica,sans-serif;font-size:15px">${inlineFormat(line)}</p>`);
+    out.push(`<p style="margin:5px 0;color:#2d2d2d;line-height:1.6;font-family:Arial,Helvetica,sans-serif;font-size:14px">${inlineFormat(line)}</p>`);
   }
   closeList();
   return out.join('\n');
@@ -229,10 +229,10 @@ function buildRawEmail({ from, to, cc, subject, body, signatureHtml = '', signat
     htmlBody = body;
   } else if (hasMarkdown(body)) {
     const converted = markdownToHtml(body);
-    htmlBody = `<div style="font-family:Arial,Helvetica,sans-serif;font-size:15px;color:#2d2d2d;line-height:1.6">${converted}</div>`;
+    htmlBody = `<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#2d2d2d;line-height:1.6">${converted}</div>`;
   } else {
     // Plain text — convert newlines to <br>
-    htmlBody = `<div style="font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:1.6;color:#2d2d2d">${body.replace(/\n/g, '<br>')}</div>`;
+    htmlBody = `<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;color:#2d2d2d">${body.replace(/\n/g, '<br>')}</div>`;
   }
 
   // Signature is appended AFTER body conversion, separately from detection above
@@ -809,9 +809,9 @@ function buildRawEmailParts({ body, signatureHtml = '', signaturePlain = '', tra
     htmlBody = body;
   } else if (hasMarkdown(body)) {
     const converted = markdownToHtml(body);
-    htmlBody = `<div style="font-family:Arial,Helvetica,sans-serif;font-size:15px;color:#2d2d2d;line-height:1.6">${converted}</div>`;
+    htmlBody = `<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#2d2d2d;line-height:1.6">${converted}</div>`;
   } else {
-    htmlBody = `<div style="font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:1.6;color:#2d2d2d">${body.replace(/\n/g, '<br>')}</div>`;
+    htmlBody = `<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;color:#2d2d2d">${body.replace(/\n/g, '<br>')}</div>`;
   }
 
   const unsubFooter = unsubscribeUrl ? unsubscribeFooterHtml(unsubscribeUrl) : '';
