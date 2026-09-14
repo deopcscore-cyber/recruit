@@ -1716,7 +1716,8 @@ async function loadAnalyticsPage(periodKey) {
       { k:'interested',     label:'🔥 Interested', col:'#16a34a' },
       { k:'question',       label:'❔ Question',    col:'#2563eb' },
       { k:'not_now',        label:'🕒 Not now',     col:'#d97706' },
-      { k:'not_interested', label:'✕ Declined',    col:'#ef4444' }
+      { k:'not_interested', label:'✕ Declined',    col:'#ef4444' },
+      { k:'unsubscribe_request', label:'🚫 Unsubscribed', col:'#b91c1c' }
     ];
     const sentTotal = SENT_ROWS.reduce((a, r) => a + (sc[r.k] || 0), 0);
     const sentimentHtml = sentTotal === 0

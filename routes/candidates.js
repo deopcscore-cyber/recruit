@@ -244,6 +244,30 @@ router.put('/:id', async (req, res) => {
   }
 });
 
+// POST /api/candidates/:id/resubscribe — manually clear a false-positive
+// unsubscribe (e.g. the auto-classifier mistook "not interested in this
+// role" for an opt-out). Deliberately its own explicit endpoint rather than
+// a field on the generic PUT — this reverses a compliance-sensitive flag and
+// should never happen as a side effect of an unrelated bulk edit.
+router.post('/:id/resubscribe', async (req, res) => {
+  try {
+    const candidate = await storage.getCandidateById(req.params.id);
+    if (!candidate) return res.status(404).json({ error: 'Candidate not found' });
+    if (candidate.userId !== req.session.userId) return res.status(403).json({ error: 'Forbidden' });
+
+    candidate.unsubscribed = false;
+    candidate.unsubscribedAt = null;
+    candidate.resubscribedAt = new Date().toISOString();
+    candidate.resubscribedBy = req.session.userName || 'Recruiter';
+
+    await storage.saveCandidate(candidate);
+    return res.json(candidate);
+  } catch (err) {
+    console.error('Resubscribe candidate error:', err);
+    return res.status(500).json({ error: 'Failed to resubscribe candidate' });
+  }
+});
+
 // DELETE /api/candidates/bulk  — delete multiple candidates by ID array
 // Body: { ids: ["id1","id2",...] }
 router.delete('/bulk', async (req, res) => {

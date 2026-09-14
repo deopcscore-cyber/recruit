@@ -552,13 +552,18 @@ router.post('/fetch', requireAuth, async (req, res) => {
             user.totalSpent = (user.totalSpent || 0) + sent.costCents;
             await storage.saveUser(user);
           }
-          // This label already covers explicit "unsubscribe/stop contacting" replies
-          // (see classifyReply's prompt) — treat it as a real opt-out, not just a stage
-          // change, so it's honored everywhere a bounce/unsubscribe already is
-          // (including the hard block on a recruiter manually re-sending).
-          if (sent.label === 'not_interested') {
+          // Declining this opportunity closes the pipeline stage either way.
+          // Only an explicit unsubscribe_request (see classifyReply's prompt)
+          // is a real withdrawal of consent — that's the only case honored
+          // everywhere a bounce/unsubscribe already is (including the hard
+          // block on a recruiter manually re-sending).
+          if (sent.label === 'not_interested' || sent.label === 'unsubscribe_request') {
             candidate.stage = 'Closed';
-            candidate.closedReason = 'Declined (auto-detected)';
+            candidate.closedReason = sent.label === 'unsubscribe_request'
+              ? 'Unsubscribed (auto-detected)'
+              : 'Declined (auto-detected)';
+          }
+          if (sent.label === 'unsubscribe_request') {
             candidate.unsubscribed = true;
             candidate.unsubscribedAt = new Date().toISOString();
           }

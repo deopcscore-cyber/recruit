@@ -1070,13 +1070,17 @@ async function runAutoFetch() {
                 await storageService.saveUser(user);
               }
               // Auto-close the clearly-uninterested so they leave the active pipeline.
-              // This label already covers explicit "unsubscribe/stop contacting" replies
-              // (see classifyReply's prompt) — treat it as a real opt-out, not just a
-              // stage change, so it's honored everywhere a bounce/unsubscribe already is
-              // (including the hard block on a recruiter manually re-sending).
-              if (sent.label === 'not_interested') {
+              // Declining this opportunity is not the same as withdrawing consent —
+              // only an explicit unsubscribe_request (see classifyReply's prompt) is
+              // honored everywhere a bounce/unsubscribe already is (including the
+              // hard block on a recruiter manually re-sending).
+              if (sent.label === 'not_interested' || sent.label === 'unsubscribe_request') {
                 candidate.stage = 'Closed';
-                candidate.closedReason = 'Declined (auto-detected)';
+                candidate.closedReason = sent.label === 'unsubscribe_request'
+                  ? 'Unsubscribed (auto-detected)'
+                  : 'Declined (auto-detected)';
+              }
+              if (sent.label === 'unsubscribe_request') {
                 candidate.unsubscribed = true;
                 candidate.unsubscribedAt = new Date().toISOString();
               }

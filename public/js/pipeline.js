@@ -280,7 +280,8 @@ const SENTIMENT_META = {
   interested:     { label: '🔥 Interested', bg: '#dcfce7', fg: '#15803d' },
   question:       { label: '❔ Question',    bg: '#dbeafe', fg: '#1d4ed8' },
   not_now:        { label: '🕒 Not now',     bg: '#fef9c3', fg: '#a16207' },
-  not_interested: { label: '✕ Declined',    bg: '#fee2e2', fg: '#b91c1c' }
+  not_interested: { label: '✕ Declined',    bg: '#fee2e2', fg: '#b91c1c' },
+  unsubscribe_request: { label: '🚫 Unsubscribed', bg: '#fee2e2', fg: '#b91c1c' }
 };
 function sentimentBadge(s) {
   const m = SENTIMENT_META[s];
@@ -1966,6 +1967,7 @@ function renderThreadTab(body) {
         <div id="unsubscribed-warning-banner" style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:#fef2f2;border:1px solid #fecaca;border-radius:9px;margin:0 16px 10px;font-size:0.82rem;color:#991b1b">
           <span>🚫</span>
           <span style="flex:1"><strong>${escapeHtml(c.email || 'This email')} unsubscribed</strong>${c.unsubscribedAt ? ' on ' + new Date(c.unsubscribedAt).toLocaleDateString() : ''} — this address can't be emailed again. Sending is disabled for this candidate.</span>
+          <button class="btn btn-ghost btn-sm" id="resubscribe-btn" title="Only use this if they did NOT actually ask to be unsubscribed">Undo — this wasn't a real opt-out</button>
         </div>` : c.bounced ? `
         <div id="bounced-warning-banner" style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:#fef2f2;border:1px solid #fecaca;border-radius:9px;margin:0 16px 10px;font-size:0.82rem;color:#991b1b">
           <span>⚠️</span>
@@ -2127,6 +2129,23 @@ function renderThreadTab(body) {
         _modalOnUpdate(_modalCandidate);
         renderThreadTab(body);
       } catch (err) { Toast.error(err.message); dismissDraftBtn.disabled = false; }
+    });
+  }
+
+  // Undo a false-positive unsubscribe (auto-classifier mistook "not
+  // interested in this role" for an opt-out request).
+  const resubscribeBtn = body.querySelector('#resubscribe-btn');
+  if (resubscribeBtn) {
+    resubscribeBtn.addEventListener('click', async () => {
+      if (!confirm(`Only confirm if ${c.name || 'this candidate'} did NOT actually ask to be unsubscribed. This re-enables sending to them.`)) return;
+      resubscribeBtn.disabled = true;
+      try {
+        const updated = await API.candidates.resubscribe(c.id);
+        Object.assign(_modalCandidate, updated);
+        _modalOnUpdate(_modalCandidate);
+        renderThreadTab(body);
+        Toast.show('Unsubscribe cleared — sending is re-enabled for this candidate');
+      } catch (err) { Toast.error(err.message); resubscribeBtn.disabled = false; }
     });
   }
 

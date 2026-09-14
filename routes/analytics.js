@@ -88,7 +88,7 @@ router.get('/', async (req, res) => {
 
     // Reply sentiment breakdown (auto-classified inbox triage) — scoped to
     // classifications that happened inside the window when one is selected
-    const sentimentCounts = { interested: 0, question: 0, not_now: 0, not_interested: 0 };
+    const sentimentCounts = { interested: 0, question: 0, not_now: 0, not_interested: 0, unsubscribe_request: 0 };
     candidates.forEach(c => {
       if (!c.replySentiment || sentimentCounts[c.replySentiment] === undefined) return;
       if (cutoff) {

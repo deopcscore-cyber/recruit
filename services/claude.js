@@ -1944,7 +1944,11 @@ Return ONLY the JSON.`;
 
 // ── Reply sentiment classification (inbox triage) ─────────────────────────────
 // Cheap single-call classifier. Returns { label, reason, costCents }.
-// label ∈ interested | question | not_now | not_interested
+// label ∈ interested | question | not_now | not_interested | unsubscribe_request
+//
+// "not_interested" and "unsubscribe_request" are kept deliberately separate:
+// declining THIS opportunity is not the same as withdrawing consent for ALL
+// future contact, and only the latter should ever trigger an unsubscribe.
 async function classifyReply(candidate, replyText, user) {
   const firstName = (candidate.name || 'the candidate').split(' ')[0];
   const prompt = `Classify the intent of this reply from ${firstName} to a recruiting/career-outreach email. Choose exactly ONE label:
@@ -1952,19 +1956,20 @@ async function classifyReply(candidate, replyText, user) {
 - "interested": positive, wants to learn more, engaged, asks to proceed, shares availability
 - "question": neutral — asking a clarifying question before deciding (how did you find me, what's this about, what company)
 - "not_now": open but not right now — timing, busy, "reach out later", "not currently looking but maybe"
-- "not_interested": clear no — not interested, unsubscribe, stop contacting, wrong person
+- "not_interested": declines THIS specific opportunity — not a fit, not looking right now, wrong role, wrong person/bad match. Does NOT ask to stop future contact.
+- "unsubscribe_request": EXPLICITLY asks to be removed from all future emails — words like "unsubscribe", "remove me from your list", "stop emailing me", "don't contact me again", "take me off this list". Only use this when they clearly ask to opt out of ALL future contact, not just decline this one message.
 
 REPLY:
 """
 ${(replyText || '').substring(0, 1500)}
 """
 
-Return ONLY valid JSON: {"label":"<one of the four>","reason":"<5-10 word justification>"}`;
+Return ONLY valid JSON: {"label":"<one of the five>","reason":"<5-10 word justification>"}`;
 
   const response = await callAI(prompt, 120, prefersClaude(user));
   const text = response.content[0].text.trim();
   const costCents = calcCostCents(response.usage, response.provider);
-  const VALID = ['interested', 'question', 'not_now', 'not_interested'];
+  const VALID = ['interested', 'question', 'not_now', 'not_interested', 'unsubscribe_request'];
   try {
     const parsed = parseAIJson(text);
     if (!VALID.includes(parsed.label)) parsed.label = 'question';
