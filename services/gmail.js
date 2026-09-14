@@ -46,8 +46,8 @@ function markdownToHtml(text) {
       closeList();
       const lv = h1 ? 1 : h2 ? 2 : 3;
       const txt = (h1 || h2 || h3)[1];
-      const sz = lv === 1 ? '22px' : lv === 2 ? '18px' : '15px';
-      out.push(`<h${lv} style="margin:22px 0 6px;font-size:${sz};color:#1a1a2e;font-family:Georgia,serif">${inlineFormat(txt)}</h${lv}>`);
+      const sz = lv === 1 ? '18px' : lv === 2 ? '16px' : '15px';
+      out.push(`<h${lv} style="margin:16px 0 4px;font-size:${sz};font-weight:bold;color:#2d2d2d;font-family:Arial,Helvetica,sans-serif;line-height:1.4">${inlineFormat(txt)}</h${lv}>`);
       continue;
     }
 
@@ -62,7 +62,7 @@ function markdownToHtml(text) {
     const bullet = line.match(/^[-*]\s+(.+)$/);
     if (bullet) {
       if (!inList) { out.push('<ul style="margin:6px 0 6px 0;padding-left:22px">'); inList = true; }
-      out.push(`<li style="margin:4px 0;color:#2d2d2d">${inlineFormat(bullet[1])}</li>`);
+      out.push(`<li style="margin:4px 0;color:#2d2d2d;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:1.6">${inlineFormat(bullet[1])}</li>`);
       continue;
     }
 
@@ -70,7 +70,7 @@ function markdownToHtml(text) {
     const numbered = line.match(/^\d+\.\s+(.+)$/);
     if (numbered) {
       if (!inNumberedList) { out.push('<ol style="margin:6px 0;padding-left:22px">'); inNumberedList = true; }
-      out.push(`<li style="margin:4px 0">${inlineFormat(numbered[1])}</li>`);
+      out.push(`<li style="margin:4px 0;color:#2d2d2d;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:1.6">${inlineFormat(numbered[1])}</li>`);
       continue;
     }
 
@@ -85,13 +85,13 @@ function markdownToHtml(text) {
     const italicLine = line.match(/^\*(.+)\*$/);
     if (italicLine) {
       closeList();
-      out.push(`<p style="margin:6px 0;color:#777;font-style:italic;font-size:13px">${inlineFormat(italicLine[1])}</p>`);
+      out.push(`<p style="margin:6px 0;color:#777777;font-style:italic;font-size:13px;font-family:Arial,Helvetica,sans-serif;line-height:1.6">${inlineFormat(italicLine[1])}</p>`);
       continue;
     }
 
     // Regular paragraph
     closeList();
-    out.push(`<p style="margin:5px 0;color:#2d2d2d;line-height:1.6">${inlineFormat(line)}</p>`);
+    out.push(`<p style="margin:5px 0;color:#2d2d2d;line-height:1.6;font-family:Arial,Helvetica,sans-serif;font-size:15px">${inlineFormat(line)}</p>`);
   }
   closeList();
   return out.join('\n');
