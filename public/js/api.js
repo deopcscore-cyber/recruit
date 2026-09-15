@@ -101,6 +101,7 @@ const API = {
       return API.postForm('/api/email/role-jd-attachment-upload', formData);
     },
     fetch() { return API.post('/api/email/fetch'); },
+    fetchOne(candidateId) { return API.post(`/api/email/fetch/${candidateId}`); },
     test() { return API.post('/api/email/test'); },
     checkPriorContact(emails) { return API.post('/api/email/check-prior-contact', { emails }); },
     teamDuplicateCheck(emails) { return API.post('/api/candidates/team-duplicate-check', { emails }); },

@@ -354,31 +354,18 @@ router.delete('/scheduled/:jobId', requireAuth, (req, res) => {
   }
 });
 
-// POST /api/email/fetch — fetch unread replies and match to candidates
-router.post('/fetch', requireAuth, async (req, res) => {
-  try {
-    const user = await storage.getUserById(req.session.userId);
-    if (!user) return res.status(404).json({ error: 'User not found' });
-    if (!isEmailConnected(user)) {
-      return res.status(400).json({ error: 'No email account connected' });
-    }
+// Matches a batch of freshly-fetched inbound messages against `candidates`,
+// applying the same bounce/resume-capture/sentiment/threading logic used by
+// both the whole-pipeline fetch and the single-candidate fetch below. Shared
+// so a fix to one (e.g. the not_interested/unsubscribe_request split) can't
+// drift out of sync between the two call sites.
+// Returns { updatedCandidates, newUnknownLeads } — does NOT persist the user
+// (unknown-leads merge) or return the response; callers do that.
+async function processReplies(replies, candidates, user) {
+  const updatedCandidates = [];
+  const newUnknownLeads = [];
 
-    const candidates = await storage.getUserCandidates(req.session.userId);
-    const candidateEmails = candidates.map(c => c.email).filter(Boolean);
-    // threadId -> candidateId map so gmail service can match by thread directly
-    const candidateThreadIds = {};
-    for (const c of candidates) {
-      // Skip closed/bounced — no point re-scanning their threads on the shared quota
-      if (c.gmailThreadId && !c.bounced && (c.stage || '') !== 'Closed') {
-        candidateThreadIds[c.gmailThreadId] = c.id;
-      }
-    }
-    const emailSvc = getEmailService(user);
-    const replies = await emailSvc.fetchUnreadReplies(req.session.userId, candidateEmails, candidateThreadIds);
-    const updatedCandidates = [];
-    const newUnknownLeads = [];
-
-    for (const reply of replies) {
+  for (const reply of replies) {
       // Match candidate: prefer direct thread ID match, fall back to email address
       let candidate = null;
       if (reply.matchedCandidateId) {
@@ -577,28 +564,58 @@ router.post('/fetch', requireAuth, async (req, res) => {
 
       await storage.saveCandidate(candidate);
       updatedCandidates.push(candidate);
+  }
+
+  return { updatedCandidates, newUnknownLeads };
+}
+
+// Persists newly-collected unknown leads (career-consultant inbound-lead
+// capture) onto the user, deduped against what's already stored/dismissed.
+// Returns how many were actually new.
+async function mergeUnknownLeads(user, newUnknownLeads) {
+  let unknownLeadsAdded = 0;
+  if (newUnknownLeads.length > 0) {
+    const existing = user.unknownLeads || [];
+    const dismissed = new Set(user.dismissedLeadKeys || []);
+    const existingIds = new Set(existing.map(l => l.messageId).filter(Boolean));
+    const existingKeys = new Set(existing.map(l => `${(l.fromEmail || '').toLowerCase()}::${(l.subject || '').toLowerCase()}`));
+    for (const lead of newUnknownLeads) {
+      const key = `${(lead.fromEmail || '').toLowerCase()}::${(lead.subject || '').toLowerCase()}`;
+      if (dismissed.has(lead.messageId) || dismissed.has(key)) continue;
+      if (!existingIds.has(lead.messageId) && !existingKeys.has(key)) {
+        existing.push(lead);
+        unknownLeadsAdded++;
+      }
+    }
+    user.unknownLeads = existing;
+    await storage.saveUser(user);
+  }
+  return unknownLeadsAdded;
+}
+
+// POST /api/email/fetch — fetch unread replies across the whole pipeline and match to candidates
+router.post('/fetch', requireAuth, async (req, res) => {
+  try {
+    const user = await storage.getUserById(req.session.userId);
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    if (!isEmailConnected(user)) {
+      return res.status(400).json({ error: 'No email account connected' });
     }
 
-    // Merge new unknown leads (dedup by messageId / fromEmail+subject,
-    // and skip anything the user already dismissed — messages stay in the
-    // inbox unmarked, so they resurface on every fetch otherwise)
-    let unknownLeadsAdded = 0;
-    if (newUnknownLeads.length > 0) {
-      const existing = user.unknownLeads || [];
-      const dismissed = new Set(user.dismissedLeadKeys || []);
-      const existingIds = new Set(existing.map(l => l.messageId).filter(Boolean));
-      const existingKeys = new Set(existing.map(l => `${(l.fromEmail || '').toLowerCase()}::${(l.subject || '').toLowerCase()}`));
-      for (const lead of newUnknownLeads) {
-        const key = `${(lead.fromEmail || '').toLowerCase()}::${(lead.subject || '').toLowerCase()}`;
-        if (dismissed.has(lead.messageId) || dismissed.has(key)) continue;
-        if (!existingIds.has(lead.messageId) && !existingKeys.has(key)) {
-          existing.push(lead);
-          unknownLeadsAdded++;
-        }
+    const candidates = await storage.getUserCandidates(req.session.userId);
+    const candidateEmails = candidates.map(c => c.email).filter(Boolean);
+    // threadId -> candidateId map so gmail service can match by thread directly
+    const candidateThreadIds = {};
+    for (const c of candidates) {
+      // Skip closed/bounced — no point re-scanning their threads on the shared quota
+      if (c.gmailThreadId && !c.bounced && (c.stage || '') !== 'Closed') {
+        candidateThreadIds[c.gmailThreadId] = c.id;
       }
-      user.unknownLeads = existing;
-      await storage.saveUser(user);
     }
+    const emailSvc = getEmailService(user);
+    const replies = await emailSvc.fetchUnreadReplies(req.session.userId, candidateEmails, candidateThreadIds);
+    const { updatedCandidates, newUnknownLeads } = await processReplies(replies, candidates, user);
+    const unknownLeadsAdded = await mergeUnknownLeads(user, newUnknownLeads);
 
     return res.json({
       fetched: replies.length,
@@ -610,6 +627,45 @@ router.post('/fetch', requireAuth, async (req, res) => {
     });
   } catch (err) {
     console.error('Fetch email error:', err);
+    return res.status(500).json({ error: 'Failed to fetch emails: ' + err.message });
+  }
+});
+
+// POST /api/email/fetch/:candidateId — targeted reply check for one candidate,
+// scoped to just their thread/address instead of scanning the whole pipeline.
+// Lets a recruiter check a single reply right away instead of waiting for the
+// periodic pipeline-wide poll, without burning the shared Gmail quota on
+// everyone else's threads.
+router.post('/fetch/:candidateId', requireAuth, async (req, res) => {
+  try {
+    const user = await storage.getUserById(req.session.userId);
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    if (!isEmailConnected(user)) {
+      return res.status(400).json({ error: 'No email account connected' });
+    }
+
+    const candidate = await storage.getCandidateById(req.params.candidateId);
+    if (!candidate || candidate.userId !== req.session.userId) {
+      return res.status(404).json({ error: 'Candidate not found' });
+    }
+
+    const candidateEmails = candidate.email ? [candidate.email] : [];
+    const candidateThreadIds = candidate.gmailThreadId ? { [candidate.gmailThreadId]: candidate.id } : {};
+
+    const emailSvc = getEmailService(user);
+    const replies = await emailSvc.fetchUnreadReplies(req.session.userId, candidateEmails, candidateThreadIds);
+    // Scope matching to just this candidate — some providers (Zoho) ignore the
+    // narrowing above and scan the whole inbox, so this is the real guard
+    // against touching anyone else's data on a single-candidate fetch.
+    const { updatedCandidates } = await processReplies(replies, [candidate], user);
+
+    return res.json({
+      fetched: replies.length,
+      found: updatedCandidates.length > 0,
+      candidate: updatedCandidates[0] || candidate
+    });
+  } catch (err) {
+    console.error('Single-candidate fetch email error:', err);
     return res.status(500).json({ error: 'Failed to fetch emails: ' + err.message });
   }
 });

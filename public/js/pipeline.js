@@ -597,6 +597,7 @@ function buildModalShell(candidate) {
             ${candidate.unread ? '<span class="badge-new">New</span>' : ''}
           </div>
         </div>
+        <button class="btn btn-secondary btn-sm" title="Check for a new reply from just this candidate, right now — instead of waiting for the periodic pipeline-wide check" style="align-self:flex-start;white-space:nowrap" onclick="fetchSingleReply('${candidate.id}', this)">🔄 Check reply</button>
         <button class="btn btn-secondary btn-sm" title="Ask the AI assistant about this candidate" style="align-self:flex-start;white-space:nowrap" data-name="${escapeHtml(candidate.name||'')}" onclick="askAssistantAboutCandidate('${candidate.id}', this.dataset.name)">💬 Ask AI</button>
         <button class="cmodal-close" title="Close">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
@@ -661,6 +662,31 @@ function refreshModal() {
       stageBadgeEl.textContent = stageLabel(normStage);
     }
   });
+}
+
+// Header "Check reply" button — targeted, single-candidate reply check
+// instead of waiting for the periodic pipeline-wide poll to reach them.
+async function fetchSingleReply(candidateId, btn) {
+  const original = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = 'Checking…';
+  try {
+    const result = await API.email.fetchOne(candidateId);
+    if (result.found && result.candidate) {
+      Object.assign(_modalCandidate, result.candidate);
+      _modalOnUpdate(_modalCandidate);
+      refreshModal();
+      renderModalTab(_activeTab);
+      Toast.success('New reply received');
+    } else {
+      Toast.show('No new reply yet');
+    }
+  } catch (err) {
+    Toast.error(err.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = original;
+  }
 }
 
 function draftStorageKey(candidateId, fieldId) {
