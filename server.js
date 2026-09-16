@@ -916,13 +916,9 @@ setTimeout(() => { runAutopilot(); setInterval(runAutopilot, 15 * 60 * 1000); },
 // ─── Auto-fetch emails every 10 minutes ──────────────────────────────────────
 const AUTO_FETCH_MS = 10 * 60 * 1000;
 
-async function runAutoFetch() {
-  try {
-    const storageService = require('./services/storage');
-
-    const users = await storageService.getAllUsers();
-    for (const user of users) {
-      if (!_isEmailConnected(user)) continue;
+// One user's reply-check cycle — pulled out of runAutoFetch so it can be run
+// concurrently across users instead of one big sequential loop (see below).
+async function processUserAutoFetch(user, storageService) {
       try {
         const svc = _getEmailService(user);
 
@@ -941,7 +937,7 @@ async function runAutoFetch() {
 
         // Zoho ignores the extra args; Gmail requires them
         const replies = await svc.fetchUnreadReplies(user.id, candidateEmails, candidateThreadIds);
-        if (!replies.length) continue;
+        if (!replies.length) return;
         const stageOrder = ['Imported','Outreach Sent','Replied','Resume Requested','Resume Received','Interviewing','Closed'];
         let matched = 0;
 
@@ -1102,6 +1098,24 @@ async function runAutoFetch() {
       } catch (uErr) {
         console.error(`Auto-fetch error for user ${user.id}:`, uErr.message);
       }
+}
+
+// Runs every AUTO_FETCH_MS across every connected user. Each user's own
+// Gmail rate limit is independent of everyone else's (Google enforces it
+// per connected account, not pooled across an app's users), so processing
+// users one at a time gained nothing but wall-clock time — a slow or
+// currently-rate-limited account held up every other account's check until
+// its turn came around. Bounded concurrency lets independent accounts run
+// at the same time while still capping how many hit the Gmail API at once.
+const AUTO_FETCH_CONCURRENCY = 5;
+async function runAutoFetch() {
+  try {
+    const storageService = require('./services/storage');
+
+    const users = (await storageService.getAllUsers()).filter(_isEmailConnected);
+    for (let i = 0; i < users.length; i += AUTO_FETCH_CONCURRENCY) {
+      const batch = users.slice(i, i + AUTO_FETCH_CONCURRENCY);
+      await Promise.all(batch.map(user => processUserAutoFetch(user, storageService)));
     }
   } catch (err) {
     console.error('Auto-fetch global error:', err.message);
