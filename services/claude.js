@@ -2018,6 +2018,49 @@ Return ONLY valid JSON:
   }
 }
 
+// ── LinkedIn profile text parsing ───────────────────────────────────────────
+// Used to live in services/linkedin.js with its own hardcoded Anthropic
+// client — meaning LinkedIn import had zero fallback and broke completely
+// whenever the Anthropic account specifically ran low on credits, even
+// though every other AI feature in the app already falls back between
+// providers via callAI. Moved here so it gets the same resilience.
+const LINKEDIN_PARSE_PROMPT = (text, url) => `Parse the following LinkedIn profile text and extract structured information.
+
+LINKEDIN PROFILE TEXT:
+${text.substring(0, 5000)}
+
+${url ? `PROFILE URL: ${url}` : ''}
+
+Extract and return ONLY this exact JSON (no other text, no markdown):
+{
+  "name": "Full Name",
+  "title": "Current job title",
+  "company": "Current company name",
+  "location": "City, State/Country",
+  "summary": "About section or headline summary (2-4 sentences max)",
+  "career": [
+    { "title": "Job Title", "company": "Company Name", "dates": "Jan 2020 – Present", "description": "Brief description of role" }
+  ],
+  "education": [
+    { "degree": "Degree / Program", "school": "School Name", "year": "Year or date range" }
+  ]
+}
+
+Rules:
+- career: list all positions found, most recent first
+- If a field is missing, use "" for strings and [] for arrays
+- Return ONLY the JSON object, nothing else`;
+
+async function parseLinkedInProfile(rawText, url = '', user = null) {
+  const response = await callAI(LINKEDIN_PARSE_PROMPT(rawText, url), 1500, prefersClaude(user));
+  const text = response.content[0].text.trim();
+  try {
+    return parseAIJson(text);
+  } catch {
+    return { name: '', title: '', company: '', location: '', summary: '', career: [], education: [] };
+  }
+}
+
 module.exports = {
   generateOutreach,
   generateRoleJD,
@@ -2033,5 +2076,6 @@ module.exports = {
   classifyReply,
   rewriteResume,
   extractAttachmentText,
-  getProviderInfo
+  getProviderInfo,
+  parseLinkedInProfile
 };

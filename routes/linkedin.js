@@ -35,7 +35,8 @@ router.post('/bookmarklet', requireAuth, bookmarkletLimiter, async (req, res) =>
     return res.status(400).json({ error: 'Profile text is too short — make sure you copied the full page.' });
   }
   try {
-    const profile = await linkedinSvc.parseFromText(text, url || '');
+    const user = await storage.getUserById(req.session.userId);
+    const profile = await linkedinSvc.parseFromText(text, url || '', user);
     if (!profile || !profile.name) {
       return res.status(422).json({ error: 'Could not extract a name from the profile text. Try selecting more of the page.' });
     }
@@ -91,14 +92,15 @@ router.post('/import', async (req, res) => {
       return res.status(400).json({ error: 'Provide a LinkedIn URL or paste the profile text' });
     }
 
+    const user = await storage.getUserById(req.session.userId);
     let profile = null;
 
     // 1. Try URL scraping
     if (url) profile = await linkedinSvc.scrapeFromUrl(url);
 
-    // 2. Fall back to Claude text parsing
+    // 2. Fall back to AI text parsing
     if ((!profile || !profile.name) && rawText) {
-      profile = await linkedinSvc.parseFromText(rawText, url || '');
+      profile = await linkedinSvc.parseFromText(rawText, url || '', user);
     }
 
     // 3. If URL provided but no raw text and scraping failed, ask for text
@@ -110,7 +112,6 @@ router.post('/import', async (req, res) => {
     }
 
     // 4. Enrich with email + phone via configured providers (ContactOut → Apollo → Hunter.io)
-    const user = await storage.getUserById(req.session.userId);
     const enriched = await linkedinSvc.enrichContact({
       name:            profile.name,
       company:         profile.company,
@@ -163,8 +164,8 @@ router.post('/quick-import', async (req, res) => {
       return res.status(400).json({ error: 'Profile text too short — make sure you\'re on a LinkedIn profile page.' });
     }
 
-    // 1. Parse profile with Claude
-    const profile = await linkedinSvc.parseFromText(text, url || '');
+    // 1. Parse profile with AI
+    const profile = await linkedinSvc.parseFromText(text, url || '', user);
     if (!profile || !profile.name) {
       return res.status(422).json({ error: 'Could not extract a name — try a different profile.' });
     }

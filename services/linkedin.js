@@ -7,35 +7,7 @@
      3. Hunter.io   → work email              (good for work)
    ============================================================ */
 
-const Anthropic = require('@anthropic-ai/sdk');
-const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-
-const PARSE_PROMPT = (text, url) => `Parse the following LinkedIn profile text and extract structured information.
-
-LINKEDIN PROFILE TEXT:
-${text.substring(0, 5000)}
-
-${url ? `PROFILE URL: ${url}` : ''}
-
-Extract and return ONLY this exact JSON (no other text, no markdown):
-{
-  "name": "Full Name",
-  "title": "Current job title",
-  "company": "Current company name",
-  "location": "City, State/Country",
-  "summary": "About section or headline summary (2-4 sentences max)",
-  "career": [
-    { "title": "Job Title", "company": "Company Name", "dates": "Jan 2020 – Present", "description": "Brief description of role" }
-  ],
-  "education": [
-    { "degree": "Degree / Program", "school": "School Name", "year": "Year or date range" }
-  ]
-}
-
-Rules:
-- career: list all positions found, most recent first
-- If a field is missing, use "" for strings and [] for arrays
-- Return ONLY the JSON object, nothing else`;
+const claudeSvc = require('./claude');
 
 // ── URL scraper (usually blocked by LinkedIn) ─────────────────────────────
 async function scrapeFromUrl(url) {
@@ -90,23 +62,12 @@ async function scrapeFromUrl(url) {
   }
 }
 
-// ── Claude AI text parser ─────────────────────────────────────────────────
-async function parseFromText(rawText, url = '') {
-  const response = await client.messages.create({
-    model: 'claude-sonnet-4-6',
-    max_tokens: 1500,
-    messages: [{ role: 'user', content: PARSE_PROMPT(rawText, url) }]
-  });
-
-  const text = response.content[0].text.trim();
-  try {
-    const clean = text.replace(/^```json\s*/i, '').replace(/```\s*$/, '').trim();
-    return JSON.parse(clean);
-  } catch (_) {
-    const match = text.match(/\{[\s\S]*\}/);
-    if (match) return JSON.parse(match[0]);
-    return { name: '', title: '', company: '', location: '', summary: '', career: [], education: [] };
-  }
+// ── AI text parser ─────────────────────────────────────────────────────────
+// Delegates to services/claude.js so this goes through the same
+// primary-provider/Claude-fallback routing as every other AI feature in the
+// app, instead of depending solely on the Anthropic account having credits.
+async function parseFromText(rawText, url = '', user = null) {
+  return claudeSvc.parseLinkedInProfile(rawText, url, user);
 }
 
 // ── ContactOut — best for personal emails + phone numbers ────────────────
