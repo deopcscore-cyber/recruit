@@ -62,12 +62,57 @@ async function scrapeFromUrl(url) {
   }
 }
 
+// ── Copy-paste text cleanup ─────────────────────────────────────────────────
+// A pasted LinkedIn page is mostly noise: the person's activity feed
+// (reposts, reaction/comment counts, "Like Comment Repost" boilerplate) sits
+// physically BETWEEN the profile header and the real Experience/Education
+// sections, often dwarfing them — on a moderately active profile it can be
+// 10x the length of the actual profile data. That's the real reason AI
+// parsing did badly here: not a model problem, an input problem. This never
+// touches the Chrome extension's DOM-based path (services/linkedin.js's
+// parseFromText, called from routes/linkedin.js's /quick-import only when
+// DOM extraction failed) — only the copy-paste flows (bookmarklet, manual
+// paste) where there's no DOM to query and cleanup has to work on plain text.
+function cleanLinkedInPasteText(raw) {
+  // Strip markdown-style links: [label](url) -> label — the popup/bookmarklet
+  // relay sometimes hands back the page as markdown-ish link syntax.
+  let text = (raw || '').replace(/\[([^\]]*)\]\([^)]*\)/g, '$1');
+  let lines = text.split('\n').map(l => l.trim());
+
+  // The feed/activity block always sits between the header and "Experience"
+  // — cut it out entirely rather than let AI wade through it.
+  const activityIdx   = lines.findIndex(l => l === 'Activity');
+  const experienceIdx = lines.findIndex(l => l === 'Experience');
+  if (activityIdx !== -1 && experienceIdx !== -1 && experienceIdx > activityIdx) {
+    lines = [...lines.slice(0, activityIdx), ...lines.slice(experienceIdx)];
+  }
+
+  // Testimonials and suggested-people sections after Education/Skills are
+  // also never profile data — drop from the first one found onward.
+  const TAIL_MARKERS = ['Recommendations', 'Interests', 'People you may know', 'More profiles for you', 'You might like', 'Explore Premium profiles'];
+  for (const marker of TAIL_MARKERS) {
+    const idx = lines.indexOf(marker);
+    if (idx !== -1) { lines = lines.slice(0, idx); break; }
+  }
+
+  // Drop known UI boilerplate lines wherever they still occur.
+  const NOISE_LINE = /^(Like|Comment|Repost|Send|Follow|Connect|Message|Show all.*|About|Posts|Comments|·|·\s*\d\w*\+?|\d+\s*(reactions?|reposts?|comments?)\d*|followers?|connections?|View job|\d+\s*notifications?|500\+)$/i;
+
+  return lines
+    .filter(l => l && !NOISE_LINE.test(l))
+    .join('\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
 // ── AI text parser ─────────────────────────────────────────────────────────
 // Delegates to services/claude.js so this goes through the same
 // primary-provider/Claude-fallback routing as every other AI feature in the
 // app, instead of depending solely on the Anthropic account having credits.
+// Cleans the pasted text first (see above) so the model gets the actual
+// profile instead of a feed dump with the profile buried inside it.
 async function parseFromText(rawText, url = '', user = null) {
-  return claudeSvc.parseLinkedInProfile(rawText, url, user);
+  return claudeSvc.parseLinkedInProfile(cleanLinkedInPasteText(rawText), url, user);
 }
 
 // LinkedIn's headline is free text but very often follows "Title at Company"
@@ -221,4 +266,4 @@ async function enrichContact({ name, company, linkedinUrl, hunterApiKey, contact
   };
 }
 
-module.exports = { scrapeFromUrl, parseFromText, splitHeadline, findEmailViaHunter, findViaContactOut, findViaApollo, enrichContact };
+module.exports = { scrapeFromUrl, parseFromText, splitHeadline, cleanLinkedInPasteText, findEmailViaHunter, findViaContactOut, findViaApollo, enrichContact };
