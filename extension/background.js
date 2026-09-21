@@ -25,7 +25,7 @@ async function getConfig() {
 }
 
 // ── Single LinkedIn profile import ────────────────────────────────────────────
-async function handleLinkedInImport({ url, text, coEmails }) {
+async function handleLinkedInImport({ url, text, sections, coEmails }) {
   const cfg = await getConfig();
   if (cfg.error) return cfg;
 
@@ -33,7 +33,7 @@ async function handleLinkedInImport({ url, text, coEmails }) {
     const res = await fetch(`${cfg.base}/api/linkedin/quick-import`, {
       method:  'POST',
       headers: { 'Content-Type': 'application/json', 'X-Extension-Token': cfg.apiToken },
-      body:    JSON.stringify({ url, text, coEmails: coEmails || [] })
+      body:    JSON.stringify({ url, text, sections: sections || null, coEmails: coEmails || [] })
     });
 
     const ct = res.headers.get('content-type') || '';

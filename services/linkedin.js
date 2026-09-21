@@ -70,6 +70,17 @@ async function parseFromText(rawText, url = '', user = null) {
   return claudeSvc.parseLinkedInProfile(rawText, url, user);
 }
 
+// LinkedIn's headline is free text but very often follows "Title at Company"
+// or "Title @ Company" — split it deterministically when it does, so the
+// extension's DOM-extracted headline (see extension/content.js) doesn't need
+// an AI call just to separate two fields that are usually already delimited.
+function splitHeadline(headline) {
+  const h = (headline || '').trim();
+  const m = h.match(/^(.+?)\s+(?:at|@)\s+(.+)$/i);
+  if (m) return { title: m[1].trim(), company: m[2].trim() };
+  return { title: h, company: '' };
+}
+
 // ── ContactOut — best for personal emails + phone numbers ────────────────
 // Docs: https://contactout.com/api
 async function findViaContactOut(linkedinUrl, apiKey) {
@@ -210,4 +221,4 @@ async function enrichContact({ name, company, linkedinUrl, hunterApiKey, contact
   };
 }
 
-module.exports = { scrapeFromUrl, parseFromText, findEmailViaHunter, findViaContactOut, findViaApollo, enrichContact };
+module.exports = { scrapeFromUrl, parseFromText, splitHeadline, findEmailViaHunter, findViaContactOut, findViaApollo, enrichContact };

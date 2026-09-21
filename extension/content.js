@@ -351,8 +351,61 @@
   }
 
   /* ════════════════════════════════════════════════════════════
-     LINKEDIN — single profile import (unchanged)
+     LINKEDIN — single profile import
   ════════════════════════════════════════════════════════════ */
+
+  // ── Deterministic DOM extraction (no AI) ──────────────────────────────────
+  // Same idea as extractCandidate() above for ContactOut: pull the fields
+  // directly from the page structure instead of dumping the whole page's
+  // text (nav, ads, "People also viewed", feed) and asking AI to find the
+  // signal in that noise. LinkedIn's profile pages have kept a few anchors
+  // stable for years because LinkedIn's OWN in-page "jump to section" nav
+  // depends on them: the <h1> name, and #about/#experience/#education
+  // section ids. Returns null if the page doesn't match the expected shape
+  // (redesign, unusual layout) — caller falls back to the old whole-page-text
+  // AI path rather than risk importing something silently wrong.
+  const NAME_RE = /^[A-Za-z\-'.À-ɏ ]{2,60}$/;
+
+  function sectionTextById(id) {
+    const anchor = document.getElementById(id);
+    if (!anchor) return '';
+    const section = anchor.closest('section') || anchor.parentElement;
+    if (!section) return '';
+    // Strip the heading line itself ("About" / "Experience" / "Education")
+    const lines = (section.innerText || '').split('\n').map(l => l.trim()).filter(Boolean);
+    if (lines[0] && lines[0].length < 20) lines.shift();
+    return lines.join('\n').slice(0, 6000);
+  }
+
+  function extractLinkedInSections() {
+    try {
+      const h1 = document.querySelector('h1');
+      const name = (h1?.innerText || '').trim();
+      if (!name || !NAME_RE.test(name) || name.split(/\s+/).length > 6) return null;
+
+      // Top card: the h1's containing section holds headline/location as the
+      // next couple of non-empty lines after the name.
+      const topCard = h1.closest('section') || h1.parentElement;
+      const topLines = ((topCard?.innerText || '').split('\n').map(l => l.trim()).filter(Boolean));
+      const nameIdx = topLines.indexOf(name);
+      const afterName = nameIdx >= 0 ? topLines.slice(nameIdx + 1, nameIdx + 5) : [];
+
+      const headline = afterName.find(l => l && l !== name && !/^\d/.test(l) && !l.includes(',')) || '';
+      const location = afterName.find(l => l.includes(',') && /^[A-Za-z\s,.'-]+$/.test(l) && l.length < 80) || '';
+
+      return {
+        name,
+        headline,
+        location,
+        about:          sectionTextById('about'),
+        experienceText: sectionTextById('experience'),
+        educationText:  sectionTextById('education')
+      };
+    } catch (err) {
+      console.warn('[Recruit Pro] DOM extraction failed, falling back to AI:', err.message);
+      return null;
+    }
+  }
 
   const LI_BTN_ID = 'recruit-pro-import-btn';
 
@@ -398,7 +451,8 @@
     const payload = {
       type:     'IMPORT_PROFILE',
       url:      location.href,
-      text:     document.body.innerText,
+      text:     document.body.innerText, // fallback only — used when sections extraction below fails
+      sections: extractLinkedInSections(),
       coEmails: readContactOutEmails()
     };
     chrome.runtime.sendMessage(payload, (response) => {

@@ -80,68 +80,20 @@ router.get('/bookmarklet/:token', requireAuth, (req, res) => {
   return res.json(entry.profile);
 });
 
-// ── Auth-required routes ──────────────────────────────────────────────────
-router.use(requireAuth);
-
-// POST /api/linkedin/import
-// Body: { url?, rawText? }
-router.post('/import', async (req, res) => {
-  try {
-    const { url, rawText } = req.body;
-    if (!url && !rawText) {
-      return res.status(400).json({ error: 'Provide a LinkedIn URL or paste the profile text' });
-    }
-
-    const user = await storage.getUserById(req.session.userId);
-    let profile = null;
-
-    // 1. Try URL scraping
-    if (url) profile = await linkedinSvc.scrapeFromUrl(url);
-
-    // 2. Fall back to AI text parsing
-    if ((!profile || !profile.name) && rawText) {
-      profile = await linkedinSvc.parseFromText(rawText, url || '', user);
-    }
-
-    // 3. If URL provided but no raw text and scraping failed, ask for text
-    if (!profile || !profile.name) {
-      return res.status(422).json({
-        needsText: true,
-        error: 'LinkedIn blocked automatic import. Please copy the profile text and paste it below.'
-      });
-    }
-
-    // 4. Enrich with email + phone via configured providers (ContactOut → Apollo → Hunter.io)
-    const enriched = await linkedinSvc.enrichContact({
-      name:            profile.name,
-      company:         profile.company,
-      linkedinUrl:     url || '',
-      hunterApiKey:    user?.hunterApiKey    || '',
-      contactOutApiKey: user?.contactOutApiKey || '',
-      apolloApiKey:    user?.apolloApiKey    || ''
-    });
-
-    return res.json({
-      ...profile,
-      email:         enriched.email,
-      personalEmail: enriched.personalEmail,
-      workEmail:     enriched.workEmail,
-      phone:         enriched.phone,
-      emailSource:   enriched.source,
-      linkedin:      url || ''
-    });
-  } catch (err) {
-    console.error('LinkedIn import error:', err);
-    return res.status(500).json({ error: 'Import failed: ' + err.message });
-  }
-});
-
 // ── Extension quick-import (no session — uses per-user extension token) ───────
 // POST /api/linkedin/quick-import
 // Called directly by the Chrome extension's background service worker.
 // Auth: X-Extension-Token header — a per-user secret stored in user.extensionToken.
 // Returns { success, candidate } and saves directly to the pipeline.
 // No tab redirect needed — the extension stays on LinkedIn.
+//
+// Registered BEFORE router.use(requireAuth) below — this route deliberately
+// does its own token-based auth instead of session auth (a Chrome extension
+// background worker has no session cookie for the app's domain; it never
+// even sends one, since a cross-origin fetch without credentials:'include'
+// doesn't carry cookies). It used to be registered after requireAuth, which
+// meant every request 401'd before this handler's own token check ever ran
+// — the route was unreachable from the extension entirely.
 router.post('/quick-import', async (req, res) => {
   // CORS for Chrome extension origins
   const origin = req.headers.origin || '';
@@ -159,13 +111,40 @@ router.post('/quick-import', async (req, res) => {
     const user = users.find(u => u.extensionToken === token);
     if (!user) return res.status(401).json({ error: 'Invalid extension token. Copy it again from Settings → Account.' });
 
-    const { url, text, coEmails } = req.body;
-    if (!text || text.trim().length < 50) {
+    const { url, text, sections, coEmails } = req.body;
+    if (!sections?.name && (!text || text.trim().length < 50)) {
       return res.status(400).json({ error: 'Profile text too short — make sure you\'re on a LinkedIn profile page.' });
     }
 
-    // 1. Parse profile with AI
-    const profile = await linkedinSvc.parseFromText(text, url || '', user);
+    // 1. Parse profile — prefer the extension's DOM-extracted sections
+    // (deterministic: name/headline/location/about need no AI at all, pulled
+    // straight from the page structure) over the old whole-page-text AI
+    // parse, which had to find the signal in a haystack of nav/ads/feed
+    // content. Only the free-form experience/education text — genuinely
+    // variable-shaped (single roles, grouped multi-role-per-company, etc.)
+    // — still goes through AI, and only that isolated section text rather
+    // than the entire page. Falls back to the old full-page AI parse when
+    // the extension couldn't match the page's expected structure (redesign,
+    // unusual layout) — sections comes back null in that case.
+    let profile;
+    if (sections && sections.name) {
+      const aiInput = [sections.experienceText, sections.educationText].filter(Boolean).join('\n\n');
+      const structured = aiInput
+        ? await linkedinSvc.parseFromText(aiInput, url || '', user).catch(() => ({ career: [], education: [] }))
+        : { career: [], education: [] };
+      const { title, company } = linkedinSvc.splitHeadline(sections.headline);
+      profile = {
+        name:     sections.name,
+        title:    title    || structured.title    || '',
+        company:  company  || structured.company  || '',
+        location: sections.location || structured.location || '',
+        summary:  sections.about    || structured.summary  || '',
+        career:    Array.isArray(structured.career)    ? structured.career    : [],
+        education: Array.isArray(structured.education) ? structured.education : []
+      };
+    } else {
+      profile = await linkedinSvc.parseFromText(text, url || '', user);
+    }
     if (!profile || !profile.name) {
       return res.status(422).json({ error: 'Could not extract a name — try a different profile.' });
     }
@@ -251,6 +230,62 @@ router.options('/quick-import', (req, res) => {
     res.header('Access-Control-Allow-Headers', 'Content-Type, X-Extension-Token');
   }
   res.sendStatus(204);
+});
+
+// ── Auth-required routes ──────────────────────────────────────────────────
+router.use(requireAuth);
+
+// POST /api/linkedin/import
+// Body: { url?, rawText? }
+router.post('/import', async (req, res) => {
+  try {
+    const { url, rawText } = req.body;
+    if (!url && !rawText) {
+      return res.status(400).json({ error: 'Provide a LinkedIn URL or paste the profile text' });
+    }
+
+    const user = await storage.getUserById(req.session.userId);
+    let profile = null;
+
+    // 1. Try URL scraping
+    if (url) profile = await linkedinSvc.scrapeFromUrl(url);
+
+    // 2. Fall back to AI text parsing
+    if ((!profile || !profile.name) && rawText) {
+      profile = await linkedinSvc.parseFromText(rawText, url || '', user);
+    }
+
+    // 3. If URL provided but no raw text and scraping failed, ask for text
+    if (!profile || !profile.name) {
+      return res.status(422).json({
+        needsText: true,
+        error: 'LinkedIn blocked automatic import. Please copy the profile text and paste it below.'
+      });
+    }
+
+    // 4. Enrich with email + phone via configured providers (ContactOut → Apollo → Hunter.io)
+    const enriched = await linkedinSvc.enrichContact({
+      name:            profile.name,
+      company:         profile.company,
+      linkedinUrl:     url || '',
+      hunterApiKey:    user?.hunterApiKey    || '',
+      contactOutApiKey: user?.contactOutApiKey || '',
+      apolloApiKey:    user?.apolloApiKey    || ''
+    });
+
+    return res.json({
+      ...profile,
+      email:         enriched.email,
+      personalEmail: enriched.personalEmail,
+      workEmail:     enriched.workEmail,
+      phone:         enriched.phone,
+      emailSource:   enriched.source,
+      linkedin:      url || ''
+    });
+  } catch (err) {
+    console.error('LinkedIn import error:', err);
+    return res.status(500).json({ error: 'Import failed: ' + err.message });
+  }
 });
 
 module.exports = router;
