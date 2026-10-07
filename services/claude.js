@@ -760,22 +760,22 @@ async function _generateCompanyRecruiterOutreach(candidate, user, instructions) 
 
   const recruiterTitle = (user.title && user.title.trim()) ? user.title.trim() : 'Senior Talent Acquisition Coordinator';
 
-  const prompt = `You are writing a personalized outreach email from a recruiter representing a confidential hiring company to an executive candidate. You must follow the exact structure and tone of the example below — this is the gold standard.
+  const prompt = `You are writing a personalized outreach email from a recruiter at ${company.name} to an executive candidate. You must follow the exact structure and tone of the example below — this is the gold standard.
 
-GOLD STANDARD EXAMPLE (study the structure, tone, and flow carefully — note the company is never named):
+GOLD STANDARD EXAMPLE (study the structure, tone, and flow carefully):
 ---
 Dear Tomeka,
 
 Your career in senior care is built on something most people in this field never have — you actually owned and operated an assisted living community. Running The Wright Manor from 2012 to 2016 means you understand what it takes to deliver care at the community level from the inside, not just from the advisory or referral side. From there you moved into senior placement and elder care advising, then into home care operations leadership at Wright Homecare Solutions, and more recently into member navigation at UnitedHealth Group and project management in home health — building a breadth of perspective across residential care, placement, home care operations, and health plan navigation that very few people in any single corner of the senior living world ever develop. Your CPR and health safety instruction practice, sustained for two decades alongside everything else, reflects someone who takes the care and safety dimensions of this work seriously at every level.
 
-I'm recruiting on behalf of a senior care organization that's looking for people who understand what it takes to operate a care environment — not just support one from the outside — and who bring the hands-on operational knowledge that comes from having run one.
+${company.pitch}
 
-Your background across ownership, placement, home care operations, and health plan navigation gives you a grounded, practical view of the senior care ecosystem that translates well into the environment we're hiring for.
+We're looking for senior care professionals who understand what it takes to operate a care environment — not just support one from the outside — and who bring the hands-on operational knowledge that comes from having run one. Your background across ownership, placement, home care operations, and health plan navigation gives you a grounded, practical view of the senior care ecosystem that translates well into the environments we manage.
 
 If any of this resonates, feel free to reply here and I'd be happy to share more about what we're working on.
 
 Jill Barror
-Senior Talent Acquisition Coordinator
+Senior Talent Acquisition Coordinator at ${company.name}
 ---
 
 RECRUITER STYLE:
@@ -786,19 +786,18 @@ ${candidateInfo}
 
 The example above shows the TARGET quality and voice — study its tone and specificity, but do NOT copy its phrasing or reuse its sentences. Cover these beats in a natural order (a checklist of ideas, not a rigid skeleton — weave them together differently each time):
 - CAREER ARC (the heart of the email): open with "Dear [First Name]," then a sharp observation about what makes this person distinctive, specific to THEIR actual background. Trace their career chronologically — name real companies, roles, and transitions with dates where available. Land one differentiating detail that reveals character or depth.
-- COMPANY INTRODUCTION: convey who's reaching out and why, drawing on the recruiter's pitch below — adapt it into fresh wording, never quote it verbatim, and describe the opportunity/organization WITHOUT ever naming the hiring company (if the pitch text below names it, describe what the company does or what it's building instead of using its name): "${company.pitch}"
-- THE FIT: connect their real background to the role's need, specific to their actual domains — the hands-on knowledge that comes from having done the work, not just supported it.
+- COMPANY INTRODUCTION: convey who's reaching out and from where, drawing on the recruiter's pitch below — adapt it into fresh wording, never quote it verbatim: "${company.pitch}"
+- THE FIT: connect their real background to the company's need, specific to their actual domains — the hands-on knowledge that comes from having done the work, not just supported it.
 - THE ASK: close by creating genuine curiosity — hint there's something specific you deliberately left out, then invite a reply with no friction (no calls, no forms). Write this closing FRESH in your own words every time; there is NO set sentence to reuse.
 ${concretenessDirective()}
 ${variationDirective()}
 ${outreachLengthDirective(user)}
 
-SIGNATURE (after one blank line, no company name):
+SIGNATURE (after one blank line):
 ${user.name}
-${recruiterTitle}
+${recruiterTitle} at ${company.name}
 
 CRITICAL RULES:
-- DO NOT name the hiring company anywhere in the email, including the signature — not in the body, not in a URL, not in a "P.S." Refer to it only by what it does or the opportunity it offers.
 - DO NOT mention any specific job title or role
 - DO NOT use generic openers like "I came across your profile" or "I'm impressed by your background"
 - DO NOT use hollow phrases like "your impressive career" — be specific always
