@@ -525,6 +525,23 @@ LENGTH & TONE: Keep it SHORT and casual — 80–120 words total, 2–3 tight pa
 LENGTH & TONE: Under 250 words. Warm, specific, human — never a sales pitch.`;
 }
 
+// Bans the hollow, impressive-sounding-but-unverifiable corporate jargon that
+// reads as scam-adjacent to both human recipients and spam content filters —
+// vague claims nobody can check are the one thing every advance-fee/fake-
+// opportunity scam script has in common. A real raw-headers sample pulled
+// from production (an independent-recruiter outreach email) was full of
+// exactly this: "fully-funded capital deployments", "Board-level
+// visibility", "accelerated stakeholder engagement", "critical succession
+// plans", "high-priority track" — language that could describe literally
+// any candidate and any opportunity, which is precisely the problem.
+function concretenessDirective() {
+  return `
+CONCRETENESS — this is the most important rule in this prompt:
+- BANNED: vague, impressive-sounding corporate jargon that could apply to any candidate — phrases like "fully-funded capital deployments", "Board-level visibility", "accelerated stakeholder engagement", "critical succession plans", "high-priority track", "strategic benchmarks", "targeted assessment of exceptional talent", "operational acumen", "mandate's scope and authority". If a sentence would still make sense with the candidate's name swapped for a stranger's, delete it and write something specific instead.
+- Every substantive claim must be tied to a real, checkable detail: their actual companies, actual titles, actual career transitions — not a category of person they belong to.
+- Vague "too good to verify" language is the single biggest tell of a scam or spam email. Specificity is what makes an email read as genuinely personal instead of mass-produced.`;
+}
+
 // If the user provided an outreach sample, return a prompt block telling the
 // model to match their VOICE (tone/personality/rhythm) for messages that aren't
 // the cold outreach itself — follow-ups, replies. We borrow voice, not structure,
@@ -641,6 +658,7 @@ PARAGRAPH 3 — Close with a question that probes the discontent (2 sentences ma
   - "Are you where you expected to be by now, or does it feel like the role hasn't caught up to what you're actually doing?"
   - "If the right thing came along at the next level up, would you be open to it — or are you fully settled where you are?"
 - The goal: a question that makes them pause and quietly admit "...actually, no, it doesn't."
+${concretenessDirective()}
 ${variationDirective()}
 
 RULES:
@@ -685,6 +703,22 @@ async function _generateIndependentRecruiterOutreach(candidate, user, instructio
 
   const prompt = `You are ${recruiterName}, an independent executive recruiter${agencyName ? ' at ' + agencyName : ''}. You are NOT writing on behalf of one specific company — you place talent across multiple client companies. You are reaching out to a candidate whose background is a strong fit for the type of roles you typically fill.
 
+GOLD STANDARD EXAMPLE (study the specificity and tone — every claim is concrete and checkable, nothing vague or generic):
+---
+Dear Marcus,
+
+Running supply chain for three different manufacturing verticals in under eight years — automotive at Delphi, industrial equipment at Caterpillar, now consumer packaging at Berry Global — is the kind of range most supply chain leaders never touch in a full career. Each of those industries runs on a completely different cost structure and supplier base, and you've had to rebuild your playbook from scratch each time.
+
+I'm an independent recruiter — not tied to one company, I work across a handful of manufacturing and industrial clients who are specifically looking for operators who've proven they can rebuild a supply chain function under a new set of constraints, not just run an existing one.
+
+Your background across three distinct manufacturing environments is exactly the kind of adaptability these clients value — most candidates I see have only worked inside one vertical's assumptions.
+
+I'm working a search right now where that range would matter a lot. If you're open to hearing more, just reply and I'll share the specifics.
+
+Marcus Webb
+Independent Recruiter
+---
+
 YOUR PITCH:
 ${pitch}
 
@@ -699,6 +733,7 @@ Write a warm, specific cold outreach email to this candidate. Cover these beats 
 - WHO YOU ARE: briefly convey, in your own fresh wording, that you're an independent recruiter (not tied to one company) who brings opportunities from multiple companies and is selective about who you approach. Adapt the pitch above — never quote it verbatim.
 - THE FIT: connect their real background to the kind of roles you fill, specific to their actual domains.
 - THE ASK: close with a low-friction, curiosity-driven invitation to reply — no calls, no commitments. Write this closing FRESH every time in your own words; there is no set sentence to reuse.
+${concretenessDirective()}
 ${variationDirective()}
 ${outreachLengthDirective(user)}
 
@@ -754,6 +789,7 @@ The example above shows the TARGET quality and voice — study its tone and spec
 - COMPANY INTRODUCTION: convey who's reaching out and from where, drawing on the recruiter's pitch below — adapt it into fresh wording, never quote it verbatim: "${company.pitch}"
 - THE FIT: connect their real background to the company's need, specific to their actual domains — the hands-on knowledge that comes from having done the work, not just supported it.
 - THE ASK: close by creating genuine curiosity — hint there's something specific you deliberately left out, then invite a reply with no friction (no calls, no forms). Write this closing FRESH in your own words every time; there is NO set sentence to reuse.
+${concretenessDirective()}
 ${variationDirective()}
 ${outreachLengthDirective(user)}
 
