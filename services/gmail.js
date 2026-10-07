@@ -4,14 +4,20 @@ const { BASE_URL } = require('../config');
 
 const _sleep = ms => new Promise(r => setTimeout(r, ms));
 
-// Gmail signals its per-user rate limit as "User-rate limit exceeded. Retry
-// after ..." (HTTP 429 / reason userRateLimitExceeded). Reply-fetching must
-// stop the moment it sees this rather than keep hammering — the whole per-user
-// quota is shared with actual outreach sends, so a runaway fetch loop blocks
-// sending entirely.
+// Gmail signals its per-user rate limit a few different ways depending on
+// which quota bucket trips: "User-rate limit exceeded. Retry after ..."
+// (reason userRateLimitExceeded), or "Quota exceeded for quota metric 'Total
+// Query Cost' and limit 'Units per minute per user'..." (no retry-after
+// given). Both mean the same thing — back off, don't keep hammering — but
+// only the first phrasing was recognized here, so the second kept falling
+// through to the generic error path and the fetch loop kept retrying every
+// remaining thread against an already-exhausted quota instead of stopping,
+// flooding the log with repeats of the same doomed call. Reply-fetching must
+// stop the moment it sees either shape — the whole per-user quota is shared
+// with actual outreach sends, so a runaway fetch loop blocks sending entirely.
 function _isGmailRateLimit(e) {
   const msg = (e && e.message) || '';
-  return /rate limit exceeded|userRateLimitExceeded|rateLimitExceeded/i.test(msg)
+  return /rate limit exceeded|quota exceeded|userRateLimitExceeded|rateLimitExceeded|RESOURCE_EXHAUSTED/i.test(msg)
     || e?.code === 429 || e?.response?.status === 429;
 }
 

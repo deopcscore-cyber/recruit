@@ -16,10 +16,12 @@ const { getEmailService, isEmailConnected, isZohoOAuthReady, isOutlookReady, isS
 
 // Gmail's own per-user quota — a transient condition that resolves itself,
 // not a bug. Parses "User-rate limit exceeded. Retry after <ISO>" into the
-// time the quota clears (15-min fallback when Google doesn't say).
+// time the quota clears (15-min fallback when Google doesn't say — e.g. the
+// "Quota exceeded for quota metric 'Total Query Cost'..." phrasing never
+// includes a retry-after timestamp at all).
 function rateLimitRetryAt(err) {
   const msg = (err && err.message) || '';
-  if (!/rate limit exceeded/i.test(msg)) return null;
+  if (!/rate limit exceeded|quota exceeded|userRateLimitExceeded|rateLimitExceeded|RESOURCE_EXHAUSTED/i.test(msg)) return null;
   const match = msg.match(/Retry after (\S+)/i);
   const parsed = match ? new Date(match[1]) : null;
   if (parsed && !isNaN(parsed)) return parsed;
