@@ -1245,6 +1245,48 @@ I came across your work leading...&#10;&#10;[Paste a full example email here —
 </div>
 
 <!-- ========== ADD CANDIDATE MODAL ========== -->
+<!-- Shown once, right after a NEW account's first Google/Outlook sign-in —
+     password signup already asks this on the registration form itself, but
+     social sign-in has no form to ask it on, so it defaults to In-House
+     Recruiter and this lets them correct it immediately. -->
+<div class="modal-overlay" id="account-type-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <h3>What best describes you?</h3>
+    </div>
+    <div class="modal-body">
+      <p class="text-muted text-xs" style="margin-bottom:14px">This changes how your outreach, follow-ups, and role descriptions are written. You can change it later in Settings.</p>
+      <div class="user-type-grid" id="onboarding-user-type-grid">
+        <label class="user-type-option selected" data-value="recruiter_company">
+          <input type="radio" name="onboardingUserType" value="recruiter_company" checked>
+          <span class="uto-icon">🏢</span>
+          <div class="uto-text">
+            <h4>In-House Recruiter</h4>
+            <p>I hire talent for my company</p>
+          </div>
+        </label>
+        <label class="user-type-option" data-value="recruiter_independent">
+          <input type="radio" name="onboardingUserType" value="recruiter_independent">
+          <span class="uto-icon">🤝</span>
+          <div class="uto-text">
+            <h4>Independent Recruiter</h4>
+            <p>I place talent for multiple client companies</p>
+          </div>
+        </label>
+        <label class="user-type-option" data-value="career_consultant">
+          <input type="radio" name="onboardingUserType" value="career_consultant">
+          <span class="uto-icon">🧭</span>
+          <div class="uto-text">
+            <h4>Career Consultant</h4>
+            <p>I help professionals advance their careers</p>
+          </div>
+        </label>
+      </div>
+      <button type="button" class="btn btn-primary" id="onboarding-user-type-save" style="width:100%">Continue</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal-overlay" id="add-candidate-modal">
   <div class="modal">
     <div class="modal-header">

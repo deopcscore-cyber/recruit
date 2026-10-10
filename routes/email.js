@@ -83,13 +83,15 @@ const gmailCallback = async (req, res) => {
       // Sign-in flow — no existing session.
       const { tokens, email, name } = await gmailService.exchangeCodeForProfile(code);
       const { findOrCreateUserForSignIn } = require('../services/socialAuth');
-      const { user } = await findOrCreateUserForSignIn({ email, name });
+      const { user, isNewUser } = await findOrCreateUserForSignIn({ email, name });
       user.gmail = { connected: true, tokens, address: email, profileName: name };
       await storage.saveUser(user);
 
       req.session.userId   = user.id;
       req.session.userName = user.name;
-      return res.redirect('/dashboard');
+      // New accounts never got to pick In-House/Independent/Consultant the
+      // way the password-signup form asks — prompt for it once, right now.
+      return res.redirect(isNewUser ? '/dashboard?onboarding=userType' : '/dashboard');
     }
 
     // Connect-mailbox flow — existing session.

@@ -243,7 +243,7 @@ app.get('/auth/outlook/callback', async (req, res) => {
     if (!userId) {
       const profile = await outlookService.exchangeCodeForProfile(code);
       const { findOrCreateUserForSignIn } = require('./services/socialAuth');
-      const { user } = await findOrCreateUserForSignIn({ email: profile.address, name: profile.name });
+      const { user, isNewUser } = await findOrCreateUserForSignIn({ email: profile.address, name: profile.name });
       user.outlook = {
         connected: true, address: profile.address,
         accessToken: profile.accessToken, refreshToken: profile.refreshToken, expiresAt: profile.expiresAt
@@ -252,7 +252,9 @@ app.get('/auth/outlook/callback', async (req, res) => {
 
       req.session.userId   = user.id;
       req.session.userName = user.name;
-      return res.redirect('/dashboard');
+      // New accounts never got to pick In-House/Independent/Consultant the
+      // way the password-signup form asks — prompt for it once, right now.
+      return res.redirect(isNewUser ? '/dashboard?onboarding=userType' : '/dashboard');
     }
 
     await outlookService.exchangeCode(userId, code);

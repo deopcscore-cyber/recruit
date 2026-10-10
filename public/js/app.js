@@ -62,6 +62,15 @@ document.addEventListener('DOMContentLoaded', async () => {
     window.history.replaceState({}, '', '/dashboard');
   }
 
+  // First Google/Outlook sign-in for a brand-new account — ask what kind of
+  // account they want instead of silently defaulting to In-House Recruiter
+  // (password signup already asks this on the registration form itself;
+  // social sign-in has no form to ask it on).
+  if (params.get('onboarding') === 'userType') {
+    window.history.replaceState({}, '', '/dashboard');
+    initAccountTypeOnboarding();
+  }
+
   document.getElementById('sidebar-user-name').textContent = currentUser.name;
   document.getElementById('sidebar-user-email').textContent = currentUser.email;
 
@@ -2308,24 +2317,6 @@ function initSettingsPage() {
     finally { btn.disabled = false; btn.textContent = 'Save Profile'; }
   });
 
-  // Password — "Set Password" (OAuth-only accounts, no current password yet)
-  // vs "Change Password" (current password required) depending on hasPassword.
-  function updatePasswordCard(hasPassword) {
-    const title   = document.getElementById('password-card-title');
-    const hint    = document.getElementById('password-card-hint');
-    const curGrp  = document.getElementById('current-password-group');
-    const newLbl  = document.getElementById('new-password-label');
-    const saveBtn = document.getElementById('password-save-btn');
-    if (!title) return;
-    title.textContent = hasPassword ? 'Password' : 'Set a Password';
-    hint.textContent = hasPassword
-      ? 'Change the password used to sign in with email + password'
-      : 'This account was created via Google/Outlook sign-in — add a password so you can also sign in with email + password';
-    curGrp.style.display = hasPassword ? '' : 'none';
-    newLbl.textContent = hasPassword ? 'New Password' : 'Password';
-    saveBtn.textContent = hasPassword ? 'Change Password' : 'Set Password';
-  }
-
   const passwordFormEl = document.getElementById('password-form');
   if (passwordFormEl) {
     passwordFormEl.addEventListener('submit', async e => {
@@ -2741,6 +2732,55 @@ function initSettingsPage() {
       Toast.success('Image inserted — click Save Signature to keep it');
     });
   }
+}
+
+// Account-type onboarding modal — first Google/Outlook sign-in only (see the
+// ?onboarding=userType handler in the DOMContentLoaded listener above).
+// Top-level (not nested in initSettingsPage) because it's called from there.
+function initAccountTypeOnboarding() {
+  const grid = document.getElementById('onboarding-user-type-grid');
+  if (!grid) return;
+  grid.querySelectorAll('.user-type-option').forEach(opt => {
+    opt.addEventListener('click', () => {
+      grid.querySelectorAll('.user-type-option').forEach(o => o.classList.remove('selected'));
+      opt.classList.add('selected');
+      opt.querySelector('input').checked = true;
+    });
+  });
+  const saveBtn = document.getElementById('onboarding-user-type-save');
+  saveBtn.addEventListener('click', async () => {
+    const selected = grid.querySelector('input[name="onboardingUserType"]:checked')?.value || 'recruiter_company';
+    saveBtn.disabled = true; saveBtn.textContent = 'Saving…';
+    try {
+      await API.settings.update({ userType: selected });
+      if (currentUser) currentUser.userType = selected;
+      new Modal('account-type-modal').close();
+    } catch (err) {
+      Toast.error(err.message);
+      saveBtn.disabled = false; saveBtn.textContent = 'Continue';
+    }
+  });
+  new Modal('account-type-modal').open();
+}
+
+// Password — "Set Password" (OAuth-only accounts, no current password yet)
+// vs "Change Password" (current password required) depending on hasPassword.
+// Top-level (not nested in initSettingsPage) because loadSettingsPage, a
+// separate top-level function, also needs to call this.
+function updatePasswordCard(hasPassword) {
+  const title   = document.getElementById('password-card-title');
+  const hint    = document.getElementById('password-card-hint');
+  const curGrp  = document.getElementById('current-password-group');
+  const newLbl  = document.getElementById('new-password-label');
+  const saveBtn = document.getElementById('password-save-btn');
+  if (!title) return;
+  title.textContent = hasPassword ? 'Password' : 'Set a Password';
+  hint.textContent = hasPassword
+    ? 'Change the password used to sign in with email + password'
+    : 'This account was created via Google/Outlook sign-in — add a password so you can also sign in with email + password';
+  curGrp.style.display = hasPassword ? '' : 'none';
+  newLbl.textContent = hasPassword ? 'New Password' : 'Password';
+  saveBtn.textContent = hasPassword ? 'Change Password' : 'Set Password';
 }
 
 // ================================================================
