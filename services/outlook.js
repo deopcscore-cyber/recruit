@@ -9,7 +9,11 @@ const storage = require('./storage');
 const { BASE_URL, MICROSOFT_CLIENT_ID, MICROSOFT_CLIENT_SECRET } = require('../config');
 const { buildSignatureHtml, buildSignaturePlainText, trackingBaseUrl, unsubscribeFooterHtml, unsubscribeFooterPlain } = require('./gmail');
 
-const TENANT       = 'consumers'; // personal Microsoft accounts only
+// 'common' accepts both personal Microsoft accounts (outlook.com/hotmail.com)
+// and work/school (Azure AD) accounts — the Azure app registration's own
+// "Supported account types" setting must also be set to allow both, or
+// Microsoft rejects work-account sign-ins regardless of this value.
+const TENANT       = 'common';
 const AUTH_BASE    = `https://login.microsoftonline.com/${TENANT}/oauth2/v2.0`;
 const GRAPH_BASE   = 'https://graph.microsoft.com/v1.0';
 const SCOPES       = 'openid email profile offline_access Mail.Send Mail.ReadWrite';
