@@ -2308,6 +2308,52 @@ function initSettingsPage() {
     finally { btn.disabled = false; btn.textContent = 'Save Profile'; }
   });
 
+  // Password — "Set Password" (OAuth-only accounts, no current password yet)
+  // vs "Change Password" (current password required) depending on hasPassword.
+  function updatePasswordCard(hasPassword) {
+    const title   = document.getElementById('password-card-title');
+    const hint    = document.getElementById('password-card-hint');
+    const curGrp  = document.getElementById('current-password-group');
+    const newLbl  = document.getElementById('new-password-label');
+    const saveBtn = document.getElementById('password-save-btn');
+    if (!title) return;
+    title.textContent = hasPassword ? 'Password' : 'Set a Password';
+    hint.textContent = hasPassword
+      ? 'Change the password used to sign in with email + password'
+      : 'This account was created via Google/Outlook sign-in — add a password so you can also sign in with email + password';
+    curGrp.style.display = hasPassword ? '' : 'none';
+    newLbl.textContent = hasPassword ? 'New Password' : 'Password';
+    saveBtn.textContent = hasPassword ? 'Change Password' : 'Set Password';
+  }
+
+  const passwordFormEl = document.getElementById('password-form');
+  if (passwordFormEl) {
+    passwordFormEl.addEventListener('submit', async e => {
+      e.preventDefault();
+      const btn   = document.getElementById('password-save-btn');
+      const errEl = document.getElementById('password-error');
+      const okEl  = document.getElementById('password-success');
+      errEl.textContent = ''; okEl.textContent = '';
+      const newPassword = document.getElementById('new-password').value;
+      const currentPassword = document.getElementById('current-password').value;
+      if (!newPassword || newPassword.length < 6) { errEl.textContent = 'Password must be at least 6 characters'; return; }
+      const prevText = btn.textContent;
+      btn.disabled = true; btn.textContent = 'Saving…';
+      try {
+        await API.settings.setPassword({ currentPassword, newPassword });
+        document.getElementById('new-password').value = '';
+        document.getElementById('current-password').value = '';
+        okEl.textContent = 'Password saved.';
+        updatePasswordCard(true);
+      } catch (err) {
+        errEl.textContent = err.message;
+        btn.textContent = prevText;
+      } finally {
+        btn.disabled = false;
+      }
+    });
+  }
+
   // Resume consultant partner form
   const partnerFormEl = document.getElementById('partner-form');
   if (partnerFormEl) {
@@ -3299,6 +3345,7 @@ async function loadSettingsPage() {
     if (document.getElementById('profile-company-pitch')) document.getElementById('profile-company-pitch').value = style.companyPitch || '';
     if (document.getElementById('profile-salary-range'))  document.getElementById('profile-salary-range').value  = style.salaryRange  || '';
     if (document.getElementById('profile-proof-points'))  document.getElementById('profile-proof-points').value  = style.proofPoints  || '';
+    updatePasswordCard(!!style.hasPassword);
     if (document.getElementById('profile-tz-offset')) {
       const saved = style.tzOffset ?? (-new Date().getTimezoneOffset() / 60);
       const sel = document.getElementById('profile-tz-offset');

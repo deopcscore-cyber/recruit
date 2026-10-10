@@ -52,6 +52,7 @@ router.get('/', async (req, res) => {
       companyPitch: user.companyPitch || '',
       salaryRange: user.salaryRange || '',
       proofPoints: user.proofPoints || '',
+      hasPassword: !!user.password, // false for accounts created via Google/Outlook sign-in
       tzOffset: typeof user.tzOffset === 'number' ? user.tzOffset : null,
       signature: user.signature || { enabled: false, style: 'rich', customHtml: '', photoUrl: '', website: '', location: '', linkedin: '', facebook: '', twitter: '', disclaimer: '' },
       secondaryTestEmail:  user.secondaryTestEmail  || '',
@@ -305,6 +306,42 @@ router.put('/', async (req, res) => {
   } catch (err) {
     console.error('Update settings error:', err);
     return res.status(500).json({ error: 'Failed to update settings' });
+  }
+});
+
+// POST /api/settings/set-password — set a password for an account that
+// doesn't have one yet (created via Google/Outlook sign-in), or change an
+// existing one. Changing an existing password requires currentPassword —
+// proof of the old password, not just a valid session — so a briefly
+// hijacked session (XSS, shared computer) can't be used to lock the real
+// owner out by silently swapping in a new password. Setting the FIRST
+// password on an OAuth-only account has no current password to check, so
+// the session itself is the only proof available (same trust level as the
+// Google/Outlook sign-in that created the session in the first place).
+const rateLimit = require('../middleware/rateLimit');
+const setPasswordLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 10, message: 'Too many attempts — try again in a few minutes.' });
+router.post('/set-password', setPasswordLimiter, async (req, res) => {
+  try {
+    const { currentPassword, newPassword } = req.body;
+    if (!newPassword || newPassword.length < 6) {
+      return res.status(400).json({ error: 'New password must be at least 6 characters' });
+    }
+
+    const user = await storage.getUserById(req.session.userId);
+    if (!user) return res.status(404).json({ error: 'User not found' });
+
+    if (user.password) {
+      if (!currentPassword) return res.status(400).json({ error: 'Current password is required' });
+      const valid = await bcrypt.compare(currentPassword, user.password);
+      if (!valid) return res.status(401).json({ error: 'Current password is incorrect' });
+    }
+
+    user.password = await bcrypt.hash(newPassword, 12);
+    await storage.saveUser(user);
+    return res.json({ success: true });
+  } catch (err) {
+    console.error('Set-password error:', err);
+    return res.status(500).json({ error: 'Failed to set password' });
   }
 });
 

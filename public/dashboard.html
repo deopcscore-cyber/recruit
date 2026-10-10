@@ -301,6 +301,29 @@
             </div>
           </div>
 
+          <!-- Password -->
+          <div class="settings-card">
+            <div class="settings-card-header">
+              <h3 id="password-card-title">Password</h3>
+              <span class="settings-card-hint" id="password-card-hint">Add a password so you can also sign in without Google/Outlook</span>
+            </div>
+            <div class="settings-card-body">
+              <form id="password-form">
+                <div class="form-group" id="current-password-group" style="display:none">
+                  <label>Current Password</label>
+                  <input type="password" id="current-password" placeholder="••••••••" />
+                </div>
+                <div class="form-group">
+                  <label id="new-password-label">New Password</label>
+                  <input type="password" id="new-password" placeholder="At least 6 characters" />
+                </div>
+                <button type="submit" class="btn btn-primary btn-sm" id="password-save-btn">Set Password</button>
+                <div class="auth-error" id="password-error" style="color:#dc2626;font-size:0.82rem;margin-top:8px"></div>
+                <div class="auth-success" id="password-success" style="color:#2f9e44;font-size:0.82rem;margin-top:8px"></div>
+              </form>
+            </div>
+          </div>
+
           <!-- Resume Consultant Partner (recruiters only) -->
           <div class="settings-card" id="resume-partner-card" style="display:none">
             <div class="settings-card-header">
