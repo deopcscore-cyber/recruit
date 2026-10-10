@@ -2288,6 +2288,7 @@ function initSettingsPage() {
         companyName: document.getElementById('profile-company-name').value.trim(),
         companyPitch: document.getElementById('profile-company-pitch').value.trim(),
         salaryRange: (document.getElementById('profile-salary-range') || {value:''}).value.trim(),
+        proofPoints: (document.getElementById('profile-proof-points') || {value:''}).value.trim(),
         tzOffset: Number(document.getElementById('profile-tz-offset').value),
         ...(hunterField && hunterField.value.trim() !== '••••••••' ? { hunterApiKey: hunterField.value.trim() } : {})
       };
@@ -3297,6 +3298,7 @@ async function loadSettingsPage() {
     if (document.getElementById('profile-company-name'))  document.getElementById('profile-company-name').value  = style.companyName  || '';
     if (document.getElementById('profile-company-pitch')) document.getElementById('profile-company-pitch').value = style.companyPitch || '';
     if (document.getElementById('profile-salary-range'))  document.getElementById('profile-salary-range').value  = style.salaryRange  || '';
+    if (document.getElementById('profile-proof-points'))  document.getElementById('profile-proof-points').value  = style.proofPoints  || '';
     if (document.getElementById('profile-tz-offset')) {
       const saved = style.tzOffset ?? (-new Date().getTimezoneOffset() / 60);
       const sel = document.getElementById('profile-tz-offset');
@@ -3381,7 +3383,7 @@ async function loadSettingsPage() {
     }
 
     // Automated follow-up config
-    renderFollowUpConfig(style.followUpConfig || { enabled: true, steps: [{ days: 3 }, { days: 7 }] });
+    renderFollowUpConfig(style.followUpConfig || { enabled: true, steps: [{ days: 3 }, { days: 7 }, { days: 12 }, { days: 18 }] });
 
     // Daily auto-outreach (autopilot) config
     renderAutopilotConfig(style.autopilot || {});
@@ -3463,6 +3465,16 @@ async function loadCreditHistory() {
 }
 
 // ---- Automated follow-up sequence settings ----
+// Each step in the outreach follow-up sequence uses a different angle —
+// Reminder, then Value Add, then Proof, then Objection handling — instead
+// of repeating the same "just checking in" email. See followUpIndex in
+// services/claude.js generateFollowUp(). Steps past the 4th cycle back to
+// a general check-in.
+const FOLLOWUP_ANGLES = ['Reminder', 'Value Add', 'Proof', 'Objection handling'];
+function followUpAngleLabel(i) {
+  return FOLLOWUP_ANGLES[i] || 'Check-in';
+}
+
 function renderFollowUpConfig(cfg) {
   const enabledEl = document.getElementById('followup-enabled');
   const stepsEl   = document.getElementById('followup-steps');
@@ -3475,6 +3487,7 @@ function renderFollowUpConfig(cfg) {
         <span style="font-size:0.82rem;color:var(--text-muted);min-width:78px">Follow-up ${i + 1}</span>
         <input type="number" class="fu-days" min="1" max="90" value="${s.days}" style="width:70px;padding:4px 6px;font-size:0.85rem" />
         <span style="font-size:0.82rem;color:var(--text-muted)">days after previous</span>
+        <span class="badge" style="font-size:0.72rem;padding:2px 8px;border-radius:10px;background:var(--bg-subtle,#f1f5f9);color:var(--text-muted)">${followUpAngleLabel(i)}</span>
         <button type="button" class="btn btn-ghost btn-xs fu-remove" data-i="${i}" style="color:#ef4444">Remove</button>
       </div>
     `).join('');
@@ -3484,7 +3497,7 @@ function renderFollowUpConfig(cfg) {
       drawSteps(cur.length ? cur : [{ days: 3 }]);
     }));
   };
-  drawSteps(cfg.steps && cfg.steps.length ? cfg.steps : [{ days: 3 }, { days: 7 }]);
+  drawSteps(cfg.steps && cfg.steps.length ? cfg.steps : [{ days: 3 }, { days: 7 }, { days: 12 }, { days: 18 }]);
 
   const addBtn = document.getElementById('followup-add-step');
   if (addBtn && !addBtn._wired) {

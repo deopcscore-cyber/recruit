@@ -23,7 +23,10 @@ const scheduling = require('./scheduling');
 // Settings (followUpConfig.steps) — the others are scripted to a specific
 // cadence/purpose per touchpoint and aren't user-configurable yet.
 const KIND_DEFAULTS = {
-  outreach:        { mode: 'auto',  steps: [{ days: 3 }, { days: 7 }] },
+  // Each step rotates through a different angle instead of repeating the
+  // same "just checking in" email — Reminder, Value Add, Proof, Objection
+  // handling, in that order (see followUpIndex in claude.js generateFollowUp).
+  outreach:        { mode: 'auto',  steps: [{ days: 3 }, { days: 7 }, { days: 12 }, { days: 18 }] },
   roleJD:          { mode: 'auto',  steps: [{ days: 3 }, { days: 7 }] },
   resumeRequested: { mode: 'auto',  steps: [{ days: 3 }, { days: 7 }] },
   review:          { mode: 'draft', steps: [{ days: 3 }] },

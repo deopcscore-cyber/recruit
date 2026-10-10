@@ -51,6 +51,7 @@ router.get('/', async (req, res) => {
       companyName: user.companyName || '',
       companyPitch: user.companyPitch || '',
       salaryRange: user.salaryRange || '',
+      proofPoints: user.proofPoints || '',
       tzOffset: typeof user.tzOffset === 'number' ? user.tzOffset : null,
       signature: user.signature || { enabled: false, style: 'rich', customHtml: '', photoUrl: '', website: '', location: '', linkedin: '', facebook: '', twitter: '', disclaimer: '' },
       secondaryTestEmail:  user.secondaryTestEmail  || '',
@@ -72,7 +73,7 @@ router.get('/', async (req, res) => {
       outreachLength:           user.outreachLength           || 'standard',
       trackingDomain:           user.trackingDomain           || '',
       trackingDomainVerified:   !!user.trackingDomainVerified,
-      followUpConfig:           user.followUpConfig           || { enabled: true, steps: [{ days: 3 }, { days: 7 }] },
+      followUpConfig:           user.followUpConfig           || { enabled: true, steps: [{ days: 3 }, { days: 7 }, { days: 12 }, { days: 18 }] },
       autopilot:                Object.assign({ enabled:false, dailyCap:30, windowStart:'09:00', windowEnd:'17:00', weekdaysOnly:true, minSpacingMin:20, maxSpacingMin:60, warmup:true }, user.autopilot || {})
     });
   } catch (err) {
@@ -84,7 +85,7 @@ router.get('/', async (req, res) => {
 // PUT /api/settings
 router.put('/', async (req, res) => {
   try {
-    const { tone, notes, use, avoid, name, title, companyName, companyPitch, salaryRange, hunterApiKey, contactOutApiKey, apolloApiKey, apifyApiKey, signature, secondaryTestEmail, userType, resumeConsultantName, resumeConsultantEmail } = req.body;
+    const { tone, notes, use, avoid, name, title, companyName, companyPitch, salaryRange, proofPoints, hunterApiKey, contactOutApiKey, apolloApiKey, apifyApiKey, signature, secondaryTestEmail, userType, resumeConsultantName, resumeConsultantEmail } = req.body;
 
     // Atomic read-modify-write — a plain getUserById + saveUser here raced
     // with concurrent writes (e.g. a credit deduction mid-AI-generation)
@@ -113,6 +114,7 @@ router.put('/', async (req, res) => {
     if (companyName  !== undefined) user.companyName  = companyName.trim();
     if (companyPitch !== undefined) user.companyPitch = companyPitch.trim();
     if (salaryRange  !== undefined) user.salaryRange  = salaryRange.trim();
+    if (proofPoints  !== undefined) user.proofPoints  = String(proofPoints).trim().slice(0, 1000);
     if (hunterApiKey     !== undefined) user.hunterApiKey     = hunterApiKey.trim();
     if (contactOutApiKey !== undefined) user.contactOutApiKey = contactOutApiKey.trim();
     if (apolloApiKey     !== undefined) user.apolloApiKey     = apolloApiKey.trim();
@@ -217,7 +219,7 @@ router.put('/', async (req, res) => {
         : [];
       user.followUpConfig = {
         enabled: !!fc.enabled,
-        steps: steps.length ? steps : [{ days: 3 }, { days: 7 }]
+        steps: steps.length ? steps : [{ days: 3 }, { days: 7 }, { days: 12 }, { days: 18 }]
       };
       // Turning the sequence off should stop follow-ups that were already
       // queued — otherwise they keep firing until the queue drains.
@@ -297,7 +299,7 @@ router.put('/', async (req, res) => {
       skipUndeliverable:        !!user.skipUndeliverable,
       trackOpens:               user.trackOpens === true,
       outreachSample:           user.outreachSample           || '',
-      followUpConfig:           user.followUpConfig           || { enabled: true, steps: [{ days: 3 }, { days: 7 }] },
+      followUpConfig:           user.followUpConfig           || { enabled: true, steps: [{ days: 3 }, { days: 7 }, { days: 12 }, { days: 18 }] },
       autopilot:                Object.assign({ enabled:false, dailyCap:30, windowStart:'09:00', windowEnd:'17:00', weekdaysOnly:true, minSpacingMin:20, maxSpacingMin:60, warmup:true }, user.autopilot || {})
     });
   } catch (err) {

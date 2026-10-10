@@ -1809,8 +1809,15 @@ WHAT TO WRITE (keep it to 3-4 short paragraphs):
 Signature: ${user.name}\n${recruiterTitle} at ${company.name}`;
 
   } else if (steps.outreach && !hasReplied) {
-    // Initial outreach, never replied
-    scenarioInstructions = `FOLLOW-UP SCENARIO: Initial outreach was sent, no reply yet.
+    // Initial outreach, never replied — rotate through 4 angles instead of
+    // repeating the same "just checking in" email every time: Reminder,
+    // Value Add, Proof, Objection handling. A 5th+ step cycles back to
+    // Reminder (most sequences cap at 4-5 steps anyway).
+    const angle = followUpIndex % 4;
+    const signatureLine = `Signature: ${user.name}\n${recruiterTitle} at ${company.name}`;
+
+    if (angle === 0) {
+      scenarioInstructions = `FOLLOW-UP SCENARIO — REMINDER (follow-up #${followUpIndex + 1}): Initial outreach was sent, no reply yet.
 You sent ${firstName} an outreach email ${daysSinceStr} about ${company.name} and they haven't responded.
 
 WHAT TO WRITE (keep it to 3-4 short paragraphs):
@@ -1818,10 +1825,53 @@ WHAT TO WRITE (keep it to 3-4 short paragraphs):
 2. One sentence re-sparking the curiosity hook — hint there's a specific detail about what ${company.name} is building that you still haven't shared. Don't repeat the full outreach.
 3. Lower the bar even further: "Even a one-line reply tells me whether it's worth five minutes of your time."
 4. Warmly close — no pressure, no deadline.
-Signature: ${user.name}\n${recruiterTitle} at ${company.name}
+${signatureLine}
 
 LAST OUTREACH BODY (for reference — do NOT repeat it, just draw from it):
 ${lastOutBody}`;
+
+    } else if (angle === 1) {
+      scenarioInstructions = `FOLLOW-UP SCENARIO — VALUE ADD (follow-up #${followUpIndex + 1}): The reminder went unanswered. Don't nag again — bring something genuinely useful this time, so the email is worth reading even if they never reply about the role.
+
+WHAT TO WRITE (keep it to 2-3 short paragraphs):
+1. Open with "Dear ${firstName}," — skip any reference to following up again or prior emails.
+2. Share ONE specific, genuine observation about THEIR OWN career that gives them something worth thinking about — a pattern in their trajectory, an underleveraged strength, a connection between two roles they may not have framed themselves. This must be grounded in their actual background below, NOT invented industry statistics, market data, or trends you can't verify.
+3. Tie it back briefly to why it's relevant to what you reached out about, then a low-pressure close.
+${signatureLine}
+
+CANDIDATE'S ACTUAL BACKGROUND (the only source for the observation — never invent outside facts):
+${candidateInfo}
+
+LAST OUTREACH BODY (for reference — do NOT repeat it):
+${lastOutBody}`;
+
+    } else if (angle === 2) {
+      const proof = (user.proofPoints || '').trim();
+      scenarioInstructions = `FOLLOW-UP SCENARIO — PROOF (follow-up #${followUpIndex + 1}): Still no reply after prior touches. Build credibility this time instead of repeating the ask.
+
+WHAT TO WRITE (keep it to 2-3 short paragraphs):
+1. Open with "Dear ${firstName}," — brief, no guilt about prior silence.
+2. ${proof
+        ? `Reference this real proof point naturally, adapted to fit the flow — do not quote it verbatim: "${proof}"`
+        : `CRITICAL: No proof point was provided, so do NOT invent one — never fabricate a statistic, a client name, a placement count, or any claim you cannot verify. Instead build credibility through specificity: restate, more concretely than before, exactly why their actual background (named details, not generalities) is a strong fit. Specificity itself is the credibility signal here.`}
+3. Low-friction close inviting a reply.
+${signatureLine}
+
+CANDIDATE'S ACTUAL BACKGROUND:
+${candidateInfo}`;
+
+    } else {
+      scenarioInstructions = `FOLLOW-UP SCENARIO — OBJECTION HANDLING (follow-up #${followUpIndex + 1}): Several touches have gone unanswered. Address the silence directly instead of asking again the same way.
+
+WHAT TO WRITE (keep it to 2-3 short paragraphs):
+1. Open with "Dear ${firstName}," — no guilt-tripping.
+2. Name the most likely real reason for the silence — plainly, not passive-aggressively — and address it directly. Pick whichever fits best: they're probably happy where they are and not actively looking; cold emails are easy to miss or dismiss; the timing may just be bad right now. Acknowledge it's genuinely fine if that's the case.
+3. Make it a true no-pressure close: a one-word reply closes the loop either way, and if circumstances change later, the door's open.
+${signatureLine}
+
+LAST OUTREACH BODY (for reference):
+${lastOutBody}`;
+    }
 
   } else {
     // General follow-up (had some interaction, conversation stalled)
