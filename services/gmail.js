@@ -132,14 +132,23 @@ function getAuthUrl(state) {
   });
 }
 
-async function exchangeCode(userId, code) {
+// Token exchange + profile fetch only — no storage access. Shared by the
+// "connect a mailbox for an already-logged-in user" flow (exchangeCode
+// below) and the "Sign in with Google" flow (server.js/routes/email.js
+// callback branches on whether a session already exists), which needs the
+// tokens/profile before it knows whether to attach them to an existing user
+// or a brand-new one.
+async function exchangeCodeForProfile(code) {
   const oauth2Client = createOAuth2Client();
   const { tokens } = await oauth2Client.getToken(code);
   oauth2Client.setCredentials(tokens);
-
-  // Get user email address
   const oauth2 = google.oauth2({ version: 'v2', auth: oauth2Client });
   const { data } = await oauth2.userinfo.get();
+  return { tokens, email: data.email || '', name: data.name || '' };
+}
+
+async function exchangeCode(userId, code) {
+  const { tokens, email, name } = await exchangeCodeForProfile(code);
 
   const user = await storage.getUserById(userId);
   if (!user) throw new Error('User not found');
@@ -147,8 +156,8 @@ async function exchangeCode(userId, code) {
   user.gmail = {
     connected:   true,
     tokens,
-    address:     data.email || '',
-    profileName: data.name  || ''   // Google account display name — used as From name
+    address:     email,
+    profileName: name   // Google account display name — used as From name
   };
   await storage.saveUser(user);
   return user;
@@ -828,6 +837,7 @@ function buildRawEmailParts({ body, signatureHtml = '', signaturePlain = '', tra
 module.exports = {
   getAuthUrl,
   exchangeCode,
+  exchangeCodeForProfile,
   getAuthedClient,
   sendEmail,
   fetchUnreadReplies,

@@ -54,36 +54,50 @@ router.get('/connect', requireAuth, async (req, res) => {
   }
 });
 
-// GET /auth/gmail/callback — exported for server.js to mount at root level
+// GET /auth/gmail/callback — exported for server.js to mount at root level.
+// Serves TWO flows through the one registered redirect URI:
+//  - A session already exists: the Settings-page "Connect Gmail" flow —
+//    attach the mailbox to this logged-in user (unchanged behavior).
+//  - No session: the login page's "Sign in with Google" flow — find or
+//    create the account by the Google-verified email, connect Gmail, and
+//    log in, all in this one step.
 const gmailCallback = async (req, res) => {
+  const userId = req.session && req.session.userId;
+  const errorRedirect = userId ? '/dashboard' : '/login';
   try {
     const { code, state, error } = req.query;
 
     if (error) {
       console.error('Gmail OAuth error:', error);
-      return res.redirect('/dashboard?gmail=error&reason=' + encodeURIComponent(error));
+      return res.redirect(`${errorRedirect}?gmail=error&reason=` + encodeURIComponent(error));
     }
-
     if (!code) {
-      return res.redirect('/dashboard?gmail=error&reason=no_code');
-    }
-
-    // Identity comes from the session; state must match the nonce we issued
-    const userId = req.session && req.session.userId;
-    if (!userId) {
-      return res.redirect('/login?gmail=error&reason=session_expired');
+      return res.redirect(`${errorRedirect}?gmail=error&reason=no_code`);
     }
     if (!state || state !== req.session.oauthState) {
-      return res.redirect('/dashboard?gmail=error&reason=state_mismatch');
+      return res.redirect(`${errorRedirect}?gmail=error&reason=state_mismatch`);
     }
     delete req.session.oauthState;
 
-    await gmailService.exchangeCode(userId, code);
+    if (!userId) {
+      // Sign-in flow — no existing session.
+      const { tokens, email, name } = await gmailService.exchangeCodeForProfile(code);
+      const { findOrCreateUserForSignIn } = require('../services/socialAuth');
+      const { user } = await findOrCreateUserForSignIn({ email, name });
+      user.gmail = { connected: true, tokens, address: email, profileName: name };
+      await storage.saveUser(user);
 
+      req.session.userId   = user.id;
+      req.session.userName = user.name;
+      return res.redirect('/dashboard');
+    }
+
+    // Connect-mailbox flow — existing session.
+    await gmailService.exchangeCode(userId, code);
     return res.redirect('/dashboard?gmail=connected');
   } catch (err) {
     console.error('Gmail callback error:', err);
-    return res.redirect('/dashboard?gmail=error&reason=' + encodeURIComponent(err.message));
+    return res.redirect(`${errorRedirect}?gmail=error&reason=` + encodeURIComponent(err.message));
   }
 };
 

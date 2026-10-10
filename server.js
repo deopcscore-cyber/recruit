@@ -224,22 +224,42 @@ app.get('/auth/zoho/callback', async (req, res) => {
 });
 
 // ─── Outlook (Microsoft) OAuth callback ──────────────────────────────────────
+// Serves TWO flows through the one registered redirect URI — same pattern as
+// the Gmail callback in routes/email.js: an existing session means "connect
+// this mailbox for the logged-in user" (unchanged); no session means "Sign
+// in with Outlook" from the login page — find or create the account by the
+// Microsoft-verified email, connect Outlook, and log in in one step.
 const outlookService = require('./services/outlook');
 app.get('/auth/outlook/callback', async (req, res) => {
   const { code, state, error } = req.query;
-  if (error || !code) return res.redirect('/dashboard?outlook=error&reason=' + encodeURIComponent(error || 'no_code'));
   const userId = req.session && req.session.userId;
-  if (!userId) return res.redirect('/login?outlook=error&reason=session_expired');
+  const errorRedirect = userId ? '/dashboard' : '/login';
+  if (error || !code) return res.redirect(`${errorRedirect}?outlook=error&reason=` + encodeURIComponent(error || 'no_code'));
   if (!state || state !== req.session.oauthState) {
-    return res.redirect('/dashboard?outlook=error&reason=state_mismatch');
+    return res.redirect(`${errorRedirect}?outlook=error&reason=state_mismatch`);
   }
   delete req.session.oauthState;
   try {
+    if (!userId) {
+      const profile = await outlookService.exchangeCodeForProfile(code);
+      const { findOrCreateUserForSignIn } = require('./services/socialAuth');
+      const { user } = await findOrCreateUserForSignIn({ email: profile.address, name: profile.name });
+      user.outlook = {
+        connected: true, address: profile.address,
+        accessToken: profile.accessToken, refreshToken: profile.refreshToken, expiresAt: profile.expiresAt
+      };
+      await require('./services/storage').saveUser(user);
+
+      req.session.userId   = user.id;
+      req.session.userName = user.name;
+      return res.redirect('/dashboard');
+    }
+
     await outlookService.exchangeCode(userId, code);
     return res.redirect('/dashboard?outlook=connected');
   } catch (err) {
     console.error('Outlook callback error:', err);
-    return res.redirect('/dashboard?outlook=error&reason=' + encodeURIComponent(err.message));
+    return res.redirect(`${errorRedirect}?outlook=error&reason=` + encodeURIComponent(err.message));
   }
 });
 

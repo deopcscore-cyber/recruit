@@ -36,7 +36,12 @@ function getAuthUrl(state) {
   return `${AUTH_BASE}/authorize?${params}`;
 }
 
-async function exchangeCode(userId, code) {
+// Token exchange + profile fetch only — no storage access. Shared by the
+// "connect a mailbox for an already-logged-in user" flow (exchangeCode
+// below) and the "Sign in with Outlook" flow (server.js callback branches on
+// whether a session already exists), which needs the tokens/profile before
+// it knows whether to attach them to an existing user or a brand-new one.
+async function exchangeCodeForProfile(code) {
   const params = new URLSearchParams({
     client_id:     MICROSOFT_CLIENT_ID,
     client_secret: MICROSOFT_CLIENT_SECRET,
@@ -51,22 +56,27 @@ async function exchangeCode(userId, code) {
   });
   if (!data.access_token) throw new Error('No access token from Microsoft');
 
-  // Fetch profile
   const { data: profile } = await axios.get(`${GRAPH_BASE}/me`, {
     headers: { Authorization: `Bearer ${data.access_token}` }
   });
   const address = (profile.mail || profile.userPrincipalName || '').toLowerCase();
 
-  const user = await storage.getUserById(userId);
-  if (!user) throw new Error('User not found');
-
-  user.outlook = {
-    connected:    true,
+  return {
     address,
+    name:         profile.displayName || '',
     accessToken:  data.access_token,
     refreshToken: data.refresh_token || '',
     expiresAt:    Date.now() + (data.expires_in || 3600) * 1000
   };
+}
+
+async function exchangeCode(userId, code) {
+  const { address, accessToken, refreshToken, expiresAt } = await exchangeCodeForProfile(code);
+
+  const user = await storage.getUserById(userId);
+  if (!user) throw new Error('User not found');
+
+  user.outlook = { connected: true, address, accessToken, refreshToken, expiresAt };
   await storage.saveUser(user);
   return user.outlook;
 }
@@ -230,4 +240,4 @@ async function fetchUnreadReplies(userId, candidateEmails, candidateThreadIds) {
   return replies;
 }
 
-module.exports = { getAuthUrl, exchangeCode, sendEmail, fetchUnreadReplies };
+module.exports = { getAuthUrl, exchangeCode, exchangeCodeForProfile, sendEmail, fetchUnreadReplies };

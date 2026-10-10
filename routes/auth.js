@@ -127,6 +127,11 @@ router.post('/login', authLimiter, async (req, res) => {
       return res.status(401).json({ error: 'Invalid email or password' });
     }
 
+    // Accounts created via "Sign in with Google/Outlook" have no password set.
+    if (!user.password) {
+      return res.status(401).json({ error: 'This account uses Google or Outlook sign-in — use one of those buttons instead of a password.' });
+    }
+
     const valid = await bcrypt.compare(password, user.password);
     if (!valid) {
       return res.status(401).json({ error: 'Invalid email or password' });
@@ -148,6 +153,37 @@ router.post('/login', authLimiter, async (req, res) => {
   } catch (err) {
     console.error('Login error:', err);
     return res.status(500).json({ error: 'Login failed' });
+  }
+});
+
+// GET /api/auth/google/signin — "Sign in with Google" from the login page.
+// No session required (unlike /api/email/connect, which is the equivalent
+// flow for connecting a mailbox from an already-logged-in Settings page).
+// The callback (routes/email.js gmailCallback) finds-or-creates the account
+// by the Google-verified email and connects Gmail in the same step.
+router.get('/google/signin', (req, res) => {
+  try {
+    const state = crypto.randomBytes(24).toString('hex');
+    req.session.oauthState = state;
+    const gmailService = require('../services/gmail');
+    return res.redirect(gmailService.getAuthUrl(state));
+  } catch (err) {
+    console.error('Google sign-in start error:', err);
+    return res.redirect('/login?gmail=error&reason=' + encodeURIComponent(err.message));
+  }
+});
+
+// GET /api/auth/outlook/signin — same idea for Microsoft. Callback lives in
+// server.js (outlookCallback branches on whether a session already exists).
+router.get('/outlook/signin', (req, res) => {
+  try {
+    const state = crypto.randomBytes(24).toString('hex');
+    req.session.oauthState = state;
+    const outlookService = require('../services/outlook');
+    return res.redirect(outlookService.getAuthUrl(state));
+  } catch (err) {
+    console.error('Outlook sign-in start error:', err);
+    return res.redirect('/login?outlook=error&reason=' + encodeURIComponent(err.message));
   }
 });
 
