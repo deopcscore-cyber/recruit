@@ -41,6 +41,19 @@ function getAuthUrl(state) {
 // below) and the "Sign in with Outlook" flow (server.js callback branches on
 // whether a session already exists), which needs the tokens/profile before
 // it knows whether to attach them to an existing user or a brand-new one.
+// Microsoft's actual error detail (error/error_description, or Graph's
+// error.message) lives in the response body — a bare axios "Request failed
+// with status code 401" throws that away and leaves nothing to diagnose
+// with. Pulls out the real reason when present, falling back to the generic
+// axios message only when Microsoft didn't send a structured body.
+function microsoftErrorMessage(err) {
+  const body = err?.response?.data;
+  if (body?.error_description) return body.error_description.split('\r\n')[0]; // AADSTS errors are verbose; keep the first line
+  if (body?.error?.message) return body.error.message; // Graph API error shape
+  if (typeof body?.error === 'string') return body.error;
+  return err.message;
+}
+
 async function exchangeCodeForProfile(code) {
   const params = new URLSearchParams({
     client_id:     MICROSOFT_CLIENT_ID,
@@ -51,14 +64,24 @@ async function exchangeCodeForProfile(code) {
     scope:         SCOPES
   });
 
-  const { data } = await axios.post(`${AUTH_BASE}/token`, params.toString(), {
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
-  });
+  let data;
+  try {
+    ({ data } = await axios.post(`${AUTH_BASE}/token`, params.toString(), {
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+    }));
+  } catch (err) {
+    throw new Error(`Microsoft token exchange failed: ${microsoftErrorMessage(err)}`);
+  }
   if (!data.access_token) throw new Error('No access token from Microsoft');
 
-  const { data: profile } = await axios.get(`${GRAPH_BASE}/me`, {
-    headers: { Authorization: `Bearer ${data.access_token}` }
-  });
+  let profile;
+  try {
+    ({ data: profile } = await axios.get(`${GRAPH_BASE}/me`, {
+      headers: { Authorization: `Bearer ${data.access_token}` }
+    }));
+  } catch (err) {
+    throw new Error(`Microsoft Graph profile fetch failed: ${microsoftErrorMessage(err)}`);
+  }
   const address = (profile.mail || profile.userPrincipalName || '').toLowerCase();
 
   return {
@@ -90,10 +113,15 @@ async function refreshTokens(user) {
     refresh_token: user.outlook.refreshToken,
     scope:         SCOPES
   });
-  const { data } = await axios.post(`${AUTH_BASE}/token`, params.toString(), {
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
-  });
-  if (!data.access_token) throw new Error('Outlook token refresh failed');
+  let data;
+  try {
+    ({ data } = await axios.post(`${AUTH_BASE}/token`, params.toString(), {
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+    }));
+  } catch (err) {
+    throw new Error(`Outlook token refresh failed: ${microsoftErrorMessage(err)}`);
+  }
+  if (!data.access_token) throw new Error('Outlook token refresh failed: no access token in response');
   user.outlook.accessToken  = data.access_token;
   if (data.refresh_token) user.outlook.refreshToken = data.refresh_token;
   user.outlook.expiresAt = Date.now() + (data.expires_in || 3600) * 1000;
