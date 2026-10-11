@@ -16,7 +16,13 @@ const { buildSignatureHtml, buildSignaturePlainText, trackingBaseUrl, unsubscrib
 const TENANT       = 'common';
 const AUTH_BASE    = `https://login.microsoftonline.com/${TENANT}/oauth2/v2.0`;
 const GRAPH_BASE   = 'https://graph.microsoft.com/v1.0';
-const SCOPES       = 'openid email profile offline_access Mail.Send Mail.ReadWrite';
+// User.Read is Microsoft's own documented scope for GET /me. Personal
+// Microsoft accounts usually get away with openid/profile alone covering
+// basic profile read, but Azure AD work/school tenants enforce permission
+// scopes more strictly and reject /me with "Insufficient privileges"
+// without it being requested explicitly — confirmed against a real company
+// account that otherwise authenticated successfully.
+const SCOPES       = 'openid email profile offline_access User.Read Mail.Send Mail.ReadWrite';
 const REDIRECT_URI = `${BASE_URL}/auth/outlook/callback`;
 
 // ── OAuth2 ────────────────────────────────────────────────────────────────────
