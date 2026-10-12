@@ -168,25 +168,29 @@ async function sendEmail(userId, { to, subject, body, trackingId, inReplyTo, ref
     toRecipients: [{ emailAddress: { address: to } }]
   };
 
-  // Threading + one-click-unsubscribe headers (best-effort: Graph accepts
-  // In-Reply-To/References here, but may silently ignore less-common custom
-  // headers depending on tenant policy — worst case the email still sends
-  // fine, it just doesn't carry List-Unsubscribe).
-  const customHeaders = [];
-  if (inReplyTo) {
-    customHeaders.push(
-      { name: 'In-Reply-To', value: `<${inReplyTo.replace(/^<|>$/g, '')}>` },
-      { name: 'References',  value: references || `<${inReplyTo.replace(/^<|>$/g, '')}>` }
-    );
-  }
-  if (unsubscribeUrl) {
-    const fromAddr = (user.outlook && user.outlook.address) || '';
-    customHeaders.push(
-      { name: 'List-Unsubscribe', value: `<mailto:${fromAddr}?subject=unsubscribe>, <${unsubscribeUrl}>` },
-      { name: 'List-Unsubscribe-Post', value: 'List-Unsubscribe=One-Click' }
-    );
-  }
-  if (customHeaders.length) message.internetMessageHeaders = customHeaders;
+  // NOT a best-effort fallback — Microsoft Graph's sendMail HARD REJECTS the
+  // entire send (400: "should start with 'x-' or 'X-'") if
+  // internetMessageHeaders contains any standard header name, confirmed live
+  // against List-Unsubscribe. In-Reply-To/References are standard headers
+  // too and would fail identically the moment an Outlook-sent reply tried to
+  // thread, even though they never got hit in this particular test. Graph
+  // only accepts custom X-prefixed headers here — there is no supported way
+  // to set List-Unsubscribe or RFC-threading headers through this endpoint.
+  //
+  // Dropped entirely rather than sent as X-List-Unsubscribe /
+  // X-In-Reply-To: renaming them would stop every mail client from
+  // recognizing them as the real thing (no native unsubscribe button, no
+  // thread grouping) while still claiming to carry them — worse than
+  // honestly not having them. The visible unsubscribe link in the body
+  // (built above, unaffected by this) still satisfies CAN-SPAM; this is the
+  // same situation Zoho is already in (see services/zoho.js) and the same
+  // fix: rely on the visible link instead of the header.
+  //
+  // Known gap: Outlook-sent replies won't RFC-thread in the recipient's
+  // client without In-Reply-To/References. Graph's own /reply and
+  // /createReply actions set these automatically when replying to a known
+  // message by ID — switching Outlook replies to use those instead of a
+  // hand-built new message is the real fix, not attempted here.
 
   if (attachments && attachments.length) {
     message.attachments = attachments.map(a => ({
