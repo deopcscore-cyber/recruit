@@ -197,9 +197,13 @@ async function sendEmail(userId, { to, subject, body, trackingId, inReplyTo, ref
     }));
   }
 
-  await axios.post(`${GRAPH_BASE}/me/sendMail`, { message, saveToSentItems: true }, {
-    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }
-  });
+  try {
+    await axios.post(`${GRAPH_BASE}/me/sendMail`, { message, saveToSentItems: true }, {
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }
+    });
+  } catch (err) {
+    throw new Error(`Microsoft Graph send failed: ${microsoftErrorMessage(err)}`);
+  }
 
   // Retrieve the sent message to get its ID + conversationId
   let smtpMessageId = `<${uuidv4()}@recruit-pro.app>`;
