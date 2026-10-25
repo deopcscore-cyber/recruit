@@ -2867,11 +2867,6 @@ async function sendAssistantMessage() {
     const res = await API.ai.chat(history, _assistantCandidateId || undefined);
     _assistantMessages = _assistantMessages.filter(m => !m.pending);
     _assistantMessages.push({ role: 'assistant', content: res.reply || '(no response)' });
-    // Only surface a toast on the noteworthy case (fell back to Claude) — a
-    // "written with X" toast on every chat turn would be noisy.
-    if (res.fellBack && typeof Toast !== 'undefined') {
-      Toast.show(`⚠ ${res.providerLabel || 'Primary AI'} was unavailable — this reply used Claude instead`, 'warning', 6000);
-    }
   } catch (err) {
     _assistantMessages = _assistantMessages.filter(m => !m.pending);
     _assistantMessages.push({ role: 'assistant', content: `⚠️ ${err.message}` });
@@ -3056,7 +3051,7 @@ function resetLinkedInModal() {
 // "enrich" mode: pre-filled with this candidate's LinkedIn URL, and on
 // confirm it merges career/education into their existing record instead of
 // creating a new candidate. Reuses the exact same scrape → paste-fallback →
-// Claude-parse path (services/linkedin.js) rather than duplicating it —
+// AI-parse path (services/linkedin.js) rather than duplicating it —
 // automatic bulk scraping isn't reliable against LinkedIn's blocking, so
 // this stays a one-click-per-candidate action.
 function openLinkedInEnrich(candidate) {
@@ -3411,23 +3406,6 @@ async function loadSettingsPage() {
     document.getElementById('style-notes').value = style.notes || '';
     document.getElementById('style-use').value = (style.use || []).join(', ');
     document.getElementById('style-avoid').value = (style.avoid || []).join(', ');
-
-    // AI provider preference — saves immediately on change
-    const aiSel = document.getElementById('ai-provider-select');
-    if (aiSel) {
-      aiSel.value = style.aiProvider || 'auto';
-      if (!aiSel.dataset.wired) {
-        aiSel.dataset.wired = '1';
-        aiSel.addEventListener('change', async () => {
-          try {
-            await API.settings.update({ aiProvider: aiSel.value });
-            const label = aiSel.value === 'auto' ? 'Auto' : aiSel.value === 'claude' ? 'Claude' : 'OpenAI';
-            Toast.success(`AI preference saved: ${label}`);
-            updateAIModelStatus();
-          } catch (err) { Toast.error(err.message); }
-        });
-      }
-    }
 
     // Secondary test inbox
     document.getElementById('secondary-test-email').value = style.secondaryTestEmail || '';
@@ -3989,15 +3967,7 @@ async function updateAIModelStatus() {
     const el = document.getElementById('ai-model-status');
     if (!el) return;
     const s = await fetch('/api/settings/ai-status').then(r => r.json());
-    el.innerHTML = `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${s.hasAnthropic || s.hasOpenAI ? '#22c55e' : '#ef4444'};margin-right:6px;vertical-align:middle"></span>
-      <strong>Active model:</strong> ${s.primary}${s.fallback ? `<br><span style="font-size:0.8rem;color:var(--text-muted);margin-left:14px">Fallback: ${s.fallback}</span>` : ''}`;
-
-    // Reflect the real primary provider in the "Preferred AI" dropdown, which
-    // otherwise hardcodes "OpenAI" — it may now be OpenRouter/Qwen.
-    const primaryLabel = { openrouter: 'OpenRouter', openai: 'OpenAI' }[s.primaryProvider] || 'the primary provider';
-    const opt = document.getElementById('ai-provider-option-primary');
-    if (opt) opt.textContent = `${primaryLabel} — lowest cost`;
-    const helper = document.getElementById('ai-provider-helper-text');
-    if (helper) helper.textContent = `Auto uses Claude for career consultants and ${primaryLabel} for recruiters. If your choice is unavailable, the other is used as backup automatically.`;
+    el.innerHTML = `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${s.configured ? '#22c55e' : '#ef4444'};margin-right:6px;vertical-align:middle"></span>
+      <strong>Active model:</strong> ${s.primary}`;
   } catch { /* ignore */ }
 }

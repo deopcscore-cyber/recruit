@@ -21,11 +21,9 @@ function withAttachment(req) {
   return instr ? `${instr}\n\n${block}` : block;
 }
 
-// Friendly display name for a generation result's provider, plus whether the
-// generator fell back to Claude — surfaced to the client so the UI can show
-// which model actually wrote a given draft (e.g. "Qwen" vs "fell back to
-// Claude because OpenRouter was unavailable").
-const PROVIDER_LABEL = { openrouter: 'OpenRouter', openai: 'OpenAI', claude: 'Claude' };
+// Friendly display name for a generation result's provider — surfaced to the
+// client so the UI can show which model actually wrote a given draft.
+const PROVIDER_LABEL = { openrouter: 'OpenRouter' };
 function aiMeta(result) {
   return {
     provider: result.provider || null,
@@ -107,15 +105,10 @@ router.post('/attachment', attachmentUpload.single('file'), async (req, res) => 
     if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
     if (!await checkCredits(user, res)) return;
 
-    // Mirror claude's own provider preference (prefersClaude isn't exported)
-    const preferClaude = user.aiProvider === 'claude'
-      || (user.aiProvider !== 'openai' && user.userType === 'career_consultant');
-
     const result = await claude.extractAttachmentText({
       buffer:   req.file.buffer,
       mimeType: req.file.mimetype,
-      filename: req.file.originalname,
-      preferClaude
+      filename: req.file.originalname
     });
     if (!result.text) return res.status(422).json({ error: "Couldn't read any text or content from that file." });
 

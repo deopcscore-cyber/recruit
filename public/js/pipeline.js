@@ -2428,11 +2428,7 @@ function mountAttachControl(body, textareaId) {
 // used for this specific generation, not just what's configured.
 function announceAIProvider(result) {
   if (!result || !result.providerLabel) return;
-  if (result.fellBack) {
-    Toast.show(`⚠ ${result.providerLabel} was unavailable — this draft was written by Claude instead`, 'warning', 6000);
-  } else {
-    Toast.show(`✨ Written with ${result.providerLabel}`);
-  }
+  Toast.show(`✨ Written with ${result.providerLabel}`);
 }
 
 function wireAIDraft(body, { genBtnId, draftAreaId, subjectId, bodyId, regenBtnId, sendBtnId, defaultSubject, stepKey, stageTo, cc, instructionsId, generate, onGenerated, extraSendParams }) {

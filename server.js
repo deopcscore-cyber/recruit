@@ -407,8 +407,7 @@ app.listen(PORT, async () => {
   // actually picked up, without having to load Settings in the browser.
   try {
     const info = require('./services/claude').getProviderInfo();
-    console.log(`AI primary: ${info.primary.provider} (${info.primary.model}) — configured: ${info.primary.configured}`);
-    console.log(`AI fallback: ${info.fallback.provider} (${info.fallback.model}) — configured: ${info.fallback.configured}`);
+    console.log(`AI model: ${info.provider} (${info.model}) — configured: ${info.configured}`);
   } catch (err) {
     console.warn('AI provider info unavailable at boot:', err.message);
   }

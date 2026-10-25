@@ -1,79 +1,53 @@
-const Anthropic = require('@anthropic-ai/sdk');
-
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-
-// ── Primary chat provider (OpenAI-compatible Chat Completions API) ───────────
-// By default this is OpenAI (gpt-4o-mini). Set OPENROUTER_API_KEY to route the
-// whole app through OpenRouter instead — e.g. a Qwen model, far cheaper and for
-// most tasks as good or better than gpt-4o-mini. OpenRouter speaks the same
-// Chat Completions API, so the same client and call sites work unchanged.
-// Everything (outreach included) flows through callAI/callChat, so this single
-// switch changes the entire app. Claude stays wired as the fallback.
-const USE_OPENROUTER = !!process.env.OPENROUTER_API_KEY;
-const PRIMARY_LABEL  = USE_OPENROUTER ? 'openrouter' : 'openai';
+// ── Sole AI provider: Qwen via OpenRouter ─────────────────────────────────────
+// This app used to run a primary/fallback pair (OpenAI-or-OpenRouter, with
+// Claude as the fallback, and Claude as the default primary for career
+// consultants). All of that is gone — every generation in this app, for every
+// user type, goes to Qwen via OpenRouter, with no other model in the loop.
+// Quality that the old setup leaned on Claude for (career-consultant writing
+// quality, following a sender's custom instructions precisely) is now the
+// job of prompting, not model choice — see appendInstructions() and
+// QUALITY_DIRECTIVE below, both written to compensate for that directly.
+const PRIMARY_LABEL = 'openrouter';
 
 function hasPrimary() {
-  return USE_OPENROUTER || !!process.env.OPENAI_API_KEY;
+  return !!process.env.OPENROUTER_API_KEY;
 }
 
-// Lazy-init the primary client so a missing key doesn't crash the server at startup
+// Lazy-init the client so a missing key doesn't crash the server at startup
 let _openai = null;
 function getOpenAI() {
   if (!_openai) {
     const { default: OpenAI } = require('openai');
-    if (USE_OPENROUTER) {
-      _openai = new OpenAI({
-        apiKey:  process.env.OPENROUTER_API_KEY,
-        baseURL: process.env.OPENROUTER_BASE_URL || 'https://openrouter.ai/api/v1',
-        // Optional attribution headers OpenRouter uses for its dashboards.
-        defaultHeaders: {
-          'HTTP-Referer': process.env.BASE_URL || 'https://recruit.app',
-          'X-Title':      'Recruit Pro'
-        }
-      });
-    } else {
-      _openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-    }
+    _openai = new OpenAI({
+      apiKey:  process.env.OPENROUTER_API_KEY,
+      baseURL: process.env.OPENROUTER_BASE_URL || 'https://openrouter.ai/api/v1',
+      // Optional attribution headers OpenRouter uses for its dashboards.
+      defaultHeaders: {
+        'HTTP-Referer': process.env.BASE_URL || 'https://recruit.app',
+        'X-Title':      'Recruit Pro'
+      }
+    });
   }
   return _openai;
 }
 
-const CLAUDE_MODEL = 'claude-sonnet-4-6';
-// The primary (OpenAI-compatible) model. Under OpenRouter, defaults to a strong,
-// cheap Qwen; overridable via env without a code change.
-const PRIMARY_MODEL = USE_OPENROUTER
-  ? (process.env.OPENROUTER_MODEL || 'qwen/qwen-2.5-72b-instruct')
-  : (process.env.OPENAI_MODEL || 'gpt-4o-mini');
-// Vision-capable primary model (image attachments). Qwen text models can't see
-// images, so the OpenRouter path uses a Qwen-VL model by default.
-const PRIMARY_VISION_MODEL = USE_OPENROUTER
-  ? (process.env.OPENROUTER_VISION_MODEL || 'qwen/qwen-2.5-vl-72b-instruct')
-  : (process.env.OPENAI_VISION_MODEL || PRIMARY_MODEL);
+// Defaults to a strong, cheap Qwen; overridable via env without a code change.
+const PRIMARY_MODEL = process.env.OPENROUTER_MODEL || 'qwen/qwen-2.5-72b-instruct';
+// Vision-capable model (image attachments) — Qwen's text models can't see
+// images, so this defaults to a Qwen-VL model.
+const PRIMARY_VISION_MODEL = process.env.OPENROUTER_VISION_MODEL || 'qwen/qwen-2.5-vl-72b-instruct';
 
-// Read-only snapshot of which provider/model is actually active, for a
-// Settings-page readout — so switching via env vars (e.g. turning on
-// OpenRouter/Qwen) is visibly confirmed rather than a silent guess.
+// Read-only snapshot of which model is actually active, for a Settings-page
+// readout — so an env-var model override is visibly confirmed, not a silent guess.
 function getProviderInfo() {
   return {
-    primary: {
-      provider: PRIMARY_LABEL,                 // 'openrouter' | 'openai'
-      model: PRIMARY_MODEL,
-      visionModel: PRIMARY_VISION_MODEL,
-      configured: hasPrimary()
-    },
-    fallback: {
-      provider: 'claude',
-      model: CLAUDE_MODEL,
-      configured: !!process.env.ANTHROPIC_API_KEY
-    }
+    provider: PRIMARY_LABEL,
+    model: PRIMARY_MODEL,
+    visionModel: PRIMARY_VISION_MODEL,
+    configured: hasPrimary()
   };
 }
 
-// Cost per million tokens in cents
-const CLAUDE_IN  = 300;   // $3.00
-const CLAUDE_OUT = 1500;  // $15.00
-const OPENAI_IN  = 15;    // $0.15
-const OPENAI_OUT = 60;    // $0.60
 // Rough OpenRouter/Qwen rates (cents per 1M tokens); override to match your
 // chosen model's real pricing.
 const OPENROUTER_IN  = parseInt(process.env.OPENROUTER_IN_CENTS  || '40', 10);
@@ -119,15 +93,11 @@ function parseAIJson(raw) {
   throw err;
 }
 
-function calcCostCents(usage, provider) {
+function calcCostCents(usage) {
   if (!usage) return 0;
   const inp = usage.input_tokens  || 0;
   const out = usage.output_tokens || 0;
-  let inRate, outRate;
-  if (provider === 'openrouter')  { inRate = OPENROUTER_IN; outRate = OPENROUTER_OUT; }
-  else if (provider === 'openai') { inRate = OPENAI_IN;     outRate = OPENAI_OUT; }
-  else                            { inRate = CLAUDE_IN;     outRate = CLAUDE_OUT; }
-  return Math.ceil((inp * inRate + out * outRate) / 1_000_000);
+  return Math.ceil((inp * OPENROUTER_IN + out * OPENROUTER_OUT) / 1_000_000);
 }
 
 // Safety net for plain-email output. Cheaper/open models (Qwen included)
@@ -196,116 +166,64 @@ output only the final email in the format this prompt requires.
 ═══════════════════════════════════════════`;
 }
 
-// Which provider runs first for this user. Explicit setting wins; otherwise
-// consultants default to Claude (writing quality) and recruiters to OpenAI (cost).
-function prefersClaude(user) {
-  if (user?.aiProvider === 'claude') return true;
-  if (user?.aiProvider === 'openai') return false;
-  return user?.userType === 'career_consultant';
+// Single call to the one model this app uses. finishReason lets callers tell
+// "the model got cut off by maxTokens" ('length') apart from "the model
+// finished normally but produced something unusable". fellBack is always
+// false now — kept on the response shape purely so the UI code that reads it
+// (aiMeta, announceAIProvider) doesn't need restructuring, not because
+// anything can still fall back.
+//
+// opts.json: true asks OpenRouter to constrain the output to valid JSON
+// (response_format: json_object). We no longer have Claude's much stronger
+// instruction-following as a fallback for "return ONLY the JSON object", so
+// for every call site that feeds its output to parseAIJson this is worth
+// more than any amount of prompt wording — it's the model provider enforcing
+// the shape instead of us hoping a prompt sentence was obeyed. Not every
+// model on OpenRouter honours response_format (some error on it instead of
+// ignoring it), so on failure we transparently retry once as a plain call —
+// parseAIJson's own recovery (fence stripping, jsonrepair) still runs on
+// whatever text comes back either way.
+// opts.temperature: lower for analytical/extraction tasks (scoring,
+// classifying, parsing) where we want the same input to reliably produce the
+// same judgment, not creative variety.
+async function callAI(prompt, maxTokens, opts = {}) {
+  const { json = false, temperature } = opts;
+  const baseReq = {
+    model: PRIMARY_MODEL, max_tokens: maxTokens,
+    messages: [{ role: 'user', content: prompt }],
+    ...(temperature !== undefined ? { temperature } : {})
+  };
+  let res;
+  try {
+    res = await getOpenAI().chat.completions.create(
+      json ? { ...baseReq, response_format: { type: 'json_object' } } : baseReq
+    );
+  } catch (err) {
+    if (!json) throw err;
+    res = await getOpenAI().chat.completions.create(baseReq);
+  }
+  return {
+    content: [{ text: res.choices[0].message.content }],
+    usage: { input_tokens: res.usage.prompt_tokens, output_tokens: res.usage.completion_tokens },
+    provider: PRIMARY_LABEL,
+    fellBack: false,
+    finishReason: res.choices[0].finish_reason
+  };
 }
 
-// Provider for a single generation. Custom sender instructions demand real
-// instruction-following, which the cheap default model reliably fumbles
-// (it half-applies multi-part instructions) — route those to Claude even for
-// users who default to OpenAI. Cost is passed through credits either way.
-function pickProvider(user, instructions) {
-  return prefersClaude(user) || !!(instructions && instructions.trim());
-}
-
-// Try OpenAI first; fall back to Claude on error
-// finishReason lets callers tell "the model got cut off by maxTokens" apart
-// from "the model finished normally but produced something unusable" —
-// 'length' (OpenAI) / 'max_tokens' (Claude) means the former.
-// fellBack: true whenever the response did NOT come from the provider this
-// call preferred (preferClaude ? Claude : the primary provider) — i.e. the
-// preferred provider errored and the other one had to cover. Lets callers
-// (and eventually the UI) tell "this used Qwen as intended" apart from
-// "OpenRouter was down, so this used the Claude fallback instead."
-async function callAI(prompt, maxTokens, preferClaude = false) {
-  if (preferClaude) {
-    // Claude first, OpenAI/OpenRouter fallback — used for career consultant profiles
-    try {
-      const res = await anthropic.messages.create({
-        model: CLAUDE_MODEL, max_tokens: maxTokens,
-        messages: [{ role: 'user', content: prompt }]
-      });
-      return { content: res.content, usage: res.usage, provider: 'claude', fellBack: false, finishReason: res.stop_reason };
-    } catch (err) {
-      console.warn('[AI] Claude unavailable, switching to ' + PRIMARY_LABEL + ':', err.message);
-    }
-    const res = await getOpenAI().chat.completions.create({
-      model: PRIMARY_MODEL, max_tokens: maxTokens,
-      messages: [{ role: 'user', content: prompt }]
-    });
-    return {
-      content: [{ text: res.choices[0].message.content }],
-      usage: { input_tokens: res.usage.prompt_tokens, output_tokens: res.usage.completion_tokens },
-      provider: PRIMARY_LABEL,
-      fellBack: true,
-      finishReason: res.choices[0].finish_reason
-    };
-  }
-
-  // Default: primary (OpenAI or OpenRouter) first, Claude fallback
-  if (hasPrimary()) {
-    try {
-      const res = await getOpenAI().chat.completions.create({
-        model: PRIMARY_MODEL, max_tokens: maxTokens,
-        messages: [{ role: 'user', content: prompt }]
-      });
-      return {
-        content: [{ text: res.choices[0].message.content }],
-        usage: { input_tokens: res.usage.prompt_tokens, output_tokens: res.usage.completion_tokens },
-        provider: PRIMARY_LABEL,
-        fellBack: false,
-        finishReason: res.choices[0].finish_reason
-      };
-    } catch (err) {
-      console.warn('[AI] ' + PRIMARY_LABEL + ' unavailable, switching to Claude:', err.message);
-    }
-  }
-
-  const res = await anthropic.messages.create({
-    model: CLAUDE_MODEL, max_tokens: maxTokens,
-    messages: [{ role: 'user', content: prompt }]
+// Multi-turn chat: a system prompt plus a running {role:'user'|'assistant',
+// content} history, preserved instead of flattened into a single prompt.
+async function callChat(system, messages, maxTokens) {
+  const res = await getOpenAI().chat.completions.create({
+    model: PRIMARY_MODEL, max_tokens: maxTokens,
+    messages: [{ role: 'system', content: system }, ...messages]
   });
-  return { content: res.content, usage: res.usage, provider: 'claude', fellBack: hasPrimary(), finishReason: res.stop_reason };
-}
-
-// Multi-turn chat across both providers: a system prompt plus a running
-// {role:'user'|'assistant', content} history. Mirrors callAI's provider
-// preference/fallback but preserves the conversation instead of flattening it
-// into a single prompt.
-async function callChat(system, messages, maxTokens, preferClaude = false) {
-  const anthropicCall = async (fellBack = false) => {
-    const res = await anthropic.messages.create({
-      model: CLAUDE_MODEL, max_tokens: maxTokens, system,
-      messages: messages.map(m => ({ role: m.role, content: m.content }))
-    });
-    return { content: res.content, usage: res.usage, provider: 'claude', fellBack };
+  return {
+    content: [{ text: res.choices[0].message.content }],
+    usage: { input_tokens: res.usage.prompt_tokens, output_tokens: res.usage.completion_tokens },
+    provider: PRIMARY_LABEL,
+    fellBack: false
   };
-  const openaiCall = async (fellBack = false) => {
-    const res = await getOpenAI().chat.completions.create({
-      model: PRIMARY_MODEL, max_tokens: maxTokens,
-      messages: [{ role: 'system', content: system }, ...messages]
-    });
-    return {
-      content: [{ text: res.choices[0].message.content }],
-      usage: { input_tokens: res.usage.prompt_tokens, output_tokens: res.usage.completion_tokens },
-      provider: PRIMARY_LABEL,
-      fellBack
-    };
-  };
-
-  if (preferClaude) {
-    try { return await anthropicCall(false); }
-    catch (err) { console.warn('[AI chat] Claude unavailable, switching to ' + PRIMARY_LABEL + ':', err.message); return await openaiCall(true); }
-  }
-  if (hasPrimary()) {
-    try { return await openaiCall(false); }
-    catch (err) { console.warn('[AI chat] ' + PRIMARY_LABEL + ' unavailable, switching to Claude:', err.message); }
-  }
-  return await anthropicCall(hasPrimary());
 }
 
 // Recruiting assistant chat. `messages` is the running conversation; `candidate`
@@ -329,7 +247,7 @@ Company context: ${company.pitch}${company.salaryRange ? `\nGeneral salary range
     system += `\n\n═══ CANDIDATE IN CONTEXT ═══\nThe user is asking about this specific candidate. Ground your answers in these details:\n${formatCandidateContext(candidate)}${convo ? '\n' + convo : ''}`;
   }
 
-  const response = await callChat(system, messages, 1200, pickProvider(user, null) || prefersClaude(user));
+  const response = await callChat(system, messages, 1200);
   const text = (response.content[0].text || '').trim();
   const costCents = calcCostCents(response.usage, response.provider);
   return { text, costCents, provider: response.provider, fellBack: response.fellBack };
@@ -342,50 +260,33 @@ Company context: ${company.pitch}${company.salaryRange ? `\nGeneral salary range
 // the vision cost is paid once, not on every regenerate.
 const _VISION_IMAGE_MIME = { 'image/jpeg': 1, 'image/png': 1, 'image/gif': 1, 'image/webp': 1 };
 
-async function _describeImage(buffer, mimeType, preferClaude) {
+async function _describeImage(buffer, mimeType) {
   const b64 = buffer.toString('base64');
   const instruction = 'A recruiter attached this image as reference for writing an email. Transcribe EVERYTHING visible verbatim — every line of text exactly as written, including names, numbers, dates, and the full wording of any messages or documents shown. Then add one short line describing any non-text visual context. Do not summarize away detail; the exact wording matters.';
 
-  const openaiCall = async () => {
-    const res = await getOpenAI().chat.completions.create({
-      model: PRIMARY_VISION_MODEL, max_tokens: 1500,
-      messages: [{ role: 'user', content: [
-        { type: 'text', text: instruction },
-        { type: 'image_url', image_url: { url: `data:${mimeType};base64,${b64}` } }
-      ] }]
-    });
-    return { text: res.choices[0].message.content, usage: { input_tokens: res.usage.prompt_tokens, output_tokens: res.usage.completion_tokens }, provider: PRIMARY_LABEL };
+  const res = await getOpenAI().chat.completions.create({
+    model: PRIMARY_VISION_MODEL, max_tokens: 1500,
+    messages: [{ role: 'user', content: [
+      { type: 'text', text: instruction },
+      { type: 'image_url', image_url: { url: `data:${mimeType};base64,${b64}` } }
+    ] }]
+  });
+  return {
+    text: res.choices[0].message.content,
+    usage: { input_tokens: res.usage.prompt_tokens, output_tokens: res.usage.completion_tokens },
+    provider: PRIMARY_LABEL,
+    fellBack: false
   };
-  const claudeCall = async () => {
-    const res = await anthropic.messages.create({
-      model: CLAUDE_MODEL, max_tokens: 1500,
-      messages: [{ role: 'user', content: [
-        { type: 'text', text: instruction },
-        { type: 'image', source: { type: 'base64', media_type: mimeType, data: b64 } }
-      ] }]
-    });
-    return { text: res.content[0].text, usage: res.usage, provider: 'claude' };
-  };
-
-  const order = preferClaude ? [claudeCall, openaiCall] : [openaiCall, claudeCall];
-  let lastErr;
-  for (let i = 0; i < order.length; i++) {
-    try {
-      const r = await order[i]();
-      return { ...r, fellBack: i > 0 };
-    } catch (e) { lastErr = e; console.warn('[Vision] provider failed:', e.message); }
-  }
-  throw lastErr || new Error('Vision extraction failed');
 }
 
-async function extractAttachmentText({ buffer, mimeType, filename, preferClaude = false }) {
+async function extractAttachmentText({ buffer, mimeType, filename }) {
   const mt = (mimeType || '').toLowerCase();
   const name = (filename || '').toLowerCase();
   const cap = t => (t || '').trim().slice(0, 12000);
 
   if (_VISION_IMAGE_MIME[mt] || /\.(jpe?g|png|gif|webp)$/.test(name)) {
-    const r = await _describeImage(buffer, _VISION_IMAGE_MIME[mt] ? mt : 'image/png', preferClaude);
-    return { text: cap(r.text), costCents: calcCostCents(r.usage, r.provider), provider: r.provider, fellBack: r.fellBack };
+    const r = await _describeImage(buffer, _VISION_IMAGE_MIME[mt] ? mt : 'image/png');
+    return { text: cap(r.text), costCents: calcCostCents(r.usage), provider: r.provider, fellBack: r.fellBack };
   }
   if (mt.includes('pdf') || name.endsWith('.pdf')) {
     const pdfParse = require('pdf-parse');
@@ -597,7 +498,7 @@ RULES:
 
 Output ONLY valid JSON. No markdown, no commentary.`;
 
-  const response = await callAI(appendInstructions(prompt, instructions), 1000, pickProvider(user, instructions));
+  const response = await callAI(appendInstructions(prompt, instructions), 1000, { json: true });
   const raw = response.content[0].text.trim();
   const costCents = calcCostCents(response.usage, response.provider);
   try {
@@ -678,7 +579,7 @@ Output ONLY valid JSON. No markdown, no extra text.
 
 Write the email now:`;
 
-  const response = await callAI(appendInstructions(prompt, instructions), 900, pickProvider(user, instructions));
+  const response = await callAI(appendInstructions(prompt, instructions), 900, { json: true });
   const raw = response.content[0].text.trim();
   const costCents = calcCostCents(response.usage, response.provider);
   try {
@@ -748,7 +649,7 @@ RULES:
 
 Write the email now:`;
 
-  const response = await callAI(appendInstructions(prompt, instructions), 800, pickProvider(user, instructions));
+  const response = await callAI(appendInstructions(prompt, instructions), 800);
   return { text: stripModelPreamble(response.content[0].text), costCents: calcCostCents(response.usage, response.provider), provider: response.provider, fellBack: response.fellBack };
 }
 
@@ -806,7 +707,7 @@ CRITICAL RULES:
 
 Write the outreach email now:`;
 
-  const response = await callAI(appendInstructions(prompt, instructions), 800, pickProvider(user, instructions));
+  const response = await callAI(appendInstructions(prompt, instructions), 800);
 
   return { text: stripModelPreamble(response.content[0].text), costCents: calcCostCents(response.usage, response.provider), provider: response.provider, fellBack: response.fellBack };
 }
@@ -1115,7 +1016,7 @@ an all-caps company banner line (e.g. REIMAGINE SENIOR CARE WITH US)
   }
 
   async function attempt(fullPrompt) {
-    const response = await callAI(fullPrompt, MAX_TOKENS, pickProvider(user, instructions));
+    const response = await callAI(fullPrompt, MAX_TOKENS);
     const raw = response.content[0].text.trim();
     const truncated = response.finishReason === TRUNCATED_REASON[response.provider];
     let parsed = null;
@@ -1279,7 +1180,7 @@ Also return a brief internal analysis. Output as valid JSON:
 
 Return ONLY the JSON object, no markdown, no extra text.`;
 
-  const response = await callAI(appendInstructions(prompt, instructions), 2500, pickProvider(user, instructions));
+  const response = await callAI(appendInstructions(prompt, instructions), 2500, { json: true });
 
   const text = response.content[0].text.trim();
   const costCents = calcCostCents(response.usage, response.provider);
@@ -1372,7 +1273,7 @@ Output ONLY the email body (starting with "Dear ${firstName},"). No subject line
 
 Write the introduction email now:`;
 
-  const response = await callAI(appendInstructions(prompt, instructions), 1000, pickProvider(user, instructions));
+  const response = await callAI(appendInstructions(prompt, instructions), 1000);
 
   return { text: response.content[0].text.trim(), costCents: calcCostCents(response.usage, response.provider), provider: response.provider, fellBack: response.fellBack };
 }
@@ -1447,7 +1348,7 @@ RULES:
 
 Write the proposal email now:`;
 
-  const response = await callAI(appendInstructions(prompt, instructions), 900, pickProvider(user, instructions));
+  const response = await callAI(appendInstructions(prompt, instructions), 900);
   return { text: response.content[0].text.trim(), costCents: calcCostCents(response.usage, response.provider), provider: response.provider, fellBack: response.fellBack };
 }
 
@@ -1549,7 +1450,7 @@ CRITICAL RULES:
 
 Write the reply now:`;
 
-  const response = await callAI(appendInstructions(prompt, instructions), 900, pickProvider(user, instructions));
+  const response = await callAI(appendInstructions(prompt, instructions), 900);
   return { text: response.content[0].text.trim(), costCents: calcCostCents(response.usage, response.provider), provider: response.provider, fellBack: response.fellBack };
 }
 
@@ -1607,7 +1508,7 @@ Also return a brief internal analysis. Output as valid JSON:
 
 Return ONLY the JSON. No markdown, no extra text.`;
 
-  const response = await callAI(appendInstructions(prompt, instructions), 2000, pickProvider(user, instructions));
+  const response = await callAI(appendInstructions(prompt, instructions), 2000, { json: true });
 
   const text = response.content[0].text.trim();
   const costCents = calcCostCents(response.usage, response.provider);
@@ -1720,7 +1621,7 @@ CRITICAL RULES:
 
 Write the reply now:`;
 
-  const response = await callAI(appendInstructions(prompt, instructions), 900, pickProvider(user, instructions));
+  const response = await callAI(appendInstructions(prompt, instructions), 900);
 
   return { text: response.content[0].text.trim(), costCents: calcCostCents(response.usage, response.provider), provider: response.provider, fellBack: response.fellBack };
 }
@@ -1907,7 +1808,7 @@ CRITICAL RULES:
 
 Write the follow-up email now:`;
 
-  const response = await callAI(appendInstructions(prompt, instructions), 600, pickProvider(user, instructions));
+  const response = await callAI(appendInstructions(prompt, instructions), 600);
 
   return { text: response.content[0].text.trim(), costCents: calcCostCents(response.usage, response.provider), provider: response.provider, fellBack: response.fellBack };
 }
@@ -1948,7 +1849,7 @@ CRITICAL RULES:
 
 Write the check-in email now:`;
 
-  const response = await callAI(appendInstructions(prompt, instructions), 500, prefersClaude(user));
+  const response = await callAI(appendInstructions(prompt, instructions), 500);
   return { text: response.content[0].text.trim(), costCents: calcCostCents(response.usage, response.provider), provider: response.provider, fellBack: response.fellBack };
 }
 
@@ -1991,7 +1892,7 @@ CRITICAL RULES:
 
 Write the check-in email now:`;
 
-  const response = await callAI(appendInstructions(prompt, instructions), 500, prefersClaude(user));
+  const response = await callAI(appendInstructions(prompt, instructions), 500);
   return { text: response.content[0].text.trim(), costCents: calcCostCents(response.usage, response.provider), provider: response.provider, fellBack: response.fellBack };
 }
 
@@ -2017,7 +1918,7 @@ Score them 1-10 on overall executive fit for ${company.name} and return ONLY a v
 Score 8-10: exceptional fit (deep relevant experience + strategic + executive). 5-7: solid fit with gaps. 1-4: significant gaps.
 Return ONLY the JSON.`;
 
-  const response = await callAI(prompt, 400, prefersClaude(user));
+  const response = await callAI(prompt, 400, { json: true, temperature: 0.3 });
 
   const text = response.content[0].text.trim();
   const costCents = calcCostCents(response.usage, response.provider);
@@ -2052,7 +1953,7 @@ ${(replyText || '').substring(0, 1500)}
 
 Return ONLY valid JSON: {"label":"<one of the five>","reason":"<5-10 word justification>"}`;
 
-  const response = await callAI(prompt, 120, prefersClaude(user));
+  const response = await callAI(prompt, 120, { json: true, temperature: 0.2 });
   const text = response.content[0].text.trim();
   const costCents = calcCostCents(response.usage, response.provider);
   const VALID = ['interested', 'question', 'not_now', 'not_interested', 'unsubscribe_request'];
@@ -2092,7 +1993,7 @@ Return ONLY valid JSON:
   "rewritten": "the full repositioned resume as plain text"
 }`;
 
-  const response = await callAI(prompt, 4000, prefersClaude(user));
+  const response = await callAI(prompt, 4000, { json: true });
   const text = response.content[0].text.trim();
   const costCents = calcCostCents(response.usage, response.provider);
   try {
@@ -2105,11 +2006,9 @@ Return ONLY valid JSON:
 }
 
 // ── LinkedIn profile text parsing ───────────────────────────────────────────
-// Used to live in services/linkedin.js with its own hardcoded Anthropic
-// client — meaning LinkedIn import had zero fallback and broke completely
-// whenever the Anthropic account specifically ran low on credits, even
-// though every other AI feature in the app already falls back between
-// providers via callAI. Moved here so it gets the same resilience.
+// Used to live in services/linkedin.js with its own hardcoded AI client,
+// duplicating all the parsing/retry logic that callAI already centralizes.
+// Moved here so it shares that infrastructure.
 const LINKEDIN_PARSE_PROMPT = (text, url) => `Parse the following LinkedIn profile text and extract structured information.
 
 LINKEDIN PROFILE TEXT:
@@ -2138,7 +2037,7 @@ Rules:
 - Return ONLY the JSON object, nothing else`;
 
 async function parseLinkedInProfile(rawText, url = '', user = null) {
-  const response = await callAI(LINKEDIN_PARSE_PROMPT(rawText, url), 1500, prefersClaude(user));
+  const response = await callAI(LINKEDIN_PARSE_PROMPT(rawText, url), 1500, { json: true, temperature: 0.2 });
   const text = response.content[0].text.trim();
   try {
     return parseAIJson(text);

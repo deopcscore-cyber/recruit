@@ -62,7 +62,6 @@ router.get('/', async (req, res) => {
       apifyApiKey:         user.apifyApiKey         ? '••••••••' : '',
       extensionToken:           user.extensionToken           || '',
       userType:                 user.userType                 || 'recruiter_company',
-      aiProvider:               user.aiProvider               || 'auto',
       resumeConsultantName:     user.resumeConsultantName     || '',
       resumeConsultantEmail:    user.resumeConsultantEmail    || '',
       additionalDocs:           (Array.isArray(user.additionalDocs) && user.additionalDocs.length) ? user.additionalDocs : [{ name: 'Technical Statement of Qualifications (TSQ)', description: '' }, { name: 'Executive Bio', description: '' }],
@@ -94,14 +93,6 @@ router.put('/', async (req, res) => {
     const user = await storage.updateUser(req.session.userId, (user) => {
     const VALID_TYPES = ['recruiter_company', 'recruiter_independent', 'career_consultant'];
     if (userType && VALID_TYPES.includes(userType)) user.userType = userType;
-
-    // AI provider preference: auto (default per user type) | openai | claude
-    if (req.body.aiProvider !== undefined) {
-      const VALID_PROVIDERS = ['auto', 'openai', 'claude'];
-      if (VALID_PROVIDERS.includes(req.body.aiProvider)) {
-        user.aiProvider = req.body.aiProvider === 'auto' ? '' : req.body.aiProvider;
-      }
-    }
 
     user.style = user.style || {};
     if (tone !== undefined) user.style.tone = tone;
@@ -793,38 +784,18 @@ router.get('/credit-history', async (req, res) => {
   }
 });
 
-// GET /api/settings/ai-status — which AI provider is active for this user
+// GET /api/settings/ai-status — which AI model is active
+// Single source of truth for what's actually configured server-side (env
+// vars) — one provider only (Qwen via OpenRouter), no fallback, no per-user
+// preference to resolve.
 router.get('/ai-status', async (req, res) => {
-  // Single source of truth for what's actually configured server-side (env
-  // vars) — includes OpenRouter, so this reflects a switch to e.g. Qwen
-  // instead of hardcoding "OpenAI".
   const info = require('../services/claude').getProviderInfo();
-  const hasAnthropic = info.fallback.configured;
-  const hasPrimary   = info.primary.configured;
-  const primaryProviderLabel = { openrouter: 'OpenRouter', openai: 'OpenAI' }[info.primary.provider] || info.primary.provider;
-  const primaryDesc  = `${primaryProviderLabel} (${info.primary.model})`;
-  const claudeDesc   = `Claude (${info.fallback.model})`;
-
-  // Effective preference: explicit setting wins, otherwise consultants get Claude
-  let claudeFirst = false;
-  try {
-    const user = await storage.getUserById(req.session.userId);
-    if (user?.aiProvider === 'claude') claudeFirst = true;
-    else if (user?.aiProvider === 'openai') claudeFirst = false;
-    else claudeFirst = user?.userType === 'career_consultant';
-  } catch {}
-
-  let primary, fallback = null;
-  if (claudeFirst && hasAnthropic) {
-    primary  = claudeDesc;
-    fallback = hasPrimary ? `${primaryDesc} (auto-switches if Claude is unavailable)` : null;
-  } else if (hasPrimary) {
-    primary  = primaryDesc;
-    fallback = hasAnthropic ? `${claudeDesc} (auto-switches if ${primaryProviderLabel} is unavailable)` : null;
-  } else {
-    primary = hasAnthropic ? claudeDesc : 'None';
-  }
-  res.json({ primary, fallback, hasAnthropic, hasOpenAI: hasPrimary, primaryProvider: info.primary.provider });
+  const label = { openrouter: 'OpenRouter' }[info.provider] || info.provider;
+  res.json({
+    primary: info.configured ? `${label} (${info.model})` : 'None',
+    configured: info.configured,
+    primaryProvider: info.provider
+  });
 });
 
 // ── SMTP / IMAP ───────────────────────────────────────────────────────────────
